@@ -415,15 +415,21 @@ function ago(iso) {
   return new Date(iso).toLocaleDateString();
 }
 
-async function loadRuns() {
-  const s = await loadSettings();
+let RUNS_LIMIT = 5;  // reports checked; "Load more" raises it
+async function loadRuns(limit = RUNS_LIMIT) {
+  RUNS_LIMIT = limit;
+  const s = await loadSettings().catch(() => ({}));
   if (!s.name) {
     $("runs").innerHTML = `<div class="empty">Set your character to see recent keys.<br><br><button class="primary" onclick="openChar()">Set character</button></div>`;
     return;
   }
+  const retry = `<button class="pill" onclick="loadRuns()">Try again</button>`;
   try {
-    const data = await api("/api/recent");
-    if (!data.runs.length) { $("runs").innerHTML = `<div class="empty">No recent M+ runs found.</div>`; return; }
+    const data = await api(`/api/recent?limit=${limit}`);
+    // A WCL rate limit part-way: show what was found plus the reason, with "Try again".
+    const note = data.partial ? `<div class="empty error">${esc(data.partial)}<br><br>${retry}</div>` : "";
+    const more = data.more && !data.partial ? `<button class="pill" onclick="loadRuns(12)">Load more</button>` : "";
+    if (!data.runs.length) { $("runs").innerHTML = note || `<div class="empty">No recent M+ runs found.${more ? `<br><br>${more}` : ""}</div>`; return; }
     $("runs").innerHTML = data.runs.map((r) => `
       <button class="run${current === r.url ? " active" : ""}" data-url="${esc(r.url)}" ${r.analyzable ? "" :
         `disabled title="You played ${esc(r.spec || "another character")} - only supported healer specs can be analyzed"`}>
@@ -432,10 +438,10 @@ async function loadRuns() {
         <div class="sub"><span>${ago(r.started)}</span><span>${r.duration_min} min</span>
           ${r.analyzable ? "" : `<span>${esc(r.spec || "not in group")}</span>`}
           ${r.analyzed ? `<span class="tag done">Analyzed</span>` : ""}</div>
-      </button>`).join("");
+      </button>`).join("") + note + (more ? `<div class="empty">${more}</div>` : "");
     document.querySelectorAll(".run:not([disabled])").forEach((el) => el.onclick = () => analyze(el.dataset.url));
   } catch (e) {
-    $("runs").innerHTML = `<div class="empty error">${esc(e.message)}</div>`;
+    $("runs").innerHTML = `<div class="empty error">${esc(e.message)}<br><br>${retry}</div>`;
   }
 }
 
@@ -457,7 +463,9 @@ async function analyze(url, fresh = false) {
       if (j.status === "error") throw new Error(j.error);
     }
   } catch (e) {
-    $("main").innerHTML = `<div class="card"><h2>Couldn't analyze this run</h2><p class="error">${esc(e.message)}</p></div>`;
+    $("main").innerHTML = `<div class="card"><h2>Couldn't analyze this run</h2><p class="error">${esc(e.message)}</p>
+      <button class="pill" id="retryAnalyze">Try again</button></div>`;
+    $("retryAnalyze").onclick = () => analyze(url, fresh);
     loadBudget();
   }
 }
@@ -1680,6 +1688,8 @@ async function startApp() {
       <p>Context-aware Mythic+ healing review, compared with top players of your spec at your key level.</p>
       <p>Sign in with your Warcraft Logs account: your analyses run on your own account and API limit, and your
         private logs stay visible only to you.</p>
+      ${new URLSearchParams(location.search).get("signin") === "failed" ? `<p class="error">Warcraft Logs didn't
+        answer the sign-in (it may be busy or limiting requests) - try again in a minute.</p>` : ""}
       <a class="primary" href="/login">Sign in with Warcraft Logs</a></main>`;
     ["studyBtn", "charBtn", "budget"].forEach((id) => { $(id).hidden = true; });
     return false;

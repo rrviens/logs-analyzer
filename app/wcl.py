@@ -26,13 +26,23 @@ CLIENT_API = "https://www.warcraftlogs.com/api/v2/client"
 USER_API = "https://www.warcraftlogs.com/api/v2/user"
 RATE_QUERY = "{ rateLimitData { limitPerHour pointsSpentThisHour pointsResetIn } }"
 RETRIES = 5  # on 429 (burst limit) / 5xx: back off 2, 4, 8, 16, 30s (or Retry-After)
+QUICK_MAX_WAIT_S = 5.0  # quick() clients: one retry after at most this
 
 
 AUX_WORKERS = 4  # small per-log / per-death fetches run this many at a time
 
 
 class WCLError(RuntimeError):
-    pass
+    def __init__(self, message, rate_limited: bool = False, retry_after: float | None = None):
+        super().__init__(message)
+        self.rate_limited, self.retry_after = rate_limited, retry_after
+
+
+def _retry_after(r: httpx.Response) -> float | None:
+    try:
+        return float(r.headers.get("Retry-After") or 0) or None
+    except ValueError:  # an HTTP date instead of seconds
+        return None
 
 
 def parallel_map(fn, items, workers: int = AUX_WORKERS) -> list:
@@ -52,6 +62,7 @@ class WCLClient:
         self._user_token: str | None = None  # set on user clients: never refreshed with client credentials
         self._ns = ""  # cache namespace: "" = shared, "u<id>:" = one user's
         self._api = CLIENT_API
+        self._retries, self._max_wait = RETRIES, 60.0
         self._http = httpx.Client(timeout=60)
         self._lock = threading.Lock()
         self._db = sqlite3.connect(cache_path, check_same_thread=False)
@@ -69,6 +80,13 @@ class WCLClient:
         """The same credentials, shared cache namespace - only for public data such as ranked top logs."""
         c = copy.copy(self)
         c._ns = ""
+        return c
+
+    def quick(self) -> "WCLClient":
+        """For requests a page is waiting on: one short retry on a rate limit instead of minutes of backoff
+        (background analyses keep the patient client)."""
+        c = copy.copy(self)
+        c._retries, c._max_wait = 1, QUICK_MAX_WAIT_S
         return c
 
     @property
@@ -113,32 +131,36 @@ class WCLClient:
     def _post(self, query: str, variables: dict | None) -> httpx.Response:
         """POST with backoff on 429 / 5xx. A 429 with the hourly points used up is not worth waiting out:
         it raises a clear message with the reset time (everything fetched so far is already cached)."""
-        for attempt in range(RETRIES + 1):
+        retries = self._retries
+        for attempt in range(retries + 1):
             try:
                 r = self._http.post(self._api, json={"query": query, "variables": variables or {}},
                                     headers={"Authorization": f"Bearer {self._get_token()}"})
             except httpx.TransportError:
-                if attempt == RETRIES:
+                if attempt == retries:
                     raise
-                time.sleep(2 ** attempt)
+                time.sleep(min(2 ** attempt, self._max_wait))
                 continue
             if r.status_code != 429 and r.status_code < 500:
                 return r
+            retry_after = _retry_after(r)
             if r.status_code == 429:
                 limit = self._rate_limit()
                 if limit and limit["pointsSpentThisHour"] >= limit["limitPerHour"] - 1:
                     raise WCLError(f"Your Warcraft Logs API limit for this hour is used up "
                                    f"({limit['pointsSpentThisHour']:.0f}/{limit['limitPerHour']}); it resets in "
                                    f"{max(1, round(limit['pointsResetIn'] / 60))} min. Everything fetched so far is "
-                                   f"saved - analyze again then and it continues where it stopped.")
-            if attempt == RETRIES:
+                                   f"saved - analyze again then and it continues where it stopped.",
+                                   rate_limited=True, retry_after=limit["pointsResetIn"])
+            if attempt == retries:
                 if r.status_code == 429:
                     raise WCLError("Warcraft Logs is limiting requests right now - either too many in a short time "
                                    "or this hour's API limit is used up. Everything fetched so far is saved - try "
-                                   "again in a few minutes (or after the hourly reset).")
+                                   "again in a few minutes (or after the hourly reset).",
+                                   rate_limited=True, retry_after=retry_after)
                 return r
-            wait = float(r.headers.get("Retry-After") or 0) or min(30.0, 2.0 * 2 ** attempt)
-            time.sleep(min(wait, 60.0))
+            wait = retry_after or min(30.0, 2.0 * 2 ** attempt)
+            time.sleep(min(wait, self._max_wait))
         return r
 
     def _rate_limit(self) -> dict | None:

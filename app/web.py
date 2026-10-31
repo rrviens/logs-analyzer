@@ -31,6 +31,8 @@ STATIC = PROJECT_ROOT / "app" / "static"
 TOP_LOGS = 8
 RECENT_REPORTS = 12
 RECENT_TTL_S = 300  # recent reports may still be live-logging
+RECENT_FIRST = 5  # reports checked on first load; "Load more" checks all RECENT_REPORTS
+FINISHED_REPORT_MS = 24 * 3600 * 1000  # reports older than this are finished: fight lists cached for good
 MIN_RUN_MIN = 5  # shorter "runs" are resets
 MIN_UNTIMED_MIN = 10  # short untimed attempts are bricked keys, not worth reviewing
 SAME_RUN_MS = 120_000
@@ -129,7 +131,7 @@ def my_characters(w: Who = Depends(who)):
     if not w.user_id:
         return {"characters": [], "local": True}
     try:
-        user = w.client.query(MY_CHARACTERS_QUERY, ttl=MY_CHARACTERS_TTL_S)["userData"]["currentUser"]
+        user = w.client.quick().query(MY_CHARACTERS_QUERY, ttl=MY_CHARACTERS_TTL_S)["userData"]["currentUser"]
     except (WCLError, httpx.HTTPError, KeyError, TypeError):  # e.g. a session from before the scope
         return {"characters": [], "relogin": True}
     chars = [{"name": c["name"], "server": c["server"]["name"], "region": c["server"]["region"]["slug"].lower(),
@@ -142,6 +144,23 @@ def realms():
     """Realm names for the Server autocomplete, from the hand-kept data/realms.json (no API calls)."""
     data = json.loads((PROJECT_ROOT / "data" / "realms.json").read_text(encoding="utf-8"))
     return {r: sorted(set(names)) for r, names in data.items() if not r.startswith("_")}
+
+
+@app.exception_handler(WCLError)
+def wcl_error(request: Request, e: WCLError):
+    """A Warcraft Logs refusal is never a 500: the page shows the message with a "Try again"."""
+    headers = {"Retry-After": str(round(e.retry_after))} if e.retry_after else {}
+    return JSONResponse({"detail": str(e), "rate_limited": e.rate_limited}, status_code=429 if e.rate_limited else 503,
+                        headers=headers)
+
+
+@app.exception_handler(httpx.HTTPError)
+def http_error(request: Request, e: httpx.HTTPError):
+    """Network trouble or an error status from Warcraft Logs (token or API): a message, not a 500."""
+    status = getattr(getattr(e, "response", None), "status_code", None)
+    return JSONResponse({"detail": "Warcraft Logs didn't answer properly" + (f" ({status})" if status else "")
+                         + " - it may be busy. Try again in a minute.", "rate_limited": status == 429},
+                        status_code=429 if status == 429 else 503)
 
 
 @app.get("/healthz")
@@ -173,6 +192,8 @@ def callback(request: Request, code: str = "", state: str = "", error: str = "")
         s = auth.finish_login(app_client, code, state, request.cookies.get(auth.STATE_COOKIE))
     except PermissionError as e:
         raise HTTPException(400, str(e))
+    except (httpx.HTTPError, KeyError, TypeError, ValueError):  # WCL busy / rate limited during the token swap
+        return RedirectResponse("/?signin=failed", status_code=302)
     r = RedirectResponse("/", status_code=302)
     r.delete_cookie(auth.STATE_COOKIE)
     r.set_cookie(auth.SESSION_COOKIE, s.id, max_age=int(s.expires - datetime.now().timestamp()), httponly=True,
@@ -197,7 +218,7 @@ def get_settings(w: Who = Depends(who)):
 
 @app.post("/api/settings")
 def save_settings(s: Settings, w: Who = Depends(who)):
-    char = lookup_character(w.client, s.model_dump(), ttl=0)
+    char = lookup_character(w.client.quick(), s.model_dump(), ttl=0)
     if not char:
         raise HTTPException(404, f"No character {s.name} on {s.server} ({s.region.upper()}) on Warcraft Logs.")
     saved = {"name": char["name"], "server": char["server"]["name"], "region": s.region.lower()}
@@ -207,45 +228,62 @@ def save_settings(s: Settings, w: Who = Depends(who)):
 
 
 @app.get("/api/recent")
-def recent(w: Who = Depends(who)):
-    s, client = load_settings(w), w.client
+def recent(limit: int = RECENT_FIRST, w: Who = Depends(who)):
+    """Your recent keys from the newest `limit` reports (the page asks for more with "Load more"). Reports older
+    than a day can't change, so their fight lists come from the cache; on a WCL rate limit it returns what it has
+    found so far with a note instead of failing."""
+    s, client = load_settings(w), w.client.quick()
     if not s:
         return {"runs": []}
     char = lookup_character(client, s, ttl=RECENT_TTL_S)
     if not char:
         raise HTTPException(404, "Character not found on Warcraft Logs.")
-    runs, seen = [], []
-    for rep in char["recentReports"]["data"]:
-        for f in get_fights(client, rep["code"], ttl=RECENT_TTL_S):
-            if not f.keystone_level or f.duration_s < (MIN_RUN_MIN if f.kill else MIN_UNTIMED_MIN) * 60:
-                continue
-            start_ms = rep["startTime"] + f.start
-            # The same key is often uploaded by several group members in separate reports.
-            if any(d == (f.name, f.keystone_level) and abs(t - start_ms) < SAME_RUN_MS for d, t in seen):
-                continue
-            me_ = next((p for p in get_players(client, f) if p.name.lower() == s["name"].lower()), None)
-            if not me_:
-                continue  # someone else's key in a shared report
-            seen.append(((f.name, f.keystone_level), start_ms))
-            started = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc)
-            runs.append({
-                "spec": me_.label,
-                "analyzable": bool(spec_for(me_.class_name, me_.spec)),
-                "url": f"https://www.warcraftlogs.com/reports/{rep['code']}#fight={f.id}",
-                "dungeon": f.name,
-                "level": f.keystone_level,
-                "timed": bool(f.kill),
-                "duration_min": round(f.duration_s / 60, 1),
-                "started": started.isoformat(),
-                "analyzed": client.get_cached(cache_key(rep["code"], f.id, s["name"], TOP_LOGS)) is not None,
-            })
+    reports = sorted(char["recentReports"]["data"], key=lambda r: -r["startTime"])
+    runs, seen, partial = [], [], None
+    now_ms = datetime.now(timezone.utc).timestamp() * 1000
+    for rep in reports[:max(1, limit)]:
+        try:
+            runs += _report_runs(client, rep, s, seen, None if now_ms - rep["startTime"] > FINISHED_REPORT_MS else RECENT_TTL_S)
+        except WCLError as e:
+            partial = str(e)
+            break
     runs.sort(key=lambda r: r["started"], reverse=True)
-    return {"character": f"{char['name']} - {char['server']['name']}", "runs": runs}
+    return {"character": f"{char['name']} - {char['server']['name']}", "runs": runs, "partial": partial,
+            "more": limit < len(reports)}
+
+
+def _report_runs(client: WCLClient, rep: dict, s: dict, seen: list, ttl: float | None) -> list[dict]:
+    """Your keys in one report (seen: keys already listed, as several group members upload the same run)."""
+    runs = []
+    for f in get_fights(client, rep["code"], ttl=ttl):
+        if not f.keystone_level or f.duration_s < (MIN_RUN_MIN if f.kill else MIN_UNTIMED_MIN) * 60:
+            continue
+        start_ms = rep["startTime"] + f.start
+        # The same key is often uploaded by several group members in separate reports.
+        if any(d == (f.name, f.keystone_level) and abs(t - start_ms) < SAME_RUN_MS for d, t in seen):
+            continue
+        me_ = next((p for p in get_players(client, f) if p.name.lower() == s["name"].lower()), None)
+        if not me_:
+            continue  # someone else's key in a shared report
+        seen.append(((f.name, f.keystone_level), start_ms))
+        started = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc)
+        runs.append({
+            "spec": me_.label,
+            "analyzable": bool(spec_for(me_.class_name, me_.spec)),
+            "url": f"https://www.warcraftlogs.com/reports/{rep['code']}#fight={f.id}",
+            "dungeon": f.name,
+            "level": f.keystone_level,
+            "timed": bool(f.kill),
+            "duration_min": round(f.duration_s / 60, 1),
+            "started": started.isoformat(),
+            "analyzed": client.get_cached(cache_key(rep["code"], f.id, s["name"], TOP_LOGS)) is not None,
+        })
+    return runs
 
 
 @app.get("/api/budget")
 def budget(w: Who = Depends(who)):
-    r = w.client.query("{ rateLimitData { limitPerHour pointsSpentThisHour pointsResetIn } }", ttl=0)["rateLimitData"]
+    r = w.client.quick().query("{ rateLimitData { limitPerHour pointsSpentThisHour pointsResetIn } }", ttl=0)["rateLimitData"]
     return {"used": round(r["pointsSpentThisHour"]), "limit": r["limitPerHour"], "reset_in_s": r["pointsResetIn"]}
 
 
