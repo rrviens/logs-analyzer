@@ -1,18 +1,24 @@
-"""Local web app: lists your recent keys, runs analyses in the background, shows findings.
+"""Web app: lists your recent keys, runs analyses in the background, shows findings.
 
-Start with start.bat (or: python -m uvicorn app.web:app --port 8000).
+Local (start.bat, AUTH_MODE=local): one user, the app's API client.
+Hosted (AUTH_MODE=wcl): each visitor signs in with Warcraft Logs; their analyses run on their own token and
+rate limit, their private logs stay in their own cache namespace, and settings and jobs are per visitor.
+
+Run: python -m uvicorn app.web:app --port 8000
 """
 import json
 import re
 import threading
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from app.config import CACHE_PATH, PROJECT_ROOT, wcl_credentials
+from app import auth
+from app.config import AUTH_MODE, CACHE_PATH, DATA_DIR, PROJECT_ROOT, SECURE_COOKIES, wcl_credentials
 from app.pipeline import AnalysisError, cache_key, pick_healer, run_analysis
 from app.baseline import comparable_fights, top_rankings
 from app.compare import compare_runs
@@ -23,7 +29,6 @@ from app.specs import SPECS, spec_for
 from app.study_runner import DEFAULT_RUNS, run_study, study_info
 from app.wcl import WCLClient
 
-SETTINGS_PATH = PROJECT_ROOT / "data" / "settings.json"
 STATIC = PROJECT_ROOT / "app" / "static"
 TOP_LOGS = 8
 RECENT_REPORTS = 12
@@ -31,6 +36,7 @@ RECENT_TTL_S = 300  # recent reports may still be live-logging
 MIN_RUN_MIN = 5  # shorter "runs" are resets
 MIN_UNTIMED_MIN = 10  # short untimed attempts are bricked keys, not worth reviewing
 SAME_RUN_MS = 120_000
+MAX_JOBS = 500  # finished jobs kept in memory
 
 CHARACTER_QUERY = """
 query($name: String!, $server: String!, $region: String!, $limit: Int) {
@@ -42,9 +48,32 @@ query($name: String!, $server: String!, $region: String!, $limit: Int) {
 """
 
 app = FastAPI()
-client = WCLClient(*wcl_credentials(), CACHE_PATH)
+app_client = WCLClient(*wcl_credentials(), CACHE_PATH)
 jobs: dict[str, dict] = {}
 study_job: dict = {}
+
+
+@dataclass
+class Who:
+    """Who is asking: the API client to use (theirs when hosted) and where their settings live."""
+    client: WCLClient
+    user_id: int  # 0 = local mode
+    user_name: str | None
+
+    @property
+    def settings_path(self):
+        if not self.user_id:  # local mode keeps its old place
+            return PROJECT_ROOT / "data" / "settings.json"
+        return DATA_DIR / "users" / str(self.user_id) / "settings.json"
+
+
+def who(request: Request) -> Who:
+    if AUTH_MODE != "wcl":
+        return Who(app_client, 0, None)
+    s = auth.get_session(app_client, request.cookies.get(auth.SESSION_COOKIE))
+    if not s:
+        raise HTTPException(401, "Sign in with Warcraft Logs first.")
+    return Who(app_client.for_user(s.token, s.user_id), s.user_id, s.user_name)
 
 
 class Settings(BaseModel):
@@ -58,19 +87,31 @@ class AnalyzeRequest(BaseModel):
     fresh: bool = False
 
 
-def load_settings() -> dict | None:
-    return json.loads(SETTINGS_PATH.read_text()) if SETTINGS_PATH.exists() else None
+def load_settings(w: Who) -> dict | None:
+    return json.loads(w.settings_path.read_text()) if w.settings_path.exists() else None
 
 
 def server_slug(server: str) -> str:
     return re.sub(r"[^a-z0-9-]", "", server.strip().lower().replace(" ", "-"))
 
 
-def lookup_character(s: dict, ttl: float) -> dict | None:
+def lookup_character(client: WCLClient, s: dict, ttl: float) -> dict | None:
     data = client.query(CHARACTER_QUERY, {"name": s["name"], "server": server_slug(s["server"]),
                                           "region": s["region"].lower(), "limit": RECENT_REPORTS}, ttl=ttl)
     return data["characterData"]["character"]
 
+
+def new_job(w: Who, progress: list[str] | None = None) -> tuple[str, dict]:
+    if len(jobs) > MAX_JOBS:  # drop the oldest finished jobs
+        for k in [k for k, j in jobs.items() if j["status"] != "running"][:len(jobs) - MAX_JOBS]:
+            jobs.pop(k, None)
+    job_id = uuid.uuid4().hex
+    job = {"status": "running", "progress": progress or [], "result": None, "error": None, "owner": w.user_id}
+    jobs[job_id] = job
+    return job_id, job
+
+
+# ---------- pages, health, sign-in ----------
 
 @app.get("/")
 def index():
@@ -78,28 +119,74 @@ def index():
     return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
 
 
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
+
+
+@app.get("/api/me")
+def me(request: Request):
+    if AUTH_MODE != "wcl":
+        return {"mode": "local", "user": None}
+    s = auth.get_session(app_client, request.cookies.get(auth.SESSION_COOKIE))
+    return {"mode": "wcl", "user": s.user_name if s else None}
+
+
+@app.get("/login")
+def login():
+    url, state = auth.start_login(app_client)
+    r = RedirectResponse(url, status_code=302)
+    r.set_cookie(auth.STATE_COOKIE, state, max_age=auth.STATE_TTL_S, httponly=True, secure=SECURE_COOKIES, samesite="lax")
+    return r
+
+
+@app.get("/callback")
+def callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    if error or not code:
+        return RedirectResponse("/?signin=cancelled", status_code=302)
+    try:
+        s = auth.finish_login(app_client, code, state, request.cookies.get(auth.STATE_COOKIE))
+    except PermissionError as e:
+        raise HTTPException(400, str(e))
+    r = RedirectResponse("/", status_code=302)
+    r.delete_cookie(auth.STATE_COOKIE)
+    r.set_cookie(auth.SESSION_COOKIE, s.id, max_age=int(s.expires - datetime.now().timestamp()), httponly=True,
+                 secure=SECURE_COOKIES, samesite="lax")
+    return r
+
+
+@app.post("/logout")
+def logout(request: Request):
+    auth.end_session(app_client, request.cookies.get(auth.SESSION_COOKIE))
+    r = JSONResponse({"ok": True})
+    r.delete_cookie(auth.SESSION_COOKIE)
+    return r
+
+
+# ---------- your character and keys ----------
+
 @app.get("/api/settings")
-def get_settings():
-    return load_settings() or {}
+def get_settings(w: Who = Depends(who)):
+    return load_settings(w) or {}
 
 
 @app.post("/api/settings")
-def save_settings(s: Settings):
-    char = lookup_character(s.model_dump(), ttl=0)
+def save_settings(s: Settings, w: Who = Depends(who)):
+    char = lookup_character(w.client, s.model_dump(), ttl=0)
     if not char:
         raise HTTPException(404, f"No character {s.name} on {s.server} ({s.region.upper()}) on Warcraft Logs.")
     saved = {"name": char["name"], "server": char["server"]["name"], "region": s.region.lower()}
-    SETTINGS_PATH.parent.mkdir(exist_ok=True)
-    SETTINGS_PATH.write_text(json.dumps(saved))
+    w.settings_path.parent.mkdir(parents=True, exist_ok=True)
+    w.settings_path.write_text(json.dumps(saved))
     return saved
 
 
 @app.get("/api/recent")
-def recent():
-    s = load_settings()
+def recent(w: Who = Depends(who)):
+    s, client = load_settings(w), w.client
     if not s:
         return {"runs": []}
-    char = lookup_character(s, ttl=RECENT_TTL_S)
+    char = lookup_character(client, s, ttl=RECENT_TTL_S)
     if not char:
         raise HTTPException(404, "Character not found on Warcraft Logs.")
     runs, seen = [], []
@@ -111,14 +198,14 @@ def recent():
             # The same key is often uploaded by several group members in separate reports.
             if any(d == (f.name, f.keystone_level) and abs(t - start_ms) < SAME_RUN_MS for d, t in seen):
                 continue
-            me = next((p for p in get_players(client, f) if p.name.lower() == s["name"].lower()), None)
-            if not me:
+            me_ = next((p for p in get_players(client, f) if p.name.lower() == s["name"].lower()), None)
+            if not me_:
                 continue  # someone else's key in a shared report
             seen.append(((f.name, f.keystone_level), start_ms))
             started = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc)
             runs.append({
-                "spec": me.label if me else None,
-                "analyzable": bool(me and spec_for(me.class_name, me.spec)),
+                "spec": me_.label,
+                "analyzable": bool(spec_for(me_.class_name, me_.spec)),
                 "url": f"https://www.warcraftlogs.com/reports/{rep['code']}#fight={f.id}",
                 "dungeon": f.name,
                 "level": f.keystone_level,
@@ -132,21 +219,21 @@ def recent():
 
 
 @app.get("/api/budget")
-def budget():
-    r = client.query("{ rateLimitData { limitPerHour pointsSpentThisHour pointsResetIn } }", ttl=0)["rateLimitData"]
+def budget(w: Who = Depends(who)):
+    r = w.client.query("{ rateLimitData { limitPerHour pointsSpentThisHour pointsResetIn } }", ttl=0)["rateLimitData"]
     return {"used": round(r["pointsSpentThisHour"]), "limit": r["limitPerHour"], "reset_in_s": r["pointsResetIn"]}
 
 
+# ---------- analysis and comparison (background jobs, visible only to their owner) ----------
+
 @app.post("/api/analyze")
-def start_analysis(req: AnalyzeRequest):
-    job_id = uuid.uuid4().hex[:8]
-    job = {"status": "running", "progress": [], "result": None, "error": None}
-    jobs[job_id] = job
-    s = load_settings() or {}
+def start_analysis(req: AnalyzeRequest, w: Who = Depends(who)):
+    job_id, job = new_job(w)
+    s = load_settings(w) or {}
 
     def work():
         try:
-            job["result"] = run_analysis(client, req.url, s.get("name"), TOP_LOGS,
+            job["result"] = run_analysis(w.client, req.url, s.get("name"), TOP_LOGS,
                                          progress=job["progress"].append, use_cache=not req.fresh)
             job["status"] = "done"
         except (AnalysisError, ValueError, StopIteration) as e:
@@ -157,6 +244,60 @@ def start_analysis(req: AnalyzeRequest):
     threading.Thread(target=work, daemon=True).start()
     return {"job": job_id}
 
+
+class CompareRequest(BaseModel):
+    url: str
+    other_url: str
+
+
+@app.get("/api/compare/candidates")
+def compare_candidates(url: str, w: Who = Depends(who)):
+    """Top logs for the same dungeon and key level that pass the data-quality gate."""
+    client, pub = w.client, w.client.public()  # top logs are public: shared cache
+    code, fid = parse_report_url(url)
+    fight = pick_fight(get_fights(client, code), fid)
+    _, spec = pick_healer(get_players(client, fight), (load_settings(w) or {}).get("name"))
+    ranks = {r["name"]: r for lvl in {fight.keystone_level - 1, fight.keystone_level, fight.keystone_level + 1}
+             for r in top_rankings(pub, fight.encounter_id, spec.class_name, spec.spec_name, lvl - 1)}
+    out = []
+    for f, p in comparable_fights(pub, fight, spec.class_name, spec.spec_name, 12):
+        run = fetch_run(pub, f, p.id, spec) if pub.get_cached(f"run:v2:{f.report_code}:{f.id}:{p.id}") else None
+        if run:
+            ok, _ = quality_check(run.damage, run.player_ids, f.duration_s, fight.duration_s)
+            if not ok:
+                continue
+        server = (ranks.get(p.name) or {}).get("server") or {}
+        out.append({"player": p.name, "key": f.keystone_level, "timed": bool(f.kill),
+                    "region": (server.get("region") or "").upper(), "duration_min": round(f.duration_s / 60, 1),
+                    "url": f"https://www.warcraftlogs.com/reports/{f.report_code}#fight={f.id}"})
+    return {"candidates": out}
+
+
+@app.post("/api/compare")
+def start_compare(req: CompareRequest, w: Who = Depends(who)):
+    job_id, job = new_job(w, ["Comparing..."])
+    s = load_settings(w) or {}
+
+    def work():
+        try:
+            job["result"] = compare_runs(w.client, req.url, req.other_url, s.get("name"))
+            job["status"] = "done"
+        except Exception as e:  # surface to the page
+            job["status"], job["error"] = "error", f"{type(e).__name__}: {e}"
+
+    threading.Thread(target=work, daemon=True).start()
+    return {"job": job_id}
+
+
+@app.get("/api/jobs/{job_id}")
+def job_status(job_id: str, w: Who = Depends(who)):
+    job = jobs.get(job_id)
+    if not job or job["owner"] != w.user_id:
+        raise HTTPException(404, "Unknown job")
+    return {k: v for k, v in job.items() if k != "owner"}
+
+
+# ---------- top-player study (shared data: run by the site owner when hosted) ----------
 
 class StudyRequest(BaseModel):
     runs: int = DEFAULT_RUNS
@@ -171,12 +312,14 @@ def _spec(key: str):
 
 
 @app.get("/api/study")
-def get_study(spec: str = SPECS[0].key):
-    return {**study_info(_spec(spec)), "job": study_job}
+def get_study(spec: str = SPECS[0].key, w: Who = Depends(who)):
+    return {**study_info(_spec(spec)), "job": study_job, "can_run": AUTH_MODE != "wcl"}
 
 
 @app.post("/api/study")
-def start_study(req: StudyRequest):
+def start_study(req: StudyRequest, w: Who = Depends(who)):
+    if AUTH_MODE == "wcl":  # one shared study per spec; the owner runs `python study.py` and deploys the result
+        raise HTTPException(403, "The top-player study is maintained by the site owner.")
     spec = _spec(req.spec)
     if study_job.get("status") == "running":
         raise HTTPException(409, "A study is already running.")
@@ -185,62 +328,10 @@ def start_study(req: StudyRequest):
 
     def work():
         try:
-            run_study(client, spec, max(3, min(req.runs, 20)), progress=study_job["progress"].append)
+            run_study(app_client, spec, max(3, min(req.runs, 20)), progress=study_job["progress"].append)
             study_job["status"] = "done"
         except Exception as e:  # report to the page; cached runs make a retry cheap
             study_job["status"], study_job["error"] = "error", f"{type(e).__name__}: {e}"
 
     threading.Thread(target=work, daemon=True).start()
     return study_job
-
-
-class CompareRequest(BaseModel):
-    url: str
-    other_url: str
-
-
-@app.get("/api/compare/candidates")
-def compare_candidates(url: str):
-    """Top logs for the same dungeon and key level that pass the data-quality gate."""
-    code, fid = parse_report_url(url)
-    fight = pick_fight(get_fights(client, code), fid)
-    _, spec = pick_healer(get_players(client, fight), (load_settings() or {}).get("name"))
-    ranks = {r["name"]: r for lvl in {fight.keystone_level - 1, fight.keystone_level, fight.keystone_level + 1}
-             for r in top_rankings(client, fight.encounter_id, spec.class_name, spec.spec_name, lvl - 1)}
-    out = []
-    for f, p in comparable_fights(client, fight, spec.class_name, spec.spec_name, 12):
-        run = fetch_run(client, f, p.id, spec) if client.get_cached(f"run:v2:{f.report_code}:{f.id}:{p.id}") else None
-        if run:
-            ok, _ = quality_check(run.damage, run.player_ids, f.duration_s, fight.duration_s)
-            if not ok:
-                continue
-        server = (ranks.get(p.name) or {}).get("server") or {}
-        out.append({"player": p.name, "key": f.keystone_level, "timed": bool(f.kill),
-                    "region": (server.get("region") or "").upper(), "duration_min": round(f.duration_s / 60, 1),
-                    "url": f"https://www.warcraftlogs.com/reports/{f.report_code}#fight={f.id}"})
-    return {"candidates": out}
-
-
-@app.post("/api/compare")
-def start_compare(req: CompareRequest):
-    job_id = uuid.uuid4().hex[:8]
-    job = {"status": "running", "progress": ["Comparing..."], "result": None, "error": None}
-    jobs[job_id] = job
-    s = load_settings() or {}
-
-    def work():
-        try:
-            job["result"] = compare_runs(client, req.url, req.other_url, s.get("name"))
-            job["status"] = "done"
-        except Exception as e:  # surface to the page
-            job["status"], job["error"] = "error", f"{type(e).__name__}: {e}"
-
-    threading.Thread(target=work, daemon=True).start()
-    return {"job": job_id}
-
-
-@app.get("/api/jobs/{job_id}")
-def job_status(job_id: str):
-    if job_id not in jobs:
-        raise HTTPException(404, "Unknown job")
-    return jobs[job_id]

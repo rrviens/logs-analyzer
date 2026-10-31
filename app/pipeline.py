@@ -85,25 +85,26 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     my_boss_casts = fetch_boss_casts(client, fight, run)
 
     progress("Finding comparable top logs...")
+    pub = client.public()  # ranked top logs are public: fetched once into the shared cache, for every user
     tops, top_boss, candidates, skipped = [], [], [], []
     # Extra candidates so logs failing the data-quality gate can be replaced from further down.
-    for f, p in comparable_fights(client, fight, spec.class_name, spec.spec_name, top + QUALITY_BACKFILL):
+    for f, p in comparable_fights(pub, fight, spec.class_name, spec.spec_name, top + QUALITY_BACKFILL):
         if len(tops) >= top:
             break
         progress(f"Fetching top log {len(tops) + 1} of {top} ({p.name} +{f.keystone_level})...")
-        other = fetch_run(client, f, p.id, spec)
+        other = fetch_run(pub, f, p.id, spec)
         otl = build_timeline(other)
         ok, reasons = quality_check(other.damage, other.player_ids, f.duration_s, fight.duration_s, otl.group_ehp)
         if not ok:
             skipped.append({"player": p.name, "key": f.keystone_level, "reasons": reasons})
             continue
         candidates.append((f, p))
-        state = fetch_healer_state(client, f, other, spec)
-        top_run = TopRun(other, get_trinkets(client, f).get(p.id, []),
-                         frozenset(intake_modifiers(get_players(client, f), effects)),
-                         heal_casts(other, otl, fetch_spell_heals(client, f, other, spec), state, spec))
+        state = fetch_healer_state(pub, f, other, spec)
+        top_run = TopRun(other, get_trinkets(pub, f).get(p.id, []),
+                         frozenset(intake_modifiers(get_players(pub, f), effects)),
+                         heal_casts(other, otl, fetch_spell_heals(pub, f, other, spec), state, spec))
         tops.append((top_run, otl))
-        top_boss.append((other, otl, fetch_boss_casts(client, f, other)))
+        top_boss.append((other, otl, fetch_boss_casts(pub, f, other)))
 
     progress("Analyzing...")
     top_rip = [(hots_active(tr.run, otl) if spec.maintenance else None, hot_refreshes(tr.run, spec))
@@ -227,7 +228,7 @@ def _death_recaps(client, fight, run, players, state, top_runs, candidates, cloc
     group_casts = fetch_group_casts(client, fight, {p.id for p in players})
     schools = ability_schools(client, fight)
     auras = fetch_auras(client, fight, {p.id for p in players})
-    top_auras = [(tr, fetch_auras(client, f, tr.player_ids)) for tr, (f, _) in zip(top_runs, candidates)]
+    top_auras = [(tr, fetch_auras(client.public(), f, tr.player_ids)) for tr, (f, _) in zip(top_runs, candidates)]
     can_dispel = dispellable(auras, *[a for _, a in top_auras])
     # Which own tools clear which debuff - from this run and the top healers' runs.
     self_clears = learn_self_clears(auras, group_casts, run.ability_name, tools)

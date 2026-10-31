@@ -9,3 +9,4 @@ cache.sqlite3
 # per-user runtime data
 data/settings.json
 data/feedback.json
+data/users/

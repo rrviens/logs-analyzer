@@ -1,0 +1,24 @@
+# Render blueprint (https://render.com/docs/blueprint-spec). Secrets are entered in the Render dashboard
+# (sync: false), never committed. One instance with a persistent disk for the cache, sessions and settings.
+services:
+  - type: web
+    name: healer-review
+    runtime: docker
+    plan: starter
+    healthCheckPath: /healthz
+    numInstances: 1
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: AUTH_MODE
+        value: wcl
+      - key: DATA_DIR
+        value: /data
+      - key: WCL_CLIENT_ID
+        sync: false
+      - key: WCL_CLIENT_SECRET
+        sync: false
+      - key: REDIRECT_URI
+        sync: false  # https://<your-service>.onrender.com/callback - also add it in your WCL API client

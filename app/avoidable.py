@@ -210,7 +210,7 @@ def build(client: WCLClient, fight: Fight, run: RunData, tops: list[tuple[Fight,
     """Learn and cache this run's tags (the vs-top-player comparison reads the cached copy)."""
     tags = learn_avoidable(run, [o for _, o in tops], {r[2] for r in group_casts})
     mine = fetch_kicks(client, fight, run.player_ids)
-    spells = kickable([fetch_kicks(client, f, o.player_ids) for f, o in tops], run.ability_name)
+    spells = kickable([fetch_kicks(client.public(), f, o.player_ids) for f, o in tops], run.ability_name)  # public top logs
     av = Avoidance(tags, went_through(run, mine, spells, group_casts))
     client.set_cached(cache_key(fight.report_code, fight.id), av.as_dict())
     return av

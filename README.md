@@ -31,6 +31,28 @@ Command line, if you prefer:
 .\.venv\Scripts\python cli.py analyze "<report url>" [--player NAME] [--top 8] [--all] [--fresh]
 ```
 
+## Hosting it for others (sign in with Warcraft Logs)
+
+In hosted mode (`AUTH_MODE=wcl`) every visitor signs in with their own Warcraft Logs account (OAuth with PKCE).
+Their analyses run on their own token and API limit, their private logs are cached under their own account only,
+and settings and jobs are per visitor. Ranked top logs are public and fetched once into a shared cache.
+The top-player study is shared too: the site owner runs `python study.py --spec <key>` and deploys the result.
+
+**Recommended host: [Render](https://render.com)** - deploys from GitHub with the included `render.yaml`
+(Docker, health check on `/healthz`, a 1 GB persistent disk at `/data`). The Starter plan plus the disk is roughly
+$7-8/month; the free tier has no persistent disk, so the cache and sign-ins would be lost on every restart.
+
+1. In your Warcraft Logs API client (https://www.warcraftlogs.com/api/clients) add the redirect URL
+   `https://<your-service>.onrender.com/callback` (keep `http://localhost:8000/callback` for local testing).
+2. On Render: New > Blueprint > pick this repository. Fill in the secret values when asked:
+   `WCL_CLIENT_ID`, `WCL_CLIENT_SECRET`, `REDIRECT_URI` (the URL from step 1). They live only in Render's settings.
+3. Deploy. The site shows "Sign in with Warcraft Logs"; after signing in, set your character as usual.
+
+Run it as one instance (jobs are in memory, the cache is SQLite). Any Docker host works the same way: build the
+`Dockerfile`, mount a persistent volume at `/data`, set the three environment variables, serve over https.
+
+To try hosted mode locally: set `AUTH_MODE=wcl` and `SECURE_COOKIES=0` in `.env` and start the app as usual.
+
 ## On the page
 
 - **Timeline** per pull: group HP, lowest player, top groups' typical HP, boss phases, lanes for healing

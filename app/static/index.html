@@ -311,6 +311,9 @@
   #tlSection.pinned { border-radius: 0 0 12px 12px; padding: 10px 20px 8px; }
   #tlSection.pinned details.legend { display: none; }
   #textSize.on { border-color: var(--accent); color: var(--accent); }
+  .signin { max-width: 560px; margin: 40px auto; grid-column: 1 / -1; }
+  .signin p { color: var(--muted); }
+  .signin a.primary { display: inline-block; text-decoration: none; margin-top: 8px; }
   dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text);
            padding: 20px; width: min(420px, calc(100vw - 32px)); }
   dialog::backdrop { background: rgba(0,0,0,.4); }
@@ -1441,6 +1444,7 @@ async function loadStudy() {
 $("studyBtn").onclick = async () => {
   const s = await api("/api/study").catch(() => ({}));
   if (s.job && s.job.status === "running") { alert((s.job.progress || []).join("\n") || "Running..."); return; }
+  if (s.can_run === false) { alert("The top-player study is maintained by the site owner."); return; }
   if (!confirm("Refresh the top-player study (10 top runs per dungeon)?\n\nIt pauses whenever the hourly WCL budget gets low, "
     + "so it can take a few hours. You can keep analyzing keys meanwhile; closing the app stops it (cached runs are kept).")) return;
   try { await api("/api/study", {method: "POST", body: JSON.stringify({runs: 10})}); } catch (e) { alert(e.message); }
@@ -1457,15 +1461,36 @@ function setTextSize(large) {
 }
 $("textSize").onclick = () => setTextSize(!document.documentElement.classList.contains("large"));
 setTextSize(lsGet("textSize") === "large");
-loadRuns();
-loadBudget();
-loadStudy();
+
+// Hosted mode: sign in with Warcraft Logs first; your analyses then run on your own account.
+async function startApp() {
+  const me = await api("/api/me").catch(() => ({mode: "local"}));
+  if (me.mode === "wcl" && !me.user) {
+    document.querySelector(".layout").innerHTML = `<main class="card signin">
+      <h2>Healer Review</h2>
+      <p>Context-aware Mythic+ healing review, compared with top players of your spec at your key level.</p>
+      <p>Sign in with your Warcraft Logs account: your analyses run on your own account and API limit, and your
+        private logs stay visible only to you.</p>
+      <a class="primary" href="/login">Sign in with Warcraft Logs</a></main>`;
+    ["studyBtn", "charBtn", "budget"].forEach((id) => { $(id).hidden = true; });
+    return false;
+  }
+  if (me.user) {
+    const out = document.createElement("button");
+    out.className = "pill"; out.textContent = `${me.user} · Sign out`;
+    out.onclick = async () => { await fetch("/logout", {method: "POST"}); location.href = "/"; };
+    $("charBtn").after(out);
+  }
+  return true;
+}
+const appReady = startApp();
+appReady.then((ok) => { if (ok) { loadRuns(); loadBudget(); loadStudy(); } });
 // Links: ?run=<log url> opens that run (&at=<element id> scrolls to it, &pull=<n|whole> picks the timeline view);
 // ?theme=dark|light overrides the system theme.
 (async () => {
   const q = new URLSearchParams(location.search);
   if (["dark", "light"].includes(q.get("theme"))) document.documentElement.dataset.theme = q.get("theme");
-  if (!q.get("run")) return;
+  if (!q.get("run") || !(await appReady)) return;
   await analyze(q.get("run"));
   if (TL && PRESETS[q.get("preset")]) { applyPreset(q.get("preset")); syncToggles(); drawTimeline(); }
   if (TL && q.get("pull")) selectPull(q.get("pull") === "whole" ? -1 : +q.get("pull") - 1);

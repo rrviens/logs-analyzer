@@ -1,0 +1,10 @@
+.env
+.venv
+.git
+__pycache__
+*.pyc
+cache.sqlite3*
+data/settings.json
+data/feedback.json
+data/users
+docs
