@@ -539,7 +539,7 @@ async function loadSettings() {
     $("charBtn").textContent = `${s.name} · ${s.server} ${s.region.toUpperCase()}`;
     $("cName").value = s.name; $("cServer").value = s.server; $("cRegion").value = s.region;
     const known = [...((MINE || {}).characters || []), ...recentChars()].find((c) => charKey(c) === charKey(s));
-    CURRENT_CHAR = {...s, class: known && known.class};
+    CURRENT_CHAR = {...s, class: s.class || (known && known.class)};
   }
   return s;
 }
@@ -1802,13 +1802,12 @@ async function fillRealms() {
 // ---------- character picker: a dropdown under the header button ----------
 // Your claimed Warcraft Logs characters (signed in), the ones you used recently, or "Enter manually…".
 let MINE = null, CURRENT_CHAR = null;
-const CLASS_BY_ID = {1: "Warrior", 2: "Paladin", 3: "Hunter", 4: "Rogue", 5: "Priest", 6: "Death Knight", 7: "Shaman",
-                     8: "Mage", 9: "Warlock", 10: "Monk", 11: "Druid", 12: "Demon Hunter", 13: "Evoker"};
 const charKey = (c) => `${c.name}|${c.server}|${c.region}`.toLowerCase();
-const recentChars = () => { try { return JSON.parse(localStorage.getItem("recentChars") || "[]"); } catch { return []; } };
+// v2: entries saved before the class-id fix carried wrong classes, so the old list is dropped.
+const recentChars = () => { try { return JSON.parse(localStorage.getItem("recentChars2") || "[]"); } catch { return []; } };
 function rememberChar(c) {
   const list = [c, ...recentChars().filter((r) => charKey(r) !== charKey(c))].slice(0, 5);
-  try { localStorage.setItem("recentChars", JSON.stringify(list)); } catch {}
+  try { localStorage.setItem("recentChars2", JSON.stringify(list)); } catch {}
 }
 let CHAR_OPTS = [];
 async function fillCharList() {

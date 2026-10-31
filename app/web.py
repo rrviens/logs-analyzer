@@ -42,15 +42,16 @@ SAME_RUN_MS = 120_000
 CHARACTER_QUERY = """
 query($name: String!, $server: String!, $region: String!, $limit: Int) {
   characterData { character(name: $name, serverSlug: $server, serverRegion: $region) {
-    id name server { name }
+    id name classID server { name }
     recentReports(limit: $limit) { data { code startTime } }
   } }
 }
 """
 
 MY_CHARACTERS_QUERY = "{ userData { currentUser { characters { name level classID server { name region { slug } } } } } }"
-CLASS_NAMES = {1: "Warrior", 2: "Paladin", 3: "Hunter", 4: "Rogue", 5: "Priest", 6: "Death Knight", 7: "Shaman",
-               8: "Mage", 9: "Warlock", 10: "Monk", 11: "Druid", 12: "Demon Hunter", 13: "Evoker"}
+# Warcraft Logs' own class ids (gameData.classes) - alphabetical, not Blizzard's numbering.
+CLASS_NAMES = {1: "Death Knight", 2: "Druid", 3: "Hunter", 4: "Mage", 5: "Monk", 6: "Paladin", 7: "Priest",
+               8: "Rogue", 9: "Shaman", 10: "Warlock", 11: "Warrior", 12: "Demon Hunter", 13: "Evoker"}
 MY_CHARACTERS_TTL_S = 3600
 
 app = FastAPI()
@@ -273,7 +274,8 @@ def save_settings(s: Settings, w: Who = Depends(who)):
     char = lookup_character(w.client.quick(), s.model_dump(), ttl=0)
     if not char:
         raise HTTPException(404, f"No character {s.name} on {s.server} ({s.region.upper()}) on Warcraft Logs.")
-    saved = {"name": char["name"], "server": char["server"]["name"], "region": s.region.lower()}
+    saved = {"name": char["name"], "server": char["server"]["name"], "region": s.region.lower(),
+             "class": CLASS_NAMES.get(char.get("classID"))}
     w.settings_path.parent.mkdir(parents=True, exist_ok=True)
     w.settings_path.write_text(json.dumps(saved))
     return saved
@@ -299,6 +301,8 @@ def recent(limit: int = RECENT_FIRST, w: Who = Depends(who)):
                                  "automatically.", "partial": None}
     if not char:
         raise HTTPException(404, "Character not found on Warcraft Logs.")
+    if not s.get("class") and CLASS_NAMES.get(char.get("classID")):  # saved before the class was kept: fill it in
+        w.settings_path.write_text(json.dumps({**s, "class": CLASS_NAMES[char["classID"]]}))
     reports = sorted(char["recentReports"]["data"], key=lambda r: -r["startTime"])
     runs, seen, partial = [], [], None
     now_ms = datetime.now(timezone.utc).timestamp() * 1000
