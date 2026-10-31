@@ -365,7 +365,7 @@
     <select id="cRegion"><option value="eu">EU</option><option value="us">US</option><option value="kr">KR</option><option value="tw">TW</option></select>
     <div class="error" id="charError"></div>
     <div class="row">
-      <button class="pill" value="cancel" formnovalidate>Cancel</button>
+      <button type="button" class="pill" onclick="$('charDialog').close()">Cancel</button>
       <button class="primary" id="charSave" value="save">Save</button>
     </div>
   </form>
@@ -1430,8 +1430,8 @@ async function fillRealms() {
 function openChar() { $("charError").textContent = ""; $("charDialog").showModal(); fillRealms(); }
 $("charBtn").onclick = openChar;
 $("cRegion").onchange = fillRealms;
+// Enter in Name or Server submits Save (Cancel is type="button", so it is never the form's default button).
 $("charForm").addEventListener("submit", async (e) => {
-  if (e.submitter && e.submitter.value === "cancel") return;
   e.preventDefault();
   $("charSave").disabled = true;
   try {
