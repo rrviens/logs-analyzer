@@ -902,7 +902,9 @@ function drawTimeline() {
         g += `<line${near(m)} x1="${xm}" x2="${xm}" y1="${yc - r - 1}" y2="${yc + r + 1}" stroke="${m.covered === false ? "var(--critical)" : "var(--muted)"}"
           stroke-width="3" stroke-linecap="round" ${tip}/>`;
         if (m.avoid && isOn("avoid")) g += `<circle cx="${xm}" cy="${yc - r - 4}" r="2.5" fill="var(--warning)" pointer-events="none"/>`;
-      } else if (m.icon) {  // cooldowns, personals, trinkets: the spell's icon; name and details on hover
+      } else if (m.icon && (!whole || ((kind === "trinket" || kind === "potion") && grp.every((c) => c.icon === m.icon)))) {
+        // The spell's icon; name and details on hover. Whole run: only rare items, and only when a merged group is all
+        // the same item - frequent presses (cooldowns, personals) merge, so one icon would misname the others.
         const s = laneH - 4;
         g += `<g${near(m)}>${iconSvg(m.icon, xm - s / 2, yc - s / 2, s, tip)}</g>`;
       } else {
@@ -921,8 +923,9 @@ function drawTimeline() {
       g += `<rect x="${xa}" y="${yc - barH / 2}" width="${w}" height="${barH}" rx="2" fill="${SCOPE_COLOR[d.scope]}"
         opacity="${d.minor ? .3 : d.protective ? .55 : .35}" ${tip}/>`;
       // The icon at the start of the bar says what was pressed; icons of overlapping spans sit side by side.
+      // Whole run: bars only (too squeezed - icons would drift off their bars); the name is on hover.
       const slot = all.slice(0, k).filter((o) => o.end_s > d.start_s && x(d.start_s) - x(o.start_s) < barH).length;
-      if (d.icon && (w >= barH || slot)) g += iconSvg(d.icon, xa + slot * (barH + 1), yc - barH / 2, barH, tip);
+      if (d.icon && !whole && (w >= barH || slot)) g += iconSvg(d.icon, xa + slot * (barH + 1), yc - barH / 2, barH, tip);
     });
   });
   if (manaH && t.mana.length) {
