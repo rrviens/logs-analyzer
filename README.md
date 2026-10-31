@@ -3,7 +3,7 @@
 Context-aware M+ healer analysis on top of the Warcraft Logs API.
 
 Supported specs: Restoration Shaman, Restoration Druid, Mistweaver Monk, Holy Priest, Preservation Evoker, Holy Paladin
-(Discipline Priest next). Each is a module in `app/specs/`, built from what top players of that spec actually cast in
+and Discipline Priest (beta, see Status). Each is a module in `app/specs/`, built from what top players of that spec actually cast in
 current-patch logs. Spec rules that need a top-player study (planned cooldown timings, cooldown rate) work once
 `python study.py --spec <key>` has been run for that spec; Resto Shaman's study is included.
 
@@ -175,3 +175,12 @@ A spec is one `Spec` (`app/specs/base.py`): cooldowns (healing / utility / perso
 - Cooldowns never cast in a run are treated as not talented.
 - Boss phases are not split yet; recurring group hits stand in for them.
 - WCL API budget is 1000 points/hour; a run costs ~23 points and is cached in `cache.sqlite3`.
+
+## Status (parked work)
+
+- **Discipline Priest** (`app/specs/discipline.py`): written from 6 top logs - Atonement (buff 194384, verified) as the
+  "out before big hits" mechanic, Evangelism and Ultimate Penitence as ramp cooldowns, no single-vs-group heal pair.
+  The full trial analysis on a top Disc log has not run yet (parked to save API budget), so treat its findings as beta.
+- **Top-player studies** for Resto Druid, Mistweaver, Holy Priest, Preservation, Holy Paladin and Discipline are not run
+  yet (~520 API points per spec at 5 runs per dungeon): `python study.py --spec <key> --runs 5`. Until then those specs
+  have no planned-cooldown-timing or cooldown-rate findings.
