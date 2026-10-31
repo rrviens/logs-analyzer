@@ -14,6 +14,7 @@ from app.composition import describe, intake_modifiers, load_effects
 from app.context import build_context
 from app.context_model import load_dungeon
 from app.chains import OUTCOME_S, Chain, find_chains
+from app.dps_windows import calm_bins, calm_dps, fetch_damage_done, find_windows, median_rate, summarize
 from app.encounters import Encounter, load_encounter
 from app.findings import Finding, TopRun, analyze
 from app.metrics import hot_refreshes, hots_active
@@ -35,7 +36,7 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient
 
-RULES_VERSION = 37
+RULES_VERSION = 38
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
 # memory at once; set TOP_WORKERS=1 on a small (512 MB) host.
@@ -241,6 +242,9 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
                               my_players, fetch_defense_spans(client, fight, run, my_players, load_defensives()),
                               group_casts, avoid, chains, spec, ability_icons(client, code), encounter),
     }
+    progress("Finding DPS windows...")
+    out["dps"], out["timeline"]["dps_windows"] = _dps_windows(client, fight, run, tl, segs, profiles, tops,
+                                                               candidates, spec)
     client.set_cached(key, out)
     return out
 
@@ -279,6 +283,36 @@ def _death_recaps(client, fight, run, players, state, top_runs, candidates, cloc
         r["short"], r["fix"] = _death_short(r)
         out.append(r)
     return out
+
+
+def _dps_windows(client, fight, run, tl, segs, profiles, tops, candidates, spec) -> tuple[dict, list[dict]]:
+    """Calm windows in your run (healthy group by that pull's top-group standard, no big hit coming) and the damage
+    you dealt in them, vs top healers' damage per second in their own calm moments."""
+    calm = calm_bins(run, tl, [h.t for s in segs for h in s.hits],
+                     {i: p.target_ehp for i, p in enumerate(profiles) if p})
+    windows = find_windows(run, tl, calm, fetch_damage_done(client, fight, run))
+    rates, pub = [], client.public()
+    for (tr, otl), (f, _) in zip(tops, candidates):
+        top_segs = all_segments(tr.run, otl, spec)
+        top_calm = calm_bins(tr.run, otl, [h.t for s in top_segs for h in s.hits])
+        rates.append(calm_dps(find_windows(tr.run, otl, top_calm, fetch_damage_done(pub, f, tr.run))))
+    top_rate = median_rate(rates)
+    rel = lambda t: round((t - run.start) / 1000, 1)
+    rows = []
+    for w in windows:
+        mine = w.damage / w.seconds if w.seconds else 0
+        use = min(1.0, mine / top_rate) if top_rate else None
+        missed = max(0.0, top_rate * w.seconds - w.damage) if top_rate else None
+        rows.append({"start_s": rel(w.start), "end_s": rel(w.end), "use": round(use, 2) if use is not None else None,
+                     "tip": [f"Safe DPS window: {w.seconds:.0f}s (group healthy, no big hit coming)",
+                             f"You: {w.dps_casts} damage cast{'s' if w.dps_casts != 1 else ''}, {w.other_casts} other "
+                             f"(heals into a healthy group, buffs), ~{w.idle_s:.0f}s idle",
+                             f"Your damage here: {mine / 1000:.0f}k/s" + (f" vs ~{top_rate / 1000:.0f}k/s for top "
+                                                                        f"{spec.plural} in their calm moments" if top_rate else ""),
+                             f"~{missed / 1e6:.1f}M damage left on the table" if missed and missed >= 1e5 else
+                             ("Used it about as well as top players" if top_rate else ""),
+                             "Idle time can also mean moving or out of range" if w.idle_s >= 3 else ""]})
+    return summarize(windows, top_rate), rows
 
 
 def _pull_label(run, i: int) -> str:

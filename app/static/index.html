@@ -538,6 +538,7 @@ const TOGGLES = [
   ["l:trinket", "Other", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Trinkets & potions"],
   ["l:finding", "Other", `<i class="dot" style="background:var(--warning)"></i>`, "Finding dots"],
   ["mana", "Healing", `<i style="background:var(--series-1)"></i>`, "Your mana"],
+  ["dps", "Healing", `<i class="box" style="background:var(--good)"></i>`, "DPS windows (used / missed)"],
   ["party", "Party", `<span class="sym">▤</span>`, "Party member lanes"],
   ["personal", "Party", `<i class="box" style="background:var(--series-1)"></i>`, "Personal defensives"],
   ["external", "Party", `<i class="box" style="background:var(--series-3)"></i>`, "Externals"],
@@ -551,8 +552,8 @@ const TOGGLES = [
 const SCOPE_KEY = {personal: "personal", external: "external", group: "groupdef"};
 // Presets switch whole sets of toggles; any change in the Lanes menu makes it "custom".
 const PRESETS = {
-  healing: {label: "Healing", on: ["group", "lowest", "top", "l:cooldown", "l:hit", "deaths", "chain"]},
-  party: {label: "Party", on: ["group", "lowest", "top", "uncovered", "l:cooldown", "l:hit", "deaths", "chain", "l:personal",
+  healing: {label: "Healing", on: ["group", "lowest", "top", "l:cooldown", "l:hit", "deaths", "chain", "dps"]},
+  party: {label: "Party", on: ["group", "lowest", "top", "uncovered", "l:cooldown", "l:hit", "deaths", "chain", "dps", "l:personal",
                                "party", "personal", "external", "groupdef", "avoid"]},
   everything: {label: "Everything", on: TOGGLES.map((t) => t[0])},
 };
@@ -784,7 +785,9 @@ function drawTimeline() {
                                  ...(t.lanes || [])] : [];
   const hpTop = Math.round(fs + 10), hpH = pinned ? Math.round(fs * 5) : Math.max(180, Math.round(fs * 13));
   const lanesTop = hpTop + hpH + 10;
-  const partyTop = lanesTop + shownLanes.length * laneH + (lanes.length ? 10 : 0);
+  const dpsRows = isOn("dps") && (t.dps_windows || []).length ? 1 : 0;  // one "DPS windows" row under the marker lanes
+  const dpsY = lanesTop + shownLanes.length * laneH;
+  const partyTop = dpsY + dpsRows * laneH + (lanes.length ? 10 : 0);
   const manaH = pinned || !isOn("mana") ? 0 : Math.round(fs * 3);
   const manaTop = partyTop + lanes.length * laneH + (manaH ? 12 : 0);
   const axisY = manaTop + manaH + 4, H = Math.round(axisY + fs + 10);
@@ -901,6 +904,16 @@ function drawTimeline() {
     });
   });
   const barH = Math.max(8, laneH - 6);
+  if (dpsRows) {  // calm stretches: green = used about as well as top healers, amber = partly, red = mostly missed
+    const yc = dpsY + laneH / 2;
+    g += `<line x1="${L}" x2="${W - R}" y1="${yc}" y2="${yc}" stroke="var(--grid)"/>`;
+    t.dps_windows.filter((w) => w.end_s >= s0 && w.start_s <= s1 && (!whole || pullAt(w.start_s))).forEach((w) => {
+      const xa = x(Math.max(w.start_s, s0)), xb = x(Math.min(w.end_s, s1));
+      const col = w.use == null ? "var(--ink-muted)" : w.use >= 0.75 ? "var(--good)" : w.use >= 0.4 ? "var(--warning)" : "var(--critical)";
+      g += `<rect x="${xa}" y="${yc - barH / 2}" width="${Math.max(3, xb - xa)}" height="${barH}" rx="2" fill="${col}"
+        opacity=".55" ${tipAttr(w.tip.filter(Boolean))}/>`;
+    });
+  }
   lanes.forEach((ln, i) => {
     const yc = partyTop + i * laneH + laneH / 2;
     g += `<line x1="${L}" x2="${W - R}" y1="${yc}" y2="${yc}" stroke="var(--grid)"/>`;
@@ -926,6 +939,7 @@ function drawTimeline() {
   g += `<text class="lane" x="8" y="${hpTop + fs}">HP</text>`;
   shownLanes.forEach(([, label, , short], i) =>
     g += `<text class="lane" x="8" y="${lanesTop + i * laneH + laneH / 2 + mid}">${W < 560 ? short : label}</text>`);
+  if (dpsRows) g += `<text class="lane" x="8" y="${dpsY + laneH / 2 + mid}">${W < 560 ? "DPS" : "DPS windows"}</text>`;
   lanes.forEach((ln, i) => {
     const yc = partyTop + i * laneH + laneH / 2;
     g += `<rect x="8" y="${yc - fs / 2}" width="3" height="${fs}" fill="${ln.id === "group" ? "var(--series-7)" : CLASS_COLORS[ln.class] || "var(--line)"}"/>

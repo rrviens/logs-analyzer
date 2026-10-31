@@ -108,6 +108,15 @@ start, or your mana under 35%; cooldowns on cooldown are listed as context). The
 at the same spot and what happened in the next 20s. A finding only fires when a risky chain then hurt (a death,
 someone under 25% or the group under 50%).
 
+## DPS windows
+
+Calm stretches (3s+) where the group is as healthy as top groups hold it on that pull, nobody is low, little damage is
+coming in and no big group hit lands in the next 4s - time a healer can spend on damage. The timeline's "DPS windows"
+row shades each one: green = you dealt about as much damage there as top healers of your spec do in their own calm
+moments, amber = partly, red = mostly missed. Hover for your damage casts vs other casts, idle time, your damage per
+second vs theirs, and the damage left on the table. Calm time is compared with calm time (not pull to pull), because
+groups pull differently. Thresholds are at the top of `app/dps_windows.py`.
+
 ## Encounter notes
 
 `data/encounters.json` holds our own one-line note per important enemy ability (type - tank damage, unavoidable
