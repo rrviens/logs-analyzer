@@ -1005,6 +1005,7 @@ function drawTimeline() {
 // i = pull index, or -1 for the whole run. Also filters "What to look at" to that pull.
 function selectPull(i) {
   TL.pull = i; TL.view = null; TL.mark = null;
+  lsSet(`pull:${TL.url}`, i);
   drawTimeline();
   filterLook(i < 0 ? null : i);
 }
@@ -1062,12 +1063,12 @@ function updatePinHeight() {
   document.documentElement.style.setProperty("--pin-h", `${h}px`);
 }
 
-function initTimeline(res) {
+function initTimeline(res, url) {
   if (!res.timeline || !res.timeline.pulls.length) return;
-  TL = {res, pull: 0, view: null, mark: null, tips: []};
-  const first = res.findings.find((f) => f.pull !== "Whole run");
-  const start = first ? res.timeline.pulls.findIndex((p) => first.t_s >= p.start_s && first.t_s <= p.end_s) : 0;
-  TL.pull = Math.max(0, start);
+  // Whole run unless a pull was picked for this run before (remembered per run).
+  const saved = +(lsGet(`pull:${url}`) ?? -1);
+  TL = {res, url, pull: saved < res.timeline.pulls.length ? saved : -1, view: null, mark: null, tips: []};
+  if (TL.pull >= 0) filterLook(TL.pull);
   $("tlPull").onchange = (e) => selectPull(+e.target.value);
   $("tlWhole").onclick = () => selectPull(-1);
   document.querySelectorAll("#tlSection [data-preset]").forEach((b) => b.onclick = () => {
@@ -1461,7 +1462,7 @@ function render(res, url) {
         + "mechanic has a side effect the log can't show (e.g. dispelling something is punished), the advice changes."}
       Defensive values in data/defensives.json are approximate.</div>`;
   $("fresh").onclick = () => analyze(url, true);
-  initTimeline(res);
+  initTimeline(res, url);
   drawDps();
   initCompare(url);
 }
