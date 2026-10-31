@@ -36,7 +36,7 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
-RULES_VERSION = 44
+RULES_VERSION = 45
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -702,6 +702,18 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
                       "top_curve": _top_curve(seg, tops),
                       "phases": [{"name": ph.name, "start_s": rel(ph.start), "end_s": rel(ph.end)} for ph in phases.get(i, [])]})
     mana = [state.mana_at(tl.start + b * tl.bin_ms) for b in range(len(tl.group_ehp))] if state and state.mana else []
+    # For "Analyze selection" on the page: damage taken, avoidable hits and your casts, per second.
+    nbins = len(tl.group_ehp)
+    casts_per_bin = [0] * nbins
+    for t, _, _ in run.casts:
+        casts_per_bin[tl.bin_of(t)] += 1
+    avoid_hits: dict[tuple[int, str], float] = {}
+    if avoid:
+        for d in run.damage:
+            tag = avoid.tag_at(run, d[2], d[0])
+            if tag:
+                k = (tl.bin_of(d[0]), tag.ability)
+                avoid_hits[k] = avoid_hits.get(k, 0.0) + d[3] + d[4]
     return {
         "bin_s": tl.bin_ms / 1000,
         "group": [round(v, 3) for v in tl.group_ehp],
@@ -712,6 +724,10 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
         "lanes": lanes,
         "defense": defense,
         "uses": uses,
+        "intake": [round(v) for v in tl.intake],
+        "intake_frac": [round(v, 4) for v in tl.intake_frac],
+        "avoid_hits": [[b, n, round(a)] for (b, n), a in sorted(avoid_hits.items())],
+        "casts": casts_per_bin,
         "uncovered_hits": uncovered,
         "lust": lust,
         "ready_lanes": ready_lanes,

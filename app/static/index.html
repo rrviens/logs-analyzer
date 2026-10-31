@@ -120,6 +120,12 @@
   .pill { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; background: none;
           color: var(--text); cursor: pointer; font: inherit; }
   .budget { color: var(--muted); font-size: 0.8667rem; }
+  .tlsel { margin-top: 0.6rem; padding: 0.6rem 0.8rem; border: 1px solid var(--line); border-radius: 8px;
+           background: var(--panel); font-size: 0.9333rem; }
+  .tlsel ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
+  .tlsel li { margin: 0.15rem 0; }
+  .tlselhead { display: flex; gap: 0.5rem; align-items: center; }
+  .tlselhead b { margin-right: auto; }
   .pill.stale { border-color: var(--med); color: var(--med); }
   h2.sec { margin-top: 24px; }
   .death { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
@@ -623,7 +629,8 @@ function renderTimelineShell(res) {
     <div class="tlwrap" id="ovWrap"><svg id="ovSvg" role="img" aria-label="Whole run overview: click a pull or drag a range to zoom"></svg>
       <div class="tip" id="ovTip"></div></div>
     <div class="tlwrap" id="tlWrap"><svg id="tlSvg" role="img" aria-label="Group HP, events and defensives over the selected pull"></svg>
-      <div class="tip" id="tlTip"></div></div></div>`;
+      <div class="tip" id="tlTip"></div></div>
+    <div class="tlsel" id="tlSel" hidden></div></div>`;
 }
 
 // ---------- whole-run overview: pulls side by side, gaps between pulls squeezed ----------
@@ -967,6 +974,12 @@ function drawTimeline() {
     for (let s = Math.ceil(s0 / step) * step; s <= s1; s += step)
       g += `<text x="${x(s)}" y="${tickY}" text-anchor="middle">${fmtClock(s)}</text>`;
   }
+  if (TL.sel && TL.sel[1] >= s0 && TL.sel[0] <= s1) {  // the analyzed selection
+    const xa = x(Math.max(TL.sel[0], s0)), xb = x(Math.min(TL.sel[1], s1));
+    g += `<rect x="${xa}" y="${hpTop}" width="${Math.max(2, xb - xa)}" height="${axisY - hpTop}" fill="var(--accent)" opacity=".12"
+      stroke="var(--accent)" stroke-dasharray="3 3" pointer-events="none"/>`;
+  }
+  g += `<rect id="tlDrag" x="0" y="${hpTop}" width="0" height="${axisY - hpTop}" fill="var(--accent)" opacity=".18" pointer-events="none"/>`;
   g += `<line id="tlCross" x1="0" x2="0" y1="${hpTop}" y2="${axisY}" stroke="var(--text)" stroke-width="1" opacity="0" pointer-events="none"/>`;
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.setAttribute("height", H);
@@ -1004,7 +1017,59 @@ function drawTimeline() {
       ${topAt ? `<br>Top groups here: <b>${pct(topAt[2])}</b> (middle half ${pct(topAt[1])}-${pct(topAt[3])})` : ""}`);
   };
   svg.onmouseleave = () => { tip.style.display = "none"; cross.setAttribute("opacity", "0"); };
+  // Ctrl+wheel (or a trackpad pinch) zooms around the cursor; a plain wheel keeps scrolling the page.
+  svg.onwheel = (ev) => {
+    if (!ev.ctrlKey) return;
+    ev.preventDefault();
+    const s = toS(ev), f = ev.deltaY > 0 ? 1.25 : 0.8;
+    if (whole) {  // zooming into the whole run opens the pull under the cursor
+      if (f > 1) return;
+      const q = pullAt(s);
+      if (!q) return;
+      TL.pull = t.pulls.indexOf(q);
+      lsSet(`pull:${TL.url}`, TL.pull);
+      filterLook(TL.pull);
+      TL.view = null;
+    } else {
+      zoomAt(s, f);
+    }
+    drawTimeline();
+  };
+  svg.ondblclick = () => { if (!whole && TL.view) { TL.view = null; drawTimeline(); } };
+  // Drag: pans when zoomed into a pull; otherwise (or with Shift) selects a range to analyze.
+  svg.onmousedown = (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    TL.drag = {x0: ev.clientX, s0: toS(ev), pan: !!TL.view && !whole && !ev.shiftKey, moved: false,
+               view: TL.view && [...TL.view], perPx: span / plotW * (W / svg.getBoundingClientRect().width)};
+  };
+  TL.dragMove = (ev) => {
+    const d = TL.drag;
+    if (Math.abs(ev.clientX - d.x0) > 4) d.moved = true;
+    if (!d.moved) return;
+    if (d.pan) {
+      const lo = p.start_s, hi = Math.max(p.end_s, p.start_s + 1), w = d.view[1] - d.view[0];
+      const a = Math.min(hi - w, Math.max(lo, d.view[0] - (ev.clientX - d.x0) * d.perPx));
+      TL.view = [a, a + w];
+      drawTimeline();
+    } else {
+      const s = Math.min(s1, Math.max(s0, toS(ev))), xa = x(Math.min(s, d.s0)), xb = x(Math.max(s, d.s0));
+      $("tlDrag").setAttribute("x", xa); $("tlDrag").setAttribute("width", xb - xa);
+    }
+  };
+  TL.dragEnd = (ev) => {
+    const d = TL.drag;
+    TL.drag = null;
+    if (!d.moved) return;
+    TL.noClick = true;
+    if (!d.pan) {
+      const s = Math.min(s1, Math.max(s0, toS(ev)));
+      if (Math.abs(s - d.s0) >= 1) { TL.sel = [Math.min(s, d.s0), Math.max(s, d.s0)]; renderSelection(); }
+      drawTimeline();
+    }
+  };
   svg.onclick = (ev) => {
+    if (TL.noClick) { TL.noClick = false; return; }
     const f = ev.target.closest("[data-f]");
     if (f) return flashFinding(+f.dataset.f);
     if (whole) {  // click a pull in the whole-run view to open it
@@ -1013,6 +1078,75 @@ function drawTimeline() {
     }
   };
   drawOverview();
+}
+
+// Zoom the open pull by factor f around run time s (f < 1 zooms in); back to the whole pull when it covers it.
+function zoomAt(s, f) {
+  const p = TL.res.timeline.pulls[TL.pull], lo = p.start_s, hi = Math.max(p.end_s, lo + 1);
+  const [v0, v1] = TL.view || [lo, hi], w = Math.min(hi - lo, Math.max(5, (v1 - v0) * f));
+  if (w >= hi - lo - 0.5) { TL.view = null; return; }
+  const a = Math.min(hi - w, Math.max(lo, s - (s - v0) * (w / (v1 - v0))));
+  TL.view = [a, a + w];
+}
+
+// "Analyze selection": a summary of just the dragged time range, from the timeline data already on the page.
+function renderSelection() {
+  const box = $("tlSel"), t = TL.res.timeline, [a, b] = TL.sel;
+  const b0 = Math.max(0, Math.floor(a / t.bin_s)), b1 = Math.min(t.group.length - 1, Math.ceil(b / t.bin_s));
+  const bins = [];
+  for (let k = b0; k <= b1; k++) bins.push(k);
+  const secs = Math.max(1, b - a), pct = (v) => v == null ? "-" : `${Math.round(v * 100)}%`;
+  const avg = (arr) => { const v = bins.map((k) => arr[k]).filter((x) => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+  const lowest = Math.min(...bins.map((k) => t.lowest[k] ?? 1));
+  // Top groups at the same point of each overlapping pull (their middle line), averaged.
+  const topVals = [];
+  t.pulls.forEach((q) => {
+    if (!q.top_curve || q.end_s < a || q.start_s > b) return;
+    for (let s = Math.max(a, q.start_s); s <= Math.min(b, q.end_s); s += t.bin_s) {
+      const i = Math.round((s - q.start_s) / (q.end_s - q.start_s) * (q.top_curve.length - 1));
+      topVals.push(q.top_curve[Math.max(0, Math.min(q.top_curve.length - 1, i))][2]);
+    }
+  });
+  const top = topVals.length ? topVals.reduce((s, x) => s + x, 0) / topVals.length : null;
+  const intake = bins.reduce((s, k) => s + ((t.intake || [])[k] || 0), 0);
+  const inFrac = bins.reduce((s, k) => s + ((t.intake_frac || [])[k] || 0), 0) / secs;
+  const avoidBy = {};
+  (t.avoid_hits || []).forEach(([k, n, amt]) => { if (k >= b0 && k <= b1) avoidBy[n] = (avoidBy[n] || 0) + amt; });
+  const avoid = Object.values(avoidBy).reduce((s, x) => s + x, 0);
+  const avoidNames = Object.entries(avoidBy).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([n]) => n);
+  const casts = bins.reduce((s, k) => s + ((t.casts || [])[k] || 0), 0);
+  const inside = (s) => s >= a && s <= b;
+  const marks = (kinds) => t.markers.filter((m) => kinds.includes(m.kind) && inside(m.t_s));
+  const list = (ms, fmt) => ms.length ? ms.map(fmt).join(", ") : "none";
+  const defs = {};
+  (t.defense || []).filter((d) => inside(d.start_s)).forEach((d) => { defs[d.name] = (defs[d.name] || 0) + 1; });
+  const groupDefs = groupDefenses((t.defense || []).filter((d) => inside(d.start_s)), t.lanes || []).length;
+  const name = (id) => ((t.lanes || []).find((l) => l.id === id) || {}).name || "?";
+  const uses = (t.uses || []).filter((u) => inside(u.t_s));
+  const findings = marks(["finding"]);
+  const onePull = t.pulls.find((q) => a >= q.start_s - 1 && b <= q.end_s + 1);
+  box.innerHTML = `<div class="tlselhead"><b>Selection ${fmtClock(a)}-${fmtClock(b)} <span style="font-weight:400">(${Math.round(secs)}s)</span></b>
+      ${onePull ? `<button class="tlbtn" id="tlSelZoom">Zoom to it</button>` : ""}
+      <button class="tlbtn" id="tlSelClose" aria-label="Close selection">✕</button></div>
+    <ul>
+      <li><strong>Group HP:</strong> ${pct(avg(t.group))} average, lowest player ${pct(lowest)}${top != null
+        ? ` · top groups ${pct(top)} at the same points` : ""}</li>
+      <li><strong>Damage taken:</strong> ${(inFrac * 100).toFixed(1)}% of group HP per second${intake && avoid
+        ? ` · ${pct(avoid / intake)} avoidable (${esc(avoidNames.join(", "))})` : " · nothing tagged avoidable"}</li>
+      <li><strong>Your casts:</strong> ${casts} (${Math.round(casts / secs * 60)} per minute) · cooldowns:
+        ${esc(list(marks(["cooldown", "personal", "trinket"]), (m) => `${m.label} ${fmtClock(m.t_s)}`))}</li>
+      <li><strong>Defensives pressed:</strong> ${Object.keys(defs).length
+        ? esc(Object.entries(defs).map(([n, c]) => c > 1 ? `${n} ×${c}` : n).join(", ")) : "none"}${groupDefs ? ` (${groupDefs} group-wide)` : ""}</li>
+      <li><strong>Potions / healthstones / trinkets:</strong> ${esc(list(uses, (u) => `${u.name} (${name(u.lane)}) ${fmtClock(u.t_s)}`))}</li>
+      <li><strong>Deaths:</strong> ${esc(list(marks(["death"]), (m) => `${m.label} ${fmtClock(m.t_s)}`))}</li>
+      <li><strong>Findings:</strong> ${findings.length ? findings.map((m) =>
+        `<a class="link" href="#" data-sf="${m.index}">${esc(m.label)}</a>`).join(", ") : "none"}</li>
+    </ul>`;
+  box.hidden = false;
+  $("tlSelClose").onclick = () => { TL.sel = null; box.hidden = true; drawTimeline(); updatePinHeight(); };
+  if (onePull) $("tlSelZoom").onclick = () => focusTimeline(a, b);
+  box.querySelectorAll("[data-sf]").forEach((el) => el.onclick = (e) => { e.preventDefault(); flashFinding(+el.dataset.sf); });
+  updatePinHeight();
 }
 
 // i = pull index, or -1 for the whole run. Also filters "What to look at" to that pull.
@@ -1067,7 +1201,8 @@ function syncToggles() {
   document.querySelectorAll("#tlLanes input[data-k]").forEach((cb) => { cb.checked = isOn(cb.dataset.k); });
   $("tlLegendItems").innerHTML = TOGGLES.filter(([k]) => isOn(k) && k !== "party")
     .map(([, , sw, label]) => `<span>${sw}${esc(label)}</span>`).join("")
-    + `<span class="hint">Overview: click a pull to open it, drag a range to zoom, double-click for the whole run</span>`;
+    + `<span class="hint">Overview: click a pull to open it, drag a range to zoom, double-click for the whole run.
+      Chart: Ctrl+wheel zooms, drag pans when zoomed, drag (or Shift+drag) selects a range to analyze, double-click resets.</span>`;
 }
 
 function updatePinHeight() {
@@ -1082,6 +1217,11 @@ function initTimeline(res, url) {
   const saved = +(lsGet(`pull:${url}`) ?? -1);
   TL = {res, url, pull: saved < res.timeline.pulls.length ? saved : -1, view: null, mark: null, tips: []};
   if (TL.pull >= 0) filterLook(TL.pull);
+  if (!window.tlDragBound) {  // chart drags (pan / select) keep tracking outside the chart
+    window.tlDragBound = true;
+    window.addEventListener("mousemove", (ev) => { if (TL && TL.drag) TL.dragMove(ev); });
+    window.addEventListener("mouseup", (ev) => { if (TL && TL.drag) TL.dragEnd(ev); });
+  }
   $("tlPull").onchange = (e) => selectPull(+e.target.value);
   $("tlWhole").onclick = () => selectPull(-1);
   document.querySelectorAll("#tlSection [data-preset]").forEach((b) => b.onclick = () => {
