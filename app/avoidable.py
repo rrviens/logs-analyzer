@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from app.reports import Fight
 from app.runs import RunData, _events
 from app.segments import MELEE_ID, match_pull
-from app.wcl import WCLClient
+from app.wcl import WCLClient, parallel_map
 
 CACHE_VERSION = 1
 MIN_TOPS = 3  # matched top pulls needed before judging an ability
@@ -210,7 +210,8 @@ def build(client: WCLClient, fight: Fight, run: RunData, tops: list[tuple[Fight,
     """Learn and cache this run's tags (the vs-top-player comparison reads the cached copy)."""
     tags = learn_avoidable(run, [o for _, o in tops], {r[2] for r in group_casts})
     mine = fetch_kicks(client, fight, run.player_ids)
-    spells = kickable([fetch_kicks(client.public(), f, o.player_ids) for f, o in tops], run.ability_name)  # public top logs
+    pub = client.public()  # public top logs
+    spells = kickable(parallel_map(lambda fo: fetch_kicks(pub, fo[0], fo[1].player_ids), tops), run.ability_name)
     av = Avoidance(tags, went_through(run, mine, spells, group_casts))
     client.set_cached(cache_key(fight.report_code, fight.id), av.as_dict())
     return av

@@ -3,6 +3,8 @@
 Raw event pages are large, so they skip the query cache; the trimmed RunData is
 cached instead.
 """
+import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 
 from app.reports import Fight, get_players
@@ -10,6 +12,7 @@ from app.specs.base import Spec
 from app.wcl import WCLClient
 
 CACHE_VERSION = 2
+FETCH_STREAMS = int(os.environ.get("FETCH_STREAMS", "3"))  # event streams of one run fetched at once
 
 RUN_QUERY = """
 query($code: String!) {
@@ -113,31 +116,35 @@ def fetch_run(client: WCLClient, fight: Fight, healer_id: int, spec: Spec) -> Ru
     players = get_players(client, fight)
     ids = {p.id for p in players}
 
-    damage = [
-        [e["timestamp"], e["targetID"], e.get("abilityGameID", 0), e.get("amount", 0), e.get("absorbed", 0),
-         e.get("hitPoints"), e.get("maxHitPoints"), e.get("absorb", 0), e.get("unmitigatedAmount")]
-        for e in _events(client, fight, "DamageTaken", hostility="Friendlies", resources=True)
-        if e.get("type") == "damage" and e.get("targetID") in ids
-    ]
-    heals = [
-        [e["timestamp"], e.get("sourceID"), e["targetID"], e.get("amount", 0), e["type"] == "absorbed"]
-        for e in _events(client, fight, "Healing", hostility="Friendlies")
-        if e.get("type") in ("heal", "absorbed") and e.get("targetID") in ids
-    ]
-    deaths = [
-        [e["timestamp"], e["targetID"], e.get("killingAbilityGameID", 0)]
-        for e in _events(client, fight, "Deaths", hostility="Friendlies")
-        if e.get("targetID") in ids
-    ]
-    casts = [
-        [e["timestamp"], e.get("abilityGameID", 0), e.get("targetID")]
-        for e in _events(client, fight, "Casts", source_id=healer_id)
-        if e.get("type") == "cast"
-    ]
-    hots = [
-        [e["timestamp"], e["type"], e.get("targetID")]
-        for e in _events(client, fight, "Buffs", source_id=healer_id, ability_id=spec.maintenance.buff_id)
-    ] if spec.maintenance else []
+    def damage():
+        return [[e["timestamp"], e["targetID"], e.get("abilityGameID", 0), e.get("amount", 0), e.get("absorbed", 0),
+                 e.get("hitPoints"), e.get("maxHitPoints"), e.get("absorb", 0), e.get("unmitigatedAmount")]
+                for e in _events(client, fight, "DamageTaken", hostility="Friendlies", resources=True)
+                if e.get("type") == "damage" and e.get("targetID") in ids]
+
+    def heals():
+        return [[e["timestamp"], e.get("sourceID"), e["targetID"], e.get("amount", 0), e["type"] == "absorbed"]
+                for e in _events(client, fight, "Healing", hostility="Friendlies")
+                if e.get("type") in ("heal", "absorbed") and e.get("targetID") in ids]
+
+    def deaths():
+        return [[e["timestamp"], e["targetID"], e.get("killingAbilityGameID", 0)]
+                for e in _events(client, fight, "Deaths", hostility="Friendlies") if e.get("targetID") in ids]
+
+    def casts():
+        return [[e["timestamp"], e.get("abilityGameID", 0), e.get("targetID")]
+                for e in _events(client, fight, "Casts", source_id=healer_id) if e.get("type") == "cast"]
+
+    def hots():
+        return [[e["timestamp"], e["type"], e.get("targetID")]
+                for e in _events(client, fight, "Buffs", source_id=healer_id, ability_id=spec.maintenance.buff_id)
+                ] if spec.maintenance else []
+
+    # Independent event streams, FETCH_STREAMS at a time: the waits overlap, and each stream still trims page by
+    # page, so memory grows by at most that many raw pages.
+    with ThreadPoolExecutor(FETCH_STREAMS) as pool:
+        damage, heals, deaths, casts, hots = [f.result() for f in [pool.submit(fn) for fn in
+                                                                   (damage, heals, deaths, casts, hots)]]
 
     run = RunData(
         code=fight.report_code,

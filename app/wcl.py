@@ -16,6 +16,7 @@ import json
 import sqlite3
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -27,8 +28,20 @@ RATE_QUERY = "{ rateLimitData { limitPerHour pointsSpentThisHour pointsResetIn }
 RETRIES = 5  # on 429 (burst limit) / 5xx: back off 2, 4, 8, 16, 30s (or Retry-After)
 
 
+AUX_WORKERS = 4  # small per-log / per-death fetches run this many at a time
+
+
 class WCLError(RuntimeError):
     pass
+
+
+def parallel_map(fn, items, workers: int = AUX_WORKERS) -> list:
+    """fn over items with overlapping network waits; results in input order."""
+    items = list(items)
+    if len(items) <= 1:
+        return [fn(i) for i in items]
+    with ThreadPoolExecutor(min(workers, len(items))) as pool:
+        return list(pool.map(fn, items))
 
 
 class WCLClient:

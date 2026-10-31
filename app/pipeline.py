@@ -34,7 +34,7 @@ from app.spells import fetch_spell_heals, heal_casts
 from app.verdicts import _section, items_verdict, phases_verdict, pulls_verdict, spell_verdict
 from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
-from app.wcl import WCLClient
+from app.wcl import WCLClient, parallel_map
 
 RULES_VERSION = 43
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
@@ -102,10 +102,17 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         if cached:
             return cached
 
-    progress(f"Fetching your run ({fight.name} +{fight.keystone_level or 0})...")
+    progress(f"Fetching your run ({fight.name} +{fight.keystone_level or 0}) and finding comparable top logs...")
     effects = load_effects()
     my_players = get_players(client, fight)
     my_mods = frozenset(intake_modifiers(my_players, effects))
+    pub = client.public()  # ranked top logs are public: fetched once into the shared cache, for every user
+    # The top-log search only needs the fight and your group, so it runs while your run downloads.
+    finder = ThreadPoolExecutor(1)
+    found = finder.submit(lambda: _by_comp(comparable_fights(pub, fight, spec.class_name, spec.spec_name,
+                                                             top + QUALITY_BACKFILL + COMP_POOL),
+                                           pub, fight, my_players, effects))
+    finder.shutdown(wait=False)
     run = fetch_run(client, fight, me.id, spec)
     tl = build_timeline(run)
     segs = all_segments(run, tl, spec)
@@ -113,8 +120,6 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     my_state = fetch_healer_state(client, fight, run, spec)
     my_boss_casts = fetch_boss_casts(client, fight, run)
 
-    progress("Finding comparable top logs...")
-    pub = client.public()  # ranked top logs are public: fetched once into the shared cache, for every user
     tops, top_boss, candidates, skipped = [], [], [], []
     fetched = [0]
 
@@ -137,8 +142,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
 
     # Extra candidates so logs failing the data-quality gate can be replaced from further down. Fetched
     # TOP_WORKERS at a time, in batches of exactly what is still missing, so no log is fetched for nothing.
-    pending = _by_comp(comparable_fights(pub, fight, spec.class_name, spec.spec_name, top + QUALITY_BACKFILL + COMP_POOL),
-                       pub, fight, my_players, effects)
+    pending = found.result()
     progress(f"Fetching {min(top, len(pending))} top logs, {TOP_WORKERS} at a time...")
     with ThreadPoolExecutor(TOP_WORKERS) as pool:
         while pending and len(tops) < top:
@@ -282,7 +286,9 @@ def _death_recaps(client, fight, run, players, state, top_runs, candidates, cloc
     group_casts = fetch_group_casts(client, fight, {p.id for p in players})
     schools = ability_schools(client, fight)
     auras = fetch_auras(client, fight, {p.id for p in players})
-    top_auras = [(tr, fetch_auras(client.public(), f, tr.player_ids)) for tr, (f, _) in zip(top_runs, candidates)]
+    pub = client.public()
+    top_auras = list(zip(top_runs, parallel_map(lambda trf: fetch_auras(pub, trf[1][0], trf[0].player_ids),
+                                                list(zip(top_runs, candidates)))))
     can_dispel = dispellable(auras, *[a for _, a in top_auras])
     # Which own tools clear which debuff - from this run and the top healers' runs.
     self_clears = learn_self_clears(auras, group_casts, run.ability_name, tools)
@@ -294,8 +300,8 @@ def _death_recaps(client, fight, run, players, state, top_runs, candidates, cloc
                     if d[0] == victim and t - 10_000 <= d[3] and d[2] <= t}
     handling = top_debuff_handling(top_auras, debuff_names, tools, spec.plural)
     out = []
-    for t, victim, killing in deaths:
-        ev = fetch_death_events(client, fight, victim, t)
+    events = parallel_map(lambda d: fetch_death_events(client, fight, d[1], d[0]), deaths)
+    for (t, victim, killing), ev in zip(deaths, events):
         r = recap_death(run, players, group_casts, defensives, ev, t, victim, killing, schools,
                         auras, can_dispel, self_clears, handling, state.procs() if state else None)
         r["clock"] = clock(t)
