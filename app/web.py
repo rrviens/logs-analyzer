@@ -9,6 +9,7 @@ Run: python -m uvicorn app.web:app --port 8000
 import json
 import re
 import threading
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -92,7 +93,9 @@ def load_settings(w: Who) -> dict | None:
 
 
 def server_slug(server: str) -> str:
-    return re.sub(r"[^a-z0-9-]", "", server.strip().lower().replace(" ", "-"))
+    """Blizzard realm slug: accents dropped ("Aggra (Português)" -> "aggra-portugues"), apostrophes and brackets gone."""
+    plain = unicodedata.normalize("NFKD", server).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9-]", "", re.sub(r"\s+", "-", plain.strip().lower()))
 
 
 def lookup_character(client: WCLClient, s: dict, ttl: float) -> dict | None:
@@ -117,6 +120,13 @@ def new_job(w: Who, progress: list[str] | None = None) -> tuple[str, dict]:
 def index():
     # no-store: an open tab otherwise keeps serving an old page after an update
     return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/realms")
+def realms():
+    """Realm names for the Server autocomplete, from the hand-kept data/realms.json (no API calls)."""
+    data = json.loads((PROJECT_ROOT / "data" / "realms.json").read_text(encoding="utf-8"))
+    return {r: sorted(set(names)) for r, names in data.items() if not r.startswith("_")}
 
 
 @app.get("/healthz")

@@ -360,7 +360,7 @@
   <form method="dialog" id="charForm">
     <strong>Your character</strong>
     <label for="cName">Name</label><input id="cName" required>
-    <label for="cServer">Server</label><input id="cServer" required placeholder="e.g. Kazzak">
+    <label for="cServer">Server</label><input id="cServer" required placeholder="e.g. Kazzak" list="realmList" autocomplete="off"><datalist id="realmList"></datalist>
     <label for="cRegion">Region</label>
     <select id="cRegion"><option value="eu">EU</option><option value="us">US</option><option value="kr">KR</option><option value="tw">TW</option></select>
     <div class="error" id="charError"></div>
@@ -1488,8 +1488,15 @@ function filterLook(i) {
     (${fmtClock(p.start_s)}-${fmtClock(p.end_s)})</span><button class="tlbtn" onclick="filterLook(null)">Show full dungeon</button>`;
 }
 
-function openChar() { $("charError").textContent = ""; $("charDialog").showModal(); }
+// Server autocomplete: a hand-kept realm list per region (data/realms.json); any name still works as typed.
+let REALMS = null;
+async function fillRealms() {
+  if (!REALMS) REALMS = await api("/api/realms").catch(() => ({}));
+  $("realmList").innerHTML = (REALMS[$("cRegion").value] || []).map((r) => `<option value="${esc(r)}">`).join("");
+}
+function openChar() { $("charError").textContent = ""; $("charDialog").showModal(); fillRealms(); }
 $("charBtn").onclick = openChar;
+$("cRegion").onchange = fillRealms;
 $("charForm").addEventListener("submit", async (e) => {
   if (e.submitter && e.submitter.value === "cancel") return;
   e.preventDefault();
