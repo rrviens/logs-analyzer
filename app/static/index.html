@@ -1297,9 +1297,10 @@ function renderDps(res) {
   const d = res.dps, ws = (res.timeline || {}).dps_windows || [];
   if (!d || !ws.length) return "";
   const k = (v) => v == null ? "-" : `${Math.round(v / 1000)}k`, m = (v) => `${(v / 1e6).toFixed(1)}M`;
-  const head = `${d.windows} calm window${d.windows === 1 ? "" : "s"} (${d.seconds}s in total)` + (d.top_dps
-    ? `: you dealt ${k(d.your_dps)}/s in them, top ${SP.plural} ${k(d.top_dps)}/s in their own calm moments`
-      + (d.missed ? ` · ~${m(d.missed)} damage left on the table` : "") : "");
+  const head = `${d.windows} calm window${d.windows === 1 ? "" : "s"} (${d.seconds}s in total)`
+    + (d.your_dps ? `: you dealt ${k(d.your_dps)}/s in them` : "")
+    + (d.top_dps ? `, top ${SP.plural} ${k(d.top_dps)}/s in their own calm moments` : "")
+    + (d.missed ? ` · ~${m(d.missed)} damage left on the table (your own hit sizes × enemies alive)` : "");
   const worst = ws.filter((w) => w.missed >= 5e4).sort((a, b) => b.missed - a.missed).slice(0, 6).map((w) =>
     `<li><span class="when">${T(w.clock)}</span><span class="pl">${esc(pullShort(w.pull))}</span>
       <span>${w.seconds}s calm · ${w.dps_casts} damage cast${w.dps_casts === 1 ? "" : "s"}, ${w.other_casts} other,

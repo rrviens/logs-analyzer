@@ -14,14 +14,14 @@ from app.composition import describe, intake_modifiers, load_effects
 from app.context import build_context
 from app.context_model import load_dungeon
 from app.chains import OUTCOME_S, Chain, find_chains
-from app.dps_windows import calm_bins, calm_dps, fetch_damage_done, find_windows, median_rate, summarize
+from app.dps_windows import calm_bins, calm_dps, damage_model, fetch_damage_done, find_windows, median_rate, summarize
 from app.encounters import Encounter, load_encounter
 from app.findings import Finding, TopRun, analyze
 from app.metrics import hot_refreshes, hots_active
 from app.reports import ability_icons, get_fights, get_players, get_trinkets, parse_report_url, pick_fight
 from app.runs import fetch_run
 from app.segments import all_segments, build_profile, match_pull, segment_metrics
-from app.avoidable import Avoidance, build as build_avoidance
+from app.avoidable import Avoidance, build as build_avoidance, fetch_kicks
 from app.auras import dispellable, fetch_auras, learn_self_clears, top_debuff_handling
 from app.deaths import (ENVIRONMENTAL, MAX_RECAPS, _applies, ability_schools, clear_tools, fetch_death_events, fetch_group_casts,
                         load_defensives, recap_death)
@@ -36,7 +36,7 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient
 
-RULES_VERSION = 40
+RULES_VERSION = 41
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
 # memory at once; set TOP_WORKERS=1 on a small (512 MB) host.
@@ -290,7 +290,10 @@ def _dps_windows(client, fight, run, tl, segs, profiles, tops, candidates, spec)
     you dealt in them, vs top healers' damage per second in their own calm moments."""
     calm = calm_bins(run, tl, [h.t for s in segs for h in s.hits],
                      {i: p.target_ehp for i, p in enumerate(profiles) if p})
-    windows = find_windows(run, tl, calm, fetch_damage_done(client, fight, run))
+    damage = fetch_damage_done(client, fight, run)
+    model = damage_model(run, damage, spec)
+    windows = find_windows(run, tl, calm, damage, model,
+                           fetch_kicks(client, fight, run.player_ids)["casts"] if model else None)
     rates, pub = [], client.public()
     for (tr, otl), (f, _) in zip(tops, candidates):
         top_segs = all_segments(tr.run, otl, spec)
@@ -301,15 +304,22 @@ def _dps_windows(client, fight, run, tl, segs, profiles, tops, candidates, spec)
     rows = []
     for w in windows:
         mine = w.damage / w.seconds if w.seconds else 0
-        use = min(1.0, mine / top_rate) if top_rate else None
-        missed = max(0.0, top_rate * w.seconds - w.damage) if top_rate else None
+        if w.potential is not None:  # vs what you could have cast here
+            use = min(1.0, w.damage / w.potential) if w.potential else 1.0
+            missed = w.missed
+        else:  # no spell model: vs top healers' calm-time rate
+            use = min(1.0, mine / top_rate) if top_rate else None
+            missed = max(0.0, top_rate * w.seconds - w.damage) if top_rate else None
+        could = (f"Could have dealt ~{w.potential / 1e6:.1f}M with your own {_could_spell(spec, w.enemies)} "
+                 f"({w.enemies} enem{'ies' if w.enemies != 1 else 'y'} casting nearby)") if w.potential else ""
         s = max(0, (w.start - run.start) // 1000)
         rows.append({"start_s": rel(w.start), "end_s": rel(w.end), "use": round(use, 2) if use is not None else None,
                      "missed": round(missed or 0), "clock": f"{s // 60}:{s % 60:02d}", "seconds": round(w.seconds),
                      "pull": next((_pull_label(run, i) for i, p in enumerate(run.pulls)  # 1s bins can start just before
                                    if p.start - tl.bin_ms <= w.start <= p.end), ""),
                      "dps_casts": w.dps_casts, "other_casts": w.other_casts, "idle_s": round(w.idle_s),
-                     "tip": [f"Safe DPS window: {w.seconds:.0f}s (group healthy, no big hit coming)",
+                     "tip": [f"Safe DPS window: {w.seconds:.0f}s (no damage coming in, group healthy or being "
+                             f"healed, no big hit coming)", could,
                              f"You: {w.dps_casts} damage cast{'s' if w.dps_casts != 1 else ''}, {w.other_casts} other "
                              f"(heals into a healthy group, buffs), ~{w.idle_s:.0f}s idle",
                              f"Your damage here: {mine / 1000:.0f}k/s" + (f" vs ~{top_rate / 1000:.0f}k/s for top "
@@ -318,6 +328,10 @@ def _dps_windows(client, fight, run, tl, segs, profiles, tops, candidates, spec)
                              ("Used it about as well as top players" if top_rate else ""),
                              "Idle time can also mean moving or out of range" if w.idle_s >= 3 else ""]})
     return summarize(windows, top_rate), rows
+
+
+def _could_spell(spec, enemies: int | None) -> str:
+    return spec.dps_aoe if (enemies or 0) >= 2 and spec.dps_aoe else " / ".join(spec.dps_st) or "damage spells"
 
 
 def _pull_label(run, i: int) -> str:

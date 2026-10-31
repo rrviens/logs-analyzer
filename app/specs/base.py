@@ -51,6 +51,11 @@ class Spec:
     mana_spells: str = ""  # "Chain Heal and Healing Rain" - what low mana limits
     personal_habit: str = ""  # how top players use the personal, e.g. "press Astral Shift ~13 times a run"
     self_res: tuple = ()  # abilities that bring the healer back (low HP right after is not incoming damage)
+    dps_aoe: str = ""  # damage spell for 2+ enemies in calm windows, e.g. "Chain Lightning"
+    dps_aoe_targets: int = 3  # enemies it hits
+    dps_aoe_cast_s: float = 1.7
+    dps_st: tuple = ()  # single-target damage spells, e.g. ("Lava Burst", "Lightning Bolt")
+    dps_st_cast_s: float = 1.5  # average time per single-target cast
 
     @property
     def healing_cooldowns(self) -> dict:

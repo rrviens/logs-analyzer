@@ -27,4 +27,6 @@ SPEC = Spec(
     mana_spells="Chain Heal and Healing Rain",
     personal_habit="press Astral Shift ~13 times a run - often before targeted damage lands",
     self_res=("Reincarnation",),
+    dps_aoe="Chain Lightning",
+    dps_st=("Lava Burst", "Lightning Bolt"),
 )

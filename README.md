@@ -110,12 +110,15 @@ someone under 25% or the group under 50%).
 
 ## DPS windows
 
-Calm stretches (3s+) where the group is as healthy as top groups hold it on that pull, nobody is low, little damage is
-coming in and no big group hit lands in the next 4s - time a healer can spend on damage. The "DPS windows" section
-has its own whole-run strip that shades each one (click a window to open it on the timeline): green = you dealt about as much damage there as top healers of your spec do in their own calm
-moments, amber = partly, red = mostly missed. Hover for your damage casts vs other casts, idle time, your damage per
-second vs theirs, and the damage left on the table; the biggest missed windows are listed with clickable times. Calm time is compared with calm time (not pull to pull), because
-groups pull differently. Thresholds are at the top of `app/dps_windows.py`.
+Calm stretches (3s+) with almost no damage coming in, nobody low, no big group hit in the next 3s, and either the group
+healthy or healing already running (totems, HoTs - HP will climb on its own) - time a healer can spend on damage.
+Missed damage = what you could have cast there minus what you dealt: your own average Chain Lightning hit × enemies
+alive (up to 3, 1.7s cast) on 2+ enemies, your own Lava Burst / Lightning Bolt on one. Enemies alive = distinct
+enemies casting around the window (a floor - pure melee mobs don't show). Specs without damage spells set fall back to
+top healers' damage per second in their own calm moments, which is also shown alongside. The "DPS windows" section
+has its own whole-run strip that shades each one (click a window to open it on the timeline): green = used, amber =
+partly, red = mostly missed; the biggest missed windows are listed with clickable times. Thresholds are at the top of
+`app/dps_windows.py`, spell fields in the spec (`dps_aoe`, `dps_st`).
 
 ## Encounter notes
 
