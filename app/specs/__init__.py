@@ -1,8 +1,13 @@
 """Healer specs the analyzer knows. Add a module with a SPEC and list it here."""
 from app.specs.base import RACIALS, Spec
+from app.specs.holy_paladin import SPEC as HOLY_PALADIN
+from app.specs.holy_priest import SPEC as HOLY_PRIEST
+from app.specs.mistweaver import SPEC as MISTWEAVER
+from app.specs.preservation import SPEC as PRESERVATION
+from app.specs.resto_druid import SPEC as RESTO_DRUID
 from app.specs.resto_shaman import SPEC as RESTO_SHAMAN
 
-SPECS: list[Spec] = [RESTO_SHAMAN]
+SPECS: list[Spec] = [RESTO_SHAMAN, RESTO_DRUID, MISTWEAVER, HOLY_PRIEST, PRESERVATION, HOLY_PALADIN]
 
 
 def spec_for(class_name: str, spec_name: str | None) -> Spec | None:
@@ -14,4 +19,4 @@ def spec_for(class_name: str, spec_name: str | None) -> Spec | None:
 
 def healers_in(players) -> list[tuple]:
     """(player, spec) for every healer in the group whose spec is supported."""
-    return [(p, s) for p in players if (s := spec_for(p.class_name, p.spec))]
+    return [(p, s) for p in players if p.role == "healer" and (s := spec_for(p.class_name, p.spec))]

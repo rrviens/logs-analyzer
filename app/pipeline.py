@@ -18,7 +18,7 @@ from app.runs import fetch_run
 from app.segments import all_segments, build_profile, match_pull, segment_metrics
 from app.avoidable import Avoidance, build as build_avoidance
 from app.auras import dispellable, fetch_auras, learn_self_clears, top_debuff_handling
-from app.deaths import (MAX_RECAPS, _applies, ability_schools, clear_tools, fetch_death_events, fetch_group_casts,
+from app.deaths import (ENVIRONMENTAL, MAX_RECAPS, _applies, ability_schools, clear_tools, fetch_death_events, fetch_group_casts,
                         load_defensives, recap_death)
 from app.context import CooldownTracker
 from app.defense_spans import active_at, fetch_defense_spans
@@ -31,7 +31,7 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient
 
-RULES_VERSION = 35
+RULES_VERSION = 36
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 CURVE_POINTS = 60
 LUST_SPELLS = {"Heroism", "Bloodlust", "Time Warp", "Fury of the Aspects", "Primal Rage", "Ancient Hysteria",
@@ -362,7 +362,7 @@ def _death_short(r: dict) -> tuple[str, str]:
     savers = [i for i in every if i["status"] == "ready" and i.get("verdict") == "lived"]
     if story and story.get("fix"):
         fix = story["fix"]
-    elif savers:
+    elif savers and cause not in ENVIRONMENTAL:
         fix = f"Use {savers[0]['name']}"
     else:
         fix = ""

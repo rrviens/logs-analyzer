@@ -2,7 +2,10 @@
 
 Context-aware M+ healer analysis on top of the Warcraft Logs API.
 
-Supported specs: Restoration Shaman (more healer specs are being added; each is a module in `app/specs/`).
+Supported specs: Restoration Shaman, Restoration Druid, Mistweaver Monk, Holy Priest, Preservation Evoker, Holy Paladin
+(Discipline Priest next). Each is a module in `app/specs/`, built from what top players of that spec actually cast in
+current-patch logs. Spec rules that need a top-player study (planned cooldown timings, cooldown rate) work once
+`python study.py --spec <key>` has been run for that spec; Resto Shaman's study is included.
 
 ## Setup
 

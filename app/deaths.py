@@ -24,6 +24,7 @@ CAUSE_MIN_SHARE = 0.25
 SELF_DISPEL_LATE_S = 2.0  # sitting in your own dispellable debuff longer than this is worth calling out
 LIVED_MIN = 0.10  # replay bottoming out above this = likely lived; between 0 and this = too close to call
 MAX_RECAPS = 10
+ENVIRONMENTAL = {"Falling", "Drowning", "Lava", "Fatigue", "Slime"}  # no defensive saves these: no "Use X" advice
 
 DEATH_EVENTS_QUERY = """
 query($code: String!, $fightIDs: [Int], $start: Float, $end: Float, $actor: Int) {

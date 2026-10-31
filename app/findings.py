@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from app.context import (CALM, EMERGENCY, GROUP_LOW_COUNT, IDLE, LETHAL_EHP, PRESSURE, Context,
                          CooldownTracker, low_count)
 from app.context_model import DungeonModel
+from app.deaths import ENVIRONMENTAL
 from app.metrics import hots_active
 from app.runs import RunData
 from app.specs import RACIALS
@@ -16,9 +17,11 @@ from app.spells import HealCast, buff_table, choice_table
 from app.timeline import Timeline
 
 LOW_VALUE_LOOKAHEAD_S = 10
+ROTATIONAL_SHARE = 0.75  # top players' casts reach this share of the possible casts: a rotational cooldown
 LATE_CD_S = 10
 NOT_TOPPED_MARGIN = 0.10
 INTAKE_RATIO = 1.25
+INTAKE_MERGE = 2  # more damage-taken findings than this merge into one whole-run finding
 RIPTIDE_GAP = 0.15
 RIPTIDE_WASTE_S = 15
 MIN_PRESSURE_BINS = 20
@@ -477,7 +480,8 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
     context = [["Ready?", ready_line]]
     if advice:
         context.append(["What to do", " ".join(advice)])
-    fix = (r["story"] or {}).get("fix") or (f"Use {savers[0]['name']}" if savers else "")
+    fix = (r["story"] or {}).get("fix") or (f"Use {savers[0]['name']}" if savers and r["cause"]["name"] not in ENVIRONMENTAL
+                                            else "")
     return Finding(t, c.pull_label(pull), min(100, severity), title, detail, context, fix=fix)
 
 
@@ -767,6 +771,11 @@ def _cooldown_uses(c: _Ctx) -> tuple[list[Finding], list[Finding]]:
     labels = c.ctx.labels
     for a, casts in c.cds.casts.items():
         name = c.cds.name(a)
+        # A cooldown top players press nearly on cooldown (e.g. Holy Paladin's Avenging Wrath) is rotational:
+        # pressing it into a calm moment is normal, not a waste.
+        top_rates = [sum(1 for _, x, _ in tr.run.casts if x == a) / max(1.0, (tr.run.end - tr.run.start) / 60000)
+                     for tr in c.tops]
+        rotational = bool(top_rates) and statistics.median(top_rates) * c.cds.cd_ms[a] / 60000 >= ROTATIONAL_SHARE
         for t in casts:
             b = c.tl.bin_of(t)
             pull = c.ctx.pull_of_bin[b]
@@ -784,7 +793,7 @@ def _cooldown_uses(c: _Ctx) -> tuple[list[Finding], list[Finding]]:
                 good.append(Finding(t, c.pull_label(pull), 0, f"{name} at {c.clock(t)}", [why[0].upper() + why[1:]]))
                 continue
             ahead = range(b, min(len(labels), b + LOW_VALUE_LOOKAHEAD_S + 1))
-            if not all(labels[k] in (CALM, IDLE) for k in ahead) or c.planned_near(a, t):
+            if rotational or not all(labels[k] in (CALM, IDLE) for k in ahead) or c.planned_near(a, t):
                 continue
             if pull is not None and c.run.pulls[pull].end - t < LOW_VALUE_LOOKAHEAD_S * 1000:
                 continue  # pressed as the pull ended - nothing left to judge it against
@@ -887,6 +896,13 @@ def _damage_intake(c: _Ctx) -> list[Finding]:
         ratio = seg.intake_frac_ps / ref["intake"] - 1
         out.append(Finding(seg.pull.start, c.pull_label(i), 40,
                            f"Group took {ratio:.0%} more damage than top groups", detail))
+        out[-1].ratio = ratio
+    if len(out) > INTAKE_MERGE:  # a group that takes more damage everywhere: one finding, not one per pull
+        worst = max(out, key=lambda f: f.ratio)
+        lines = [f"{f.pull} ({c.clock(f.t)}): {f.ratio:.0%} more" for f in sorted(out, key=lambda f: f.t)]
+        out = [Finding(c.run.start, "Whole run", 45, f"Group took more damage than top groups on {len(lines)} pulls",
+                       [f"Worst: {worst.pull}, {worst.ratio:.0%} more."] + worst.detail[1:] + ["All pulls:"]
+                       + [f"  {l}" for l in lines])]
     return out
 
 
