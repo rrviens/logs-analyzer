@@ -129,6 +129,7 @@
   .death .when { color: var(--muted); font-variant-numeric: tabular-nums; }
   .death .body { padding: 0 14px 12px; }
   .death .story { font-size: 0.9333rem; margin: 6px 0; }
+  .death .story.note { border-left: 3px solid var(--accent); padding-left: 8px; }
   .death .storylines { font-size: 0.9333rem; color: var(--muted); margin: 6px 0; padding-left: 18px; }
   .death .advice { font-size: 0.9333rem; border-left: 3px solid var(--med); background: var(--med-bg); padding: 6px 10px;
                    border-radius: 4px; margin: 8px 0; }
@@ -1236,6 +1237,7 @@ function renderDeaths(res) {
       <div class="body">
         ${d.story && d.story.advice.length ? `<div class="advice"><strong>What to do:</strong><ul style="margin:4px 0 0;padding-left:18px">
           ${d.story.advice.map((a) => `<li>${T(a)}</li>`).join("")}</ul></div>` : ""}
+        ${d.note ? `<div class="story note"><strong>ℹ About ${esc(d.cause ? d.cause.name : d.killing)}:</strong> ${esc(d.note)}</div>` : ""}
         ${d.avoid ? `<div class="story"><strong>⚠ ${esc(d.avoid.label)}:</strong> ${T(d.avoid.line.split(" - ").slice(1).join(" - "))}</div>` : ""}
         ${d.cause ? `<div class="story"><strong>Cause:</strong> ${T(d.cause.lines.join(" · "))}
           ${d.cause.name !== d.killing ? ` · killing blow ${esc(d.killing)}` : ""}</div>` : ""}
@@ -1347,7 +1349,8 @@ function render(res, url) {
     <div class="card">
     <div class="runhead"><h3>${esc(r.dungeon)} +${r.level}</h3>
       <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span>
-      <div class="actions"><a class="link" href="${esc(url)}" target="_blank" rel="noopener">Open log</a>
+      <div class="actions">${(res.encounter || {}).guide ? `<a class="link" href="${esc(res.encounter.guide)}" target="_blank"
+        rel="noopener">Wowhead guide</a>` : ""}<a class="link" href="${esc(url)}" target="_blank" rel="noopener">Open log</a>
       <button class="link" id="fresh">Re-analyze</button></div></div>
     <div class="meta">${esc(r.player)} (${esc(SP.label)}) · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"} ·
       compared with ${c.count} top ${esc(SP.label)} logs (${levels})${(c.skipped || []).length
@@ -1372,9 +1375,11 @@ function render(res, url) {
     ${sec("good", res.good_calls.length, `<details class="vsec ok"><summary>✓ ${res.good_calls.length} cooldowns pressed at the right moment</summary>
       <div class="body">${good}</div></details>`, "Good calls: none recorded.", false)}
     ${renderCompareShell()}
-    <div class="caveat">Everything here is read from combat logs, not the encounter journal - if a mechanic has a side
-      effect the log can't show (e.g. dispelling something is punished), the advice changes. Defensive values in
-      data/defensives.json are approximate.</div>`;
+    <div class="caveat">${(res.encounter || {}).covered
+      ? "Ability notes (ℹ) are our own, written from log evidence across top runs; the Wowhead guide has the full strategy."
+      : "No ability notes for this dungeon yet: everything here is read from combat logs, not the encounter journal - if a "
+        + "mechanic has a side effect the log can't show (e.g. dispelling something is punished), the advice changes."}
+      Defensive values in data/defensives.json are approximate.</div>`;
   $("fresh").onclick = () => analyze(url, true);
   initTimeline(res);
   initCompare(url);

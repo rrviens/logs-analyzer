@@ -14,6 +14,7 @@ from app.composition import describe, intake_modifiers, load_effects
 from app.context import build_context
 from app.context_model import load_dungeon
 from app.chains import OUTCOME_S, Chain, find_chains
+from app.encounters import Encounter, load_encounter
 from app.findings import Finding, TopRun, analyze
 from app.metrics import hot_refreshes, hots_active
 from app.reports import ability_icons, get_fights, get_players, get_trinkets, parse_report_url, pick_fight
@@ -34,7 +35,7 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient
 
-RULES_VERSION = 36
+RULES_VERSION = 37
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
 # memory at once; set TOP_WORKERS=1 on a small (512 MB) host.
@@ -157,11 +158,16 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     progress("Tagging avoidable damage...")
     avoid = build_avoidance(client, fight, run, [(f, tr.run) for (tr, _), (f, _) in zip(tops, candidates)],
                             group_casts)
+    # Encounter notes correct the learned tags: an ability the notes call not avoidable loses its tag.
+    encounter = load_encounter(run.dungeon)
+    avoid.by_pull = {i: {a: t for a, t in tags.items() if not encounter.not_avoidable(a, run.ability_name(a))}
+                     for i, tags in avoid.by_pull.items()}
     death_recaps = _death_recaps(client, fight, run, my_players, my_state, [tr.run for tr, _ in tops],
                                  candidates, clock, progress, spec)
     for r in death_recaps:
         tag = avoid.tag_by_name(run, r["cause"]["name"], r["t"])
         r["avoid"] = {"label": tag.label, "line": tag.line()} if tag else None
+        r["note"] = encounter.note(name=r["cause"]["name"])
     result = analyze(run, tl, segs, profiles, ctx, model, [tr for tr, _ in tops], my_trinkets, my_mods,
                      my_heals, phases, phase_rows, my_state, death_recaps, spec=spec)
     chains = find_chains(run, tl, fetch_auras(client, fight, run.player_ids), my_state, tops, group_casts, spec)
@@ -212,6 +218,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
                  "group": spec.spell_pair.group if spec.spell_pair else None,
                  "maintenance": spec.maintenance.plural if spec.maintenance else None,
                  "majors": spec.major_pair_text},
+        "encounter": {"guide": encounter.guide, "covered": encounter.covered},
         "compared": {
             "count": len(tops),
             "levels": sorted({tr.run.keystone_level for tr, _ in tops}),
@@ -232,7 +239,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         "deaths": death_recaps,
         "timeline": _timeline(run, tl, segs, profiles, phases, my_state, my_trinkets, result, tops, death_recaps,
                               my_players, fetch_defense_spans(client, fight, run, my_players, load_defensives()),
-                              group_casts, avoid, chains, spec, ability_icons(client, code)),
+                              group_casts, avoid, chains, spec, ability_icons(client, code), encounter),
     }
     client.set_cached(key, out)
     return out
@@ -416,7 +423,7 @@ def _top_curve(seg, tops) -> list[list[float]] | None:
 
 def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(), recaps=(), players=(),
               spans=(), group_casts=(), avoid: Avoidance | None = None, chains=(), spec=None,
-              icons=({}, {})) -> dict:
+              icons=({}, {}), encounter: Encounter | None = None) -> dict:
     """Everything the page needs to draw HP over time: cooldowns, deaths, hits, findings - each
     with hover details - plus each party member's active defensives."""
     rel = lambda t: round((t - run.start) / 1000, 1)
@@ -467,6 +474,8 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
                 tip.append(f"Killing blow: {r['killing']}")
             if r.get("avoid"):
                 tip.append(f"⚠ {r['avoid']['line']}")
+            if r.get("note"):
+                tip.append(f"ℹ {r['note']}")
             if r.get("story") and r["story"]["advice"]:
                 tip.append("→ " + r["story"]["advice"][0])
         else:
@@ -500,6 +509,8 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
             tag = avoid.tag_at(run, h.ability, h.t) if avoid else None
             if tag:
                 tip.insert(1, f"⚠ {tag.label} - {tag.evidence}")
+            if encounter and (note := encounter.note(h.ability, run.ability_name(h.ability))):
+                tip.insert(1, f"ℹ {note}")
             # Highlight only big hits where nobody had any protective defensive up at all.
             bare = h.avg_frac >= UNCOVERED_MIN_HIT and not up
             markers.append({"t_s": rel(h.t), "kind": "hit", "label": run.ability_name(h.ability),

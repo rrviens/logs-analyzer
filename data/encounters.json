@@ -1,0 +1,852 @@
+{
+ "_source": "Own notes derived from Warcraft Logs evidence (who an ability hits, how hard, how many players at once, dispels and interrupts across cached top runs), Oct 2026. Wowhead dungeon guides are linked as the reference for full strategy; no text is copied from them. Edit freely.",
+ "dungeons": {
+  "The Blinding Vale": {
+   "guide": "https://www.wowhead.com/guide/midnight/the-blinding-vale-dungeon-overview-location-rewards",
+   "abilities": {
+    "1247644": {
+     "name": "Oozing Xylem",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~18% each, up to 38%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Ziekett",
+     "evidence": "48 runs; hit in 47/48; 8 deaths; 13.2% of damage taken"
+    },
+    "1263628": {
+     "name": "Spouting Floret",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~23% each, up to 60%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Ziekett",
+     "evidence": "48 runs; hit in 48/48; 11 deaths; 7.5% of damage taken"
+    },
+    "1238076": {
+     "name": "Thornblade",
+     "kinds": [
+      "targeted",
+      "dispel"
+     ],
+     "note": "Hits 1 player at a time (~15%, up to 28%): spot-heal the target. Healers dispel it (45x in these logs) - dispel early; yourself first if you have it too. Seen on every top run - normal targeted damage, not something to dodge.",
+     "boss": "Lightblossom Trinity",
+     "evidence": "48 runs; hit in 48/48; 4 deaths; 6.2% of damage taken",
+     "avoidable": false
+    },
+    "1276586": {
+     "name": "Bedrock Surge",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~13% each, up to 25%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Lightblossom Trinity",
+     "evidence": "48 runs; hit in 48/48; 1 deaths; 5.2% of damage taken"
+    },
+    "1263420": {
+     "name": "Lightcrazed Frenzy",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~10% each, up to 19%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Ikuzz the Light Hunter",
+     "evidence": "48 runs; hit in 48/48; 6 deaths; 5.0% of damage taken"
+    },
+    "1241058": {
+     "name": "Grievous Thrash",
+     "kinds": [
+      "targeted",
+      "dispel",
+      "dot"
+     ],
+     "note": "Hits 3 players at a time (~8%, up to 91%): heal the ones it hit. Healers dispel it (16x in these logs) - dispel early; yourself first if you have it too. Ticks several times per application.",
+     "boss": "Lightwarden Ruia",
+     "evidence": "48 runs; hit in 48/48; 15 deaths; 4.7% of damage taken"
+    },
+    "1247052": {
+     "name": "Lightbloom's Might",
+     "kinds": [
+      "targeted",
+      "dot"
+     ],
+     "note": "Hits 3 players at a time (~7%, up to 29%): heal the ones it hit. Ticks several times per application.",
+     "boss": "Ziekett",
+     "evidence": "48 runs; hit in 47/48; 7 deaths; 4.6% of damage taken"
+    },
+    "1239825": {
+     "name": "Lightfire",
+     "kinds": [
+      "targeted",
+      "dot"
+     ],
+     "note": "Hits 3 players at a time (~17%, up to 38%): heal the ones it hit. Ticks several times per application.",
+     "boss": "Lightwarden Ruia",
+     "evidence": "48 runs; hit in 48/48; 7 deaths; 4.4% of damage taken"
+    },
+    "1238084": {
+     "name": "Spore Spines",
+     "kinds": [
+      "tank",
+      "dispel"
+     ],
+     "note": "Tank damage (~0% per hit, up to 53%): keep the tank topped; an external helps on big casts. Healers dispel it (660x in these logs) - dispel early; yourself first if you have it too.",
+     "boss": "Lightblossom Trinity",
+     "evidence": "48 runs; hit in 48/48; 0 deaths; 4.2% of damage taken"
+    },
+    "1236731": {
+     "name": "Thorncaller Roar",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~25% each, up to 54%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Ikuzz the Light Hunter",
+     "evidence": "48 runs; hit in 48/48; 5 deaths; 4.0% of damage taken"
+    },
+    "1237330": {
+     "name": "Bloodthorn Roots",
+     "kinds": [
+      "targeted",
+      "dispel",
+      "dot"
+     ],
+     "note": "Hits 1 player at a time (~10%, up to 32%): spot-heal the target. Healers dispel it (674x in these logs) - dispel early; yourself first if you have it too. Ticks several times per application.",
+     "boss": "Ikuzz the Light Hunter",
+     "evidence": "48 runs; hit in 48/48; 6 deaths; 3.8% of damage taken"
+    },
+    "1250937": {
+     "name": "Toxic Spew",
+     "kinds": [
+      "group",
+      "dispel"
+     ],
+     "note": "Unavoidable group damage (~20% each, up to 46%): top everyone before it; plan cooldowns for the big casts. Healers dispel it (255x in these logs) - dispel early; yourself first if you have it too.",
+     "boss": null,
+     "evidence": "48 runs; hit in 47/48; 3 deaths; 3.6% of damage taken"
+    },
+    "1238071": {
+     "name": "Thornblade",
+     "kinds": [
+      "targeted",
+      "dispel"
+     ],
+     "note": "Hits 1 player at a time (~23%, up to 43%): spot-heal the target. Healers dispel it (45x in these logs) - dispel early; yourself first if you have it too. Seen on every top run - normal targeted damage, not something to dodge.",
+     "boss": "Lightblossom Trinity",
+     "evidence": "48 runs; hit in 48/48; 2 deaths; 3.0% of damage taken",
+     "avoidable": false
+    },
+    "1255205": {
+     "name": "Uproot",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~37% each, up to 77%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Ikuzz the Light Hunter",
+     "evidence": "48 runs; hit in 48/48; 2 deaths; 3.0% of damage taken"
+    },
+    "1235574": {
+     "name": "Lightblossom Beam",
+     "kinds": [
+      "targeted",
+      "dot"
+     ],
+     "note": "Hits 3 players at a time (~27%, up to 52%): heal the ones it hit. Ticks several times per application.",
+     "boss": "Lightblossom Trinity",
+     "evidence": "48 runs; hit in 48/48; 0 deaths; 2.8% of damage taken"
+    },
+    "1236746": {
+     "name": "Verdant Stomp",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~33% each, up to 77%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Ikuzz the Light Hunter",
+     "evidence": "48 runs; hit in 48/48; 0 deaths; 2.5% of damage taken"
+    },
+    "1242135": {
+     "name": "Grievous Gash",
+     "kinds": [
+      "tank"
+     ],
+     "note": "Tank damage (~9% per hit, up to 95%): keep the tank topped; an external helps on big casts.",
+     "boss": "Lightwarden Ruia",
+     "evidence": "48 runs; hit in 48/48; 0 deaths; 2.4% of damage taken"
+    },
+    "1237855": {
+     "name": "Earthrupture Strike",
+     "kinds": [
+      "tank"
+     ],
+     "note": "Tank damage (~21% per hit, up to 124%): keep the tank topped; an external helps on big casts.",
+     "boss": "Ikuzz the Light Hunter",
+     "evidence": "48 runs; hit in 48/48; 3 deaths; 1.3% of damage taken"
+    },
+    "1240257": {
+     "name": "Pulverizing Strikes",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 1 player at a time (~57%, up to 100%): spot-heal the target.",
+     "boss": "Lightwarden Ruia",
+     "evidence": "48 runs; hit in 48/48; 3 deaths; 1.3% of damage taken"
+    },
+    "1235865": {
+     "name": "Thornblade",
+     "kinds": [
+      "targeted",
+      "dispel"
+     ],
+     "note": "Hits 1 player at a time (~24%, up to 49%): spot-heal the target. Healers dispel it (45x in these logs) - dispel early; yourself first if you have it too. Seen on every top run - normal targeted damage, not something to dodge.",
+     "boss": "Lightblossom Trinity",
+     "evidence": "48 runs; hit in 48/48; 2 deaths; 1.0% of damage taken",
+     "avoidable": false
+    },
+    "1238063": {
+     "name": "Light Bolt",
+     "kinds": [
+      "targeted",
+      "interrupt"
+     ],
+     "note": "Hits 1 player at a time (~38%, up to 79%): spot-heal the target. Interruptible: groups kick it 86% of the time.",
+     "boss": "Ziekett",
+     "evidence": "48 runs; hit in 48/48; 9 deaths; 0.9% of damage taken"
+    },
+    "1314885": {
+     "name": "Hunting Leap",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 1 player at a time (~28%, up to 79%): spot-heal the target.",
+     "boss": "Lightwarden Ruia",
+     "evidence": "48 runs; hit in 48/48; 2 deaths; 0.9% of damage taken"
+    },
+    "1247669": {
+     "name": "Lightspore Shot",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 2 players at a time (~17%, up to 44%): heal the ones it hit.",
+     "boss": "Ziekett",
+     "evidence": "48 runs; hit in 47/48; 5 deaths; 0.8% of damage taken"
+    },
+    "1238463": {
+     "name": "Lightmaw Beams",
+     "kinds": [
+      "targeted",
+      "dot"
+     ],
+     "note": "Hits 3 players at a time (~17%, up to 40%): heal the ones it hit. Ticks several times per application.",
+     "boss": null,
+     "evidence": "48 runs; hit in 19/48; 3 deaths; 0.8% of damage taken"
+    },
+    "1238232": {
+     "name": "Seed Shot",
+     "kinds": [
+      "targeted",
+      "interrupt"
+     ],
+     "note": "Hits 1 player at a time (~35%, up to 74%): spot-heal the target. Interruptible: groups kick it 74% of the time.",
+     "boss": "Lightwarden Ruia",
+     "evidence": "48 runs; hit in 41/48; 2 deaths; 0.6% of damage taken"
+    },
+    "1239919": {
+     "name": "Lightfire Beams",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 1 player at a time (~14%, up to 31%): spot-heal the target.",
+     "boss": "Lightwarden Ruia",
+     "evidence": "48 runs; hit in 37/48; 14 deaths; 0.6% of damage taken"
+    },
+    "1235642": {
+     "name": "Thornblade",
+     "kinds": [
+      "targeted",
+      "dispel"
+     ],
+     "note": "Hits 1 player at a time (~30%, up to 57%): spot-heal the target. Healers dispel it (45x in these logs) - dispel early; yourself first if you have it too. Seen on every top run - normal targeted damage, not something to dodge.",
+     "boss": "Lightblossom Trinity",
+     "evidence": "48 runs; hit in 48/48; 0 deaths; 0.3% of damage taken",
+     "avoidable": false
+    },
+    "1301834": {
+     "name": "Light Bolt Volley",
+     "kinds": [
+      "group",
+      "interrupt"
+     ],
+     "note": "Unavoidable group damage (~40% each, up to 99%): top everyone before it; plan cooldowns for the big casts. Interruptible: groups kick it 99% of the time.",
+     "boss": "Ziekett",
+     "evidence": "48 runs; hit in 15/48; 3 deaths; 0.2% of damage taken"
+    },
+    "1263642": {
+     "name": "Belch Spores",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 1 player at a time (~43%, up to 112%): spot-heal the target.",
+     "boss": "Lightwarden Ruia",
+     "evidence": "48 runs; hit in 26/48; 5 deaths; 0.2% of damage taken"
+    },
+    "1235616": {
+     "name": "Light Bolt",
+     "kinds": [
+      "targeted",
+      "interrupt"
+     ],
+     "note": "Hits 1 player at a time (~29%, up to 70%): spot-heal the target. Interruptible: groups kick it 86% of the time.",
+     "boss": "Lightblossom Trinity",
+     "evidence": "48 runs; hit in 18/48; 2 deaths; 0.1% of damage taken"
+    },
+    "1240152": {
+     "name": "Lightfall",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 1 player at a time (~49%, up to 98%): spot-heal the target.",
+     "boss": "Lightwarden Ruia",
+     "evidence": "48 runs; hit in 24/48; 3 deaths; 0.1% of damage taken"
+    }
+   }
+  },
+  "Den of Nalorakk": {
+   "guide": "https://www.wowhead.com/guide/midnight/den-of-nalorakk-dungeon-overview-location-rewards",
+   "abilities": {
+    "1238439": {
+     "name": "Razor Dive",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 1 player at a time (~15%, up to 30%): spot-heal the target.",
+     "boss": "The Hoardmonger",
+     "evidence": "11 runs; hit in 11/11; 4 deaths; 9.5% of damage taken"
+    },
+    "1246957": {
+     "name": "Primal Echo",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~12% each, up to 54%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": null,
+     "evidence": "11 runs; hit in 11/11; 2 deaths; 8.6% of damage taken"
+    },
+    "1296519": {
+     "name": "Rumbling Ward",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~9% each, up to 14%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Sentinel of Winter",
+     "evidence": "11 runs; hit in 11/11; 2 deaths; 8.5% of damage taken"
+    },
+    "1235125": {
+     "name": "Hearty Bellow",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~11% each, up to 86%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "The Hoardmonger",
+     "evidence": "11 runs; hit in 11/11; 0 deaths; 6.5% of damage taken"
+    },
+    "1297793": {
+     "name": "Overwhelming Onslaught",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~24% each, up to 34%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Nalorakk",
+     "evidence": "11 runs; hit in 11/11; 0 deaths; 5.3% of damage taken"
+    },
+    "1246847": {
+     "name": "Shoot",
+     "kinds": [
+      "tank"
+     ],
+     "note": "Tank damage (~8% per hit, up to 52%): keep the tank topped; an external helps on big casts. Tank-only on every top run.",
+     "boss": "Nalorakk",
+     "evidence": "11 runs; hit in 11/11; 1 deaths; 4.4% of damage taken",
+     "avoidable": false
+    },
+    "1246825": {
+     "name": "Searing Magma",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~11% each, up to 18%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": null,
+     "evidence": "11 runs; hit in 11/11; 1 deaths; 4.3% of damage taken"
+    },
+    "1234681": {
+     "name": "Ravenous Bellow",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~11% each, up to 86%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "The Hoardmonger",
+     "evidence": "11 runs; hit in 11/11; 0 deaths; 4.2% of damage taken"
+    },
+    "1235658": {
+     "name": "Frozen Tempest",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~13% each, up to 20%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Sentinel of Winter",
+     "evidence": "11 runs; hit in 11/11; 1 deaths; 4.2% of damage taken"
+    },
+    "1239871": {
+     "name": "Cryo Surge",
+     "kinds": [
+      "targeted",
+      "dispel",
+      "dot"
+     ],
+     "note": "Hits 2 players at a time (~17%, up to 28%): heal the ones it hit. Healers dispel it (14x in these logs) - dispel early; yourself first if you have it too. Ticks several times per application.",
+     "boss": "Sentinel of Winter",
+     "evidence": "11 runs; hit in 11/11; 6 deaths; 4.0% of damage taken"
+    },
+    "1234734": {
+     "name": "Spoiled Supplies",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 3 players at a time (~35%, up to 54%): heal the ones it hit.",
+     "boss": "The Hoardmonger",
+     "evidence": "11 runs; hit in 11/11; 1 deaths; 3.8% of damage taken"
+    },
+    "1235549": {
+     "name": "Glacial Torment",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 2 players at a time (~26%, up to 36%): heal the ones it hit.",
+     "boss": "Sentinel of Winter",
+     "evidence": "11 runs; hit in 11/11; 0 deaths; 3.2% of damage taken"
+    },
+    "1242887": {
+     "name": "Echoing Maul",
+     "kinds": [
+      "targeted",
+      "dot"
+     ],
+     "note": "Hits 3 players at a time (~61%, up to 94%): heal the ones it hit. Ticks several times per application.",
+     "boss": "Nalorakk",
+     "evidence": "11 runs; hit in 11/11; 2 deaths; 3.0% of damage taken"
+    },
+    "1309931": {
+     "name": "Volatile Flames",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~17% each, up to 29%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": null,
+     "evidence": "11 runs; hit in 11/11; 3 deaths; 2.8% of damage taken"
+    },
+    "1309964": {
+     "name": "Harsh Winter",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~14% each, up to 22%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": null,
+     "evidence": "11 runs; hit in 11/11; 0 deaths; 2.6% of damage taken"
+    },
+    "1297699": {
+     "name": "Rotten Supplies",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 1 player at a time (~16%, up to 24%): spot-heal the target.",
+     "boss": "The Hoardmonger",
+     "evidence": "11 runs; hit in 11/11; 0 deaths; 2.4% of damage taken"
+    },
+    "1265400": {
+     "name": "Frostbite",
+     "kinds": [
+      "tank"
+     ],
+     "note": "Tank damage (~9% per hit, up to 21%): keep the tank topped; an external helps on big casts. Tank damage on every top run; more ticks than top groups means a longer pull, not a mistake.",
+     "boss": "Sentinel of Winter",
+     "evidence": "11 runs; hit in 11/11; 0 deaths; 2.4% of damage taken",
+     "avoidable": false
+    },
+    "1241464": {
+     "name": "Glacial Tomb",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 2 players at a time (~14%, up to 22%): heal the ones it hit.",
+     "boss": null,
+     "evidence": "11 runs; hit in 11/11; 1 deaths; 2.1% of damage taken"
+    },
+    "1234846": {
+     "name": "Toxic Spores",
+     "kinds": [
+      "targeted",
+      "dispel"
+     ],
+     "note": "Hits 2 players at a time (~7%, up to 37%): heal the ones it hit. Healers dispel it (14x in these logs) - dispel early; yourself first if you have it too.",
+     "boss": "The Hoardmonger",
+     "evidence": "11 runs; hit in 11/11; 1 deaths; 1.9% of damage taken"
+    },
+    "1238725": {
+     "name": "Feast of Misery",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~15% each, up to 23%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": null,
+     "evidence": "11 runs; hit in 11/11; 2 deaths; 1.8% of damage taken"
+    },
+    "1243408": {
+     "name": "Echoing Fury",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 2 players at a time (~24%, up to 37%): heal the ones it hit.",
+     "boss": "Nalorakk",
+     "evidence": "11 runs; hit in 11/11; 1 deaths; 1.7% of damage taken"
+    },
+    "1297701": {
+     "name": "Rotten Ground",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 1 player at a time (~28%, up to 42%): spot-heal the target.",
+     "boss": "The Hoardmonger",
+     "evidence": "11 runs; hit in 11/11; 2 deaths; 1.4% of damage taken"
+    },
+    "1297797": {
+     "name": "Forceful Slam",
+     "kinds": [
+      "tank"
+     ],
+     "note": "Tank damage (~32% per hit, up to 140%): keep the tank topped; an external helps on big casts.",
+     "boss": "Nalorakk",
+     "evidence": "11 runs; hit in 11/11; 0 deaths; 1.2% of damage taken"
+    },
+    "1247366": {
+     "name": "Earthquake",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 2 players at a time (~40%, up to 62%): heal the ones it hit. Hits the same 1-2 players hard on every top run; whether it can be dodged is not clear from logs.",
+     "boss": null,
+     "evidence": "11 runs; hit in 11/11; 1 deaths; 1.1% of damage taken"
+    },
+    "1247367": {
+     "name": "Earthquake",
+     "kinds": [
+      "tank"
+     ],
+     "note": "Tank damage (~22% per hit, up to 40%): keep the tank topped; an external helps on big casts. Hits the same 1-2 players hard on every top run; whether it can be dodged is not clear from logs.",
+     "boss": null,
+     "evidence": "11 runs; hit in 6/11; 1 deaths; 0.2% of damage taken"
+    },
+    "1240280": {
+     "name": "Pulverize",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 1 player at a time (~47%, up to 87%): spot-heal the target.",
+     "boss": null,
+     "evidence": "11 runs; hit in 5/11; 4 deaths; 0.1% of damage taken"
+    }
+   }
+  },
+  "Murder Row": {
+   "guide": "https://www.wowhead.com/guide/midnight/murder-row-dungeon-overview-location-rewards",
+   "abilities": {}
+  },
+  "Voidscar Arena": {
+   "guide": "https://www.wowhead.com/guide/midnight/voidscar-arena-dungeon-overview-location-rewards",
+   "abilities": {}
+  },
+  "Altar of Fangs": {
+   "guide": "https://www.wowhead.com/guide/midnight/altar-of-fangs-dungeon-overview-location-rewards",
+   "abilities": {}
+  },
+  "Kings' Rest": {
+   "guide": "https://www.wowhead.com/guide/kings-rest-dungeon-strategy-guide",
+   "abilities": {}
+  },
+  "Temple of Sethraliss": {
+   "guide": "https://www.wowhead.com/guide/temple-of-sethraliss-dungeon-strategy-guide",
+   "abilities": {}
+  },
+  "Ruby Life Pools": {
+   "guide": "https://www.wowhead.com/search?q=Ruby+Life+Pools",
+   "abilities": {
+    "384823": {
+     "name": "Inferno",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~11% each, up to 60%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Kokia Blazehoof",
+     "evidence": "10 runs; hit in 9/10; 2 deaths; 13.5% of damage taken"
+    },
+    "373692": {
+     "name": "Inferno",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~12% each, up to 55%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": null,
+     "evidence": "10 runs; hit in 10/10; 4 deaths; 9.3% of damage taken"
+    },
+    "392406": {
+     "name": "Thunderous Stomp",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~17% each, up to 31%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Kyrakka and Erkhart Stormvein",
+     "evidence": "10 runs; hit in 9/10; 2 deaths; 7.1% of damage taken"
+    },
+    "1307205": {
+     "name": "Earthbound's Imprint",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 1 player at a time (~13%, up to 38%): spot-heal the target.",
+     "boss": "Melidrussa Chillworn",
+     "evidence": "10 runs; hit in 10/10; 1 deaths; 4.9% of damage taken"
+    },
+    "381862": {
+     "name": "Inferno Spit",
+     "kinds": [
+      "targeted",
+      "dot"
+     ],
+     "note": "Hits 2 players at a time (~14%, up to 24%): heal the ones it hit. Ticks several times per application.",
+     "boss": "Kyrakka and Erkhart Stormvein",
+     "evidence": "10 runs; hit in 9/10; 1 deaths; 3.7% of damage taken"
+    },
+    "373688": {
+     "name": "Frost Overload",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~17% each, up to 34%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Melidrussa Chillworn",
+     "evidence": "10 runs; hit in 10/10; 0 deaths; 3.6% of damage taken"
+    },
+    "373693": {
+     "name": "Living Bomb",
+     "kinds": [
+      "targeted",
+      "dispel"
+     ],
+     "note": "Hits 1 player at a time (~17%, up to 30%): spot-heal the target. Healers dispel it (45x in these logs) - dispel early; yourself first if you have it too.",
+     "boss": "Kokia Blazehoof",
+     "evidence": "10 runs; hit in 10/10; 2 deaths; 3.5% of damage taken"
+    },
+    "397077": {
+     "name": "Chillstorm",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~13% each, up to 30%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Melidrussa Chillworn",
+     "evidence": "10 runs; hit in 10/10; 0 deaths; 3.4% of damage taken"
+    },
+    "392570": {
+     "name": "Molten Blood",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~28% each, up to 61%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": null,
+     "evidence": "10 runs; hit in 9/10; 0 deaths; 3.2% of damage taken"
+    },
+    "396044": {
+     "name": "Hailburst",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~42% each, up to 68%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Melidrussa Chillworn",
+     "evidence": "10 runs; hit in 10/10; 0 deaths; 3.0% of damage taken"
+    },
+    "1309705": {
+     "name": "Steel Barrage",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~8% each, up to 13%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": null,
+     "evidence": "10 runs; hit in 10/10; 0 deaths; 2.7% of damage taken"
+    },
+    "392399": {
+     "name": "Stormcloud Detonation",
+     "kinds": [
+      "targeted",
+      "dot"
+     ],
+     "note": "Hits 3 players at a time (~13%, up to 23%): heal the ones it hit. Ticks several times per application.",
+     "boss": "Kyrakka and Erkhart Stormvein",
+     "evidence": "10 runs; hit in 9/10; 1 deaths; 2.7% of damage taken"
+    },
+    "1305201": {
+     "name": "Excavating Blast",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~11% each, up to 60%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": null,
+     "evidence": "10 runs; hit in 10/10; 0 deaths; 2.6% of damage taken"
+    },
+    "381518": {
+     "name": "Winds of Change",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~3% each, up to 5%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Kyrakka and Erkhart Stormvein",
+     "evidence": "10 runs; hit in 9/10; 0 deaths; 2.2% of damage taken"
+    },
+    "381516": {
+     "name": "Interrupting Cloudburst",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~30% each, up to 52%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Kyrakka and Erkhart Stormvein",
+     "evidence": "10 runs; hit in 9/10; 0 deaths; 2.0% of damage taken"
+    },
+    "385567": {
+     "name": "Flaming Barrage",
+     "kinds": [
+      "tank"
+     ],
+     "note": "Tank damage (~12% per hit, up to 28%): keep the tank topped; an external helps on big casts.",
+     "boss": "Kokia Blazehoof",
+     "evidence": "10 runs; hit in 10/10; 1 deaths; 1.6% of damage taken"
+    },
+    "1310363": {
+     "name": "Tempest Stormshield",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~9% each, up to 16%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": null,
+     "evidence": "10 runs; hit in 9/10; 0 deaths; 1.6% of damage taken"
+    },
+    "372859": {
+     "name": "Searing Blows",
+     "kinds": [
+      "tank"
+     ],
+     "note": "Tank damage (~6% per hit, up to 93%): keep the tank topped; an external helps on big casts.",
+     "boss": "Kokia Blazehoof",
+     "evidence": "10 runs; hit in 9/10; 0 deaths; 1.4% of damage taken"
+    },
+    "1307488": {
+     "name": "Lightning Torrent",
+     "kinds": [
+      "targeted"
+     ],
+     "note": "Hits 1 player at a time (~21%, up to 35%): spot-heal the target.",
+     "boss": null,
+     "evidence": "10 runs; hit in 9/10; 7 deaths; 1.4% of damage taken"
+    },
+    "372794": {
+     "name": "Steel Barrage",
+     "kinds": [
+      "tank",
+      "dot"
+     ],
+     "note": "Tank damage (~3% per hit, up to 89%): keep the tank topped; an external helps on big casts. Ticks several times per application.",
+     "boss": null,
+     "evidence": "10 runs; hit in 10/10; 0 deaths; 1.3% of damage taken"
+    },
+    "383925": {
+     "name": "Chillstorm",
+     "kinds": [
+      "group"
+     ],
+     "note": "Unavoidable group damage (~21% each, up to 35%): top everyone before it; plan cooldowns for the big casts.",
+     "boss": "Melidrussa Chillworn",
+     "evidence": "10 runs; hit in 10/10; 0 deaths; 1.3% of damage taken"
+    },
+    "395292": {
+     "name": "Fire Maw",
+     "kinds": [
+      "tank"
+     ],
+     "note": "Tank damage (~12% per hit, up to 27%): keep the tank topped; an external helps on big casts.",
+     "boss": null,
+     "evidence": "10 runs; hit in 10/10; 0 deaths; 1.3% of damage taken"
+    },
+    "372860": {
+     "name": "Searing Wounds",
+     "kinds": [
+      "tank",
+      "dot"
+     ],
+     "note": "Tank damage (~4% per hit, up to 13%): keep the tank topped; an external helps on big casts. Ticks several times per application.",
+     "boss": "Kokia Blazehoof",
+     "evidence": "10 runs; hit in 9/10; 0 deaths; 1.3% of damage taken"
+    },
+    "1305865": {
+     "name": "Flaming Barrage",
+     "kinds": [
+      "tank"
+     ],
+     "note": "Tank damage (~3% per hit, up to 53%): keep the tank topped; an external helps on big casts.",
+     "boss": "Kokia Blazehoof",
+     "evidence": "10 runs; hit in 10/10; 0 deaths; 1.2% of damage taken"
+    },
+    "384194": {
+     "name": "Cinderbolt",
+     "kinds": [
+      "targeted",
+      "interrupt"
+     ],
+     "note": "Hits 1 player at a time (~40%, up to 74%): spot-heal the target. Interruptible: groups kick it 83% of the time.",
+     "boss": "Kokia Blazehoof",
+     "evidence": "10 runs; hit in 10/10; 3 deaths; 0.9% of damage taken"
+    },
+    "381513": {
+     "name": "Stormslam",
+     "kinds": [
+      "tank",
+      "dispel"
+     ],
+     "note": "Tank damage (~29% per hit, up to 54%): keep the tank topped; an external helps on big casts. Healers dispel it (64x in these logs) - dispel early; yourself first if you have it too.",
+     "boss": "Kyrakka and Erkhart Stormvein",
+     "evidence": "10 runs; hit in 9/10; 0 deaths; 0.7% of damage taken"
+    },
+    "381514": {
+     "name": "Stormslam",
+     "kinds": [
+      "tank",
+      "dispel"
+     ],
+     "note": "Tank damage (~20% per hit, up to 80%): keep the tank topped; an external helps on big casts. Healers dispel it (64x in these logs) - dispel early; yourself first if you have it too.",
+     "boss": "Kyrakka and Erkhart Stormvein",
+     "evidence": "10 runs; hit in 9/10; 0 deaths; 0.7% of damage taken"
+    },
+    "381864": {
+     "name": "Inferno Spit",
+     "kinds": [
+      "targeted",
+      "dot"
+     ],
+     "note": "Hits 3 players at a time (~11%, up to 22%): heal the ones it hit. Ticks several times per application.",
+     "boss": "Kyrakka and Erkhart Stormvein",
+     "evidence": "10 runs; hit in 9/10; 2 deaths; 0.7% of damage taken"
+    },
+    "1305923": {
+     "name": "Living Bomb",
+     "kinds": [
+      "targeted",
+      "dispel"
+     ],
+     "note": "Hits 1 player at a time (~18%, up to 31%): spot-heal the target. Healers dispel it (45x in these logs) - dispel early; yourself first if you have it too.",
+     "boss": "Kokia Blazehoof",
+     "evidence": "10 runs; hit in 9/10; 7 deaths; 0.6% of damage taken"
+    }
+   }
+  }
+ }
+}

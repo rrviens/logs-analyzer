@@ -108,6 +108,14 @@ start, or your mana under 35%; cooldowns on cooldown are listed as context). The
 at the same spot and what happened in the next 20s. A finding only fires when a risky chain then hurt (a death,
 someone under 25% or the group under 50%).
 
+## Encounter notes
+
+`data/encounters.json` holds our own one-line note per important enemy ability (type - tank damage, unavoidable
+group damage, targeted, dispellable, interruptible, ticking - and what a healer should do), written from log evidence
+across cached top runs, plus a Wowhead guide link per dungeon. Notes show in timeline hovers (ℹ) and death recaps;
+`"avoidable": false` overrides a wrong learned "avoidable" tag. Currently covered: The Blinding Vale, Den of Nalorakk,
+Ruby Life Pools (the dungeons with enough cached logs); the others get notes as logs come in. Edit freely.
+
 ## Data quality
 
 Top logs are checked before they become a baseline (`app/quality.py`): HP data on most hits, real (changing) HP for
