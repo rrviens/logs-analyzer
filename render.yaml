@@ -17,7 +17,7 @@ services:
       - key: DATA_DIR
         value: /data
       - key: TOP_WORKERS
-        value: "1"  # one top log at a time keeps memory within the Starter plan's 512 MB
+        value: "2"  # top logs fetched at once; events stream page by page since the 502 fix. Back to "1" on memory errors
       - key: FETCH_STREAMS
         value: "3"  # event streams of one log fetched at once (each trims page by page); lower to 2 on memory errors
       - key: WCL_CLIENT_ID
