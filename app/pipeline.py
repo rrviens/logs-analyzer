@@ -26,12 +26,12 @@ from app.healer_state import fetch_healer_state
 from app.phases import fetch_boss_casts, phase_breakdown
 from app.quality import check as quality_check
 from app.spells import fetch_spell_heals, heal_casts
-from app.verdicts import items_verdict, phases_verdict, pulls_verdict, spell_verdict
+from app.verdicts import _section, items_verdict, phases_verdict, pulls_verdict, spell_verdict
 from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient
 
-RULES_VERSION = 33
+RULES_VERSION = 34
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 CURVE_POINTS = 60
 LUST_SPELLS = {"Heroism", "Bloodlust", "Time Warp", "Fury of the Aspects", "Primal Rage", "Ancient Hysteria",
@@ -162,6 +162,15 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         "phases": phase_v,
         "pulls": pulls_verdict(result.requirements, phase_v),
     }
+    # Every chain pull, one line each - an action only when it went in risky and then hurt.
+    if chains and verdicts["pulls"]:
+        verdicts["pulls"]["lines"] += [{"text": "⛓ " + _chain_line(run, c), "action": c.risky and c.hurt,
+                                        "examples": [f"At {clock(c.t)}"]} for c in chains]
+        risky = sum(1 for c in chains if c.risky)
+        ok_head = (verdicts["pulls"]["headline"].rstrip(".") + f" · {len(chains)} chain pull{'s' if len(chains) > 1 else ''}"
+                   + (f", {risky} went in risky." if risky else ", none risky."))
+        verdicts["pulls"] = _section(verdicts["pulls"]["lines"], ok_head if verdicts["pulls"]["ok"] else
+                                     verdicts["pulls"]["headline"], "pulls")
     out = {
         "run": {
             "code": code,
@@ -254,6 +263,18 @@ def _chain_text(c: Chain) -> list[str]:
     lines.append(f"Next {OUTCOME_S}s: {c.deaths} death{'s' if c.deaths != 1 else ''}, lowest player {c.min_lowest:.0%}, "
                  f"group down to {c.min_group:.0%}")
     return lines
+
+
+def _chain_line(run, c: Chain) -> str:
+    """One line per chain: 'Pull 7 → 8 · chained · nothing risky · top groups chain here 5/8'."""
+    parts = [f"Pull {c.prev_idx + 1} → {c.idx + 1} ({run.pulls[c.idx].name})", "chained",
+             "; ".join(c.risks) if c.risky else "nothing risky going in"]
+    if c.top_chained:
+        parts.append(f"top groups chain here {c.top_chained[0]}/{c.top_chained[1]}")
+    if c.hurt:
+        parts.append(f"{c.deaths} death(s), lowest {c.min_lowest:.0%} in the next {OUTCOME_S}s" if c.deaths
+                     else f"lowest player {c.min_lowest:.0%} in the next {OUTCOME_S}s")
+    return " · ".join(parts)
 
 
 def _chain_findings(run, chains: list[Chain], clock) -> list[Finding]:
@@ -498,7 +519,7 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
             else:
                 merged.append([a, b])
         spans_ready = merged
-        ready_lanes.append({"name": name, "ready": spans_ready,
+        ready_lanes.append({"name": spec.short_names.get(name, name), "ready": spans_ready,
                             "ready_s": round(sum(b - a for a, b in spans_ready))})
     findings_by_pull: dict[str, list] = {}
     for f in result.findings:
@@ -526,7 +547,7 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
                                              + (f" ({r['avoid']['label'].lower()})" if r.get("avoid") else "")
                                              for r in died],
                              "avoid": avoid_line,
-                             "chain": next(("; ".join(_chain_text(c)[:2]) for c in chains if c.idx == i), "")}
+                             "chain": next((_chain_line(run, c) for c in chains if c.idx == i), "")}
 
     lanes = [{"id": p.id, "name": p.name, "class": p.class_name, "role": p.role}
              for p in sorted(players, key=lambda p: {"tank": 0, "healer": 1, "dps": 2}.get(p.role, 3))]

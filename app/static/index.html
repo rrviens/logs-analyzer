@@ -25,43 +25,51 @@
       --grid: #2c2c2a; --axis: #383835; --phase-a: rgba(255,255,255,0.04);
     }
   }
+  :root[data-theme="dark"] {
+    --bg: #111418; --panel: #1a1e24; --text: #e6e9ed; --muted: #9aa3ae; --line: #2a3038;
+    --accent: #4c8dff; --accent-text: #0b0d10;
+    --high: #ff8a50; --high-bg: #2b1a12; --med: #e3b341; --med-bg: #29230f; --low: #aab2bd; --low-bg: #20252c;
+    --good: #4ade80; --good-bg: #12241a;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-7: #9085e9;
+    --grid: #2c2c2a; --axis: #383835; --phase-a: rgba(255,255,255,0.04);
+  }
   /* time links: every m:ss on the page jumps the timeline there */
   a.tl { color: inherit; text-decoration: underline dotted var(--accent); text-underline-offset: 2px; cursor: pointer; }
   a.tl:hover { color: var(--accent); }
   /* sections */
   .secnav { position: sticky; top: var(--pin-h); z-index: 4; display: flex; flex-wrap: wrap; gap: 6px;
             background: var(--panel); padding: 8px 0; margin: 0 0 8px; border-bottom: 1px solid var(--line); }
-  .secnav a { white-space: nowrap; font-size: 12px; text-decoration: none; color: var(--text); border: 1px solid var(--line);
+  .secnav a { white-space: nowrap; font-size: 0.8667rem; text-decoration: none; color: var(--text); border: 1px solid var(--line);
               border-radius: 999px; padding: 3px 10px; border-left: 3px solid var(--acc); }
   .secnav a .n { color: var(--muted); margin-left: 4px; }
   section.sec { margin: 22px 0 8px; scroll-margin-top: calc(var(--pin-h) + 56px); }
   .sechead { display: flex; align-items: center; gap: 8px; border-bottom: 2px solid var(--acc); padding-bottom: 6px; margin-bottom: 10px; }
-  .sechead .ico { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; font-size: 13px;
+  .sechead .ico { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; font-size: 0.9333rem;
                   background: var(--acc); color: #fff; flex: none; }
-  .sechead h2 { margin: 0; font-size: 14px; color: var(--text); letter-spacing: .02em; }
-  .sechead .badge { font-size: 12px; font-weight: 700; color: var(--acc); }
+  .sechead h2 { margin: 0; font-size: 1rem; color: var(--text); letter-spacing: .02em; }
+  .sechead .badge { font-size: 0.8667rem; font-weight: 700; color: var(--acc); }
   .sechead .sp { flex: 1; }
-  .sechead button { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; }
-  .secempty { color: var(--muted); font-size: 13px; }
+  .sechead button { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 0.8667rem; }
+  .secempty { color: var(--muted); font-size: 0.9333rem; }
   /* collapsed findings */
   details.finding { padding: 0; }
   details.finding > summary { list-style: none; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
-                              padding: 9px 12px; margin: 0; font-weight: 400; color: var(--text); font-size: 14px; }
+                              padding: 9px 12px; margin: 0; font-weight: 400; color: var(--text); font-size: 1rem; }
   details.finding > summary::-webkit-details-marker, details.vsec > summary::-webkit-details-marker { display: none; }
   details.finding > summary .when { min-width: 40px; }
-  details.finding > summary .pl { color: var(--muted); font-size: 12px; }
+  details.finding > summary .pl { color: var(--muted); font-size: 0.8667rem; }
   details.finding > summary .title { font-weight: 600; flex: 1 1 200px; }
-  .fix { font-size: 12px; font-weight: 600; color: var(--med); background: var(--med-bg); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .fix { font-size: 0.8667rem; font-weight: 600; color: var(--med); background: var(--med-bg); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
   details.finding .body { padding: 0 12px 10px; }
   details.finding .body .pull { margin-left: 0; }
   details.finding .body ul, details.finding .body .ctx { margin-left: 0; }
   details.vsec { border: 1px solid var(--line); border-left: 4px solid var(--good); border-radius: 8px; margin: 0; }
   details.vsec.todo { border-left-color: var(--med); }
-  details.vsec > summary { list-style: none; padding: 9px 12px; margin: 0; color: var(--text); font-weight: 600; font-size: 14px; }
+  details.vsec > summary { list-style: none; padding: 9px 12px; margin: 0; color: var(--text); font-weight: 600; font-size: 1rem; }
   details.vsec .body { padding: 0 12px 10px; }
   details.vsec .verdict { border: 0; padding: 0; }
   details.finding, details.death, details.vsec { margin: 0 0 6px; }
-  .caveat { color: var(--muted); font-size: 12px; margin-top: 24px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .caveat { color: var(--muted); font-size: 0.8667rem; margin-top: 24px; border-top: 1px solid var(--line); padding-top: 10px; }
   /* timeline pin + zoom */
   #tlSection { background: var(--panel); }
   #tlSection.pinned { position: sticky; top: 0; z-index: 5; padding: 8px 0 6px; border-bottom: 1px solid var(--line);
@@ -69,10 +77,10 @@
   #tlSection.pinned .legend { display: none; }  /* compact when pinned; the legend is in the unpinned view */
   #tlSection.pinned .tl-head { margin-bottom: 2px; }
   #tlSection.pinned.collapsed .tlwrap { display: none; }
-  #tlSection.pinned .tlwrap text { font-size: 9px; }
+
   @media (max-width: 700px) { #tlSection.pinned { max-height: 45vh; overflow-y: auto; } }
   .tlbtn { border: 1px solid var(--line); background: none; color: var(--text); border-radius: 6px; padding: 3px 9px;
-           cursor: pointer; font: inherit; font-size: 12px; }
+           cursor: pointer; font: inherit; font-size: 0.8667rem; }
   .tlbtn.on { border-color: var(--accent); color: var(--accent); }
   .legend i.box { height: 8px; width: 12px; border-radius: 2px; }
   .legend .lg { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
@@ -82,45 +90,49 @@
   .flashmark { animation: flashmark .5s ease-in-out 3; }
   .tl-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
   .tl-head select { flex: 0 1 340px; }
-  .tl-head .scope { font-size: 12px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent);
+  .tl-head .scope { font-size: 0.8667rem; font-weight: 700; color: var(--accent); border: 1px solid var(--accent);
                     border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
-  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8667rem; color: var(--muted); }
   .legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; }
   .legend i.dash { background: repeating-linear-gradient(90deg, var(--ink-muted) 0 4px, transparent 4px 7px); }
   .tlwrap { position: relative; }
   .tlwrap svg { display: block; width: 100%; }
-  .tlwrap text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink-muted); }
-  .tlwrap text.lane { fill: var(--muted); }
+  .tlwrap { --tl-fs: 0.8667rem; }  /* timeline text: 13px at Normal; JS sizes lanes from it (tlMetrics) */
+  .tlwrap text { font: var(--tl-fs) system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--muted); }
+  .tlwrap text.lane { fill: var(--text); opacity: .8; }
   .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line);
-         border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12);
-         max-width: 280px; display: none; z-index: 2; }
+         border-radius: 6px; padding: 8px 10px; font-size: 0.9333rem; line-height: 1.45; box-shadow: 0 4px 14px rgba(0,0,0,.12);
+         max-width: 360px; display: none; z-index: 2; }
   .tip b { font-variant-numeric: tabular-nums; }
-  .jump { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; padding: 0; }
+  .jump { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 0.8667rem; padding: 0; }
   .finding.flash { outline: 2px solid var(--accent); }
-  .lookbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+  .lookbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 0.8667rem; color: var(--muted); margin: 0 0 8px; }
   .lookbar[hidden] { display: none; }
   * { box-sizing: border-box; }
+  /* Text size: every size is in rem, so this one value scales the page (header "Text" toggle). */
+  html { font-size: 15px; }
+  html.large { font-size: 17px; }
   body { margin: 0; background: var(--bg); color: var(--text);
-         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+         font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
   header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: var(--panel);
            border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-  header h1 { font-size: 16px; margin: 0; margin-right: auto; }
+  header h1 { font-size: 1.1333rem; margin: 0; margin-right: auto; }
   .pill { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; background: none;
           color: var(--text); cursor: pointer; font: inherit; }
-  .budget { color: var(--muted); font-size: 12px; }
+  .budget { color: var(--muted); font-size: 0.8667rem; }
   .pill.stale { border-color: var(--med); color: var(--med); }
   h2.sec { margin-top: 24px; }
   .death { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
-  .death > summary { list-style: none; cursor: pointer; padding: 10px 14px; color: var(--text); font-size: 14px;
+  .death > summary { list-style: none; cursor: pointer; padding: 10px 14px; color: var(--text); font-size: 1rem;
                      display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
   .death > summary::-webkit-details-marker { display: none; }
   .death .when { color: var(--muted); font-variant-numeric: tabular-nums; }
   .death .body { padding: 0 14px 12px; }
-  .death .story { font-size: 13px; margin: 6px 0; }
-  .death .storylines { font-size: 13px; color: var(--muted); margin: 6px 0; padding-left: 18px; }
-  .death .advice { font-size: 13px; border-left: 3px solid var(--med); background: var(--med-bg); padding: 6px 10px;
+  .death .story { font-size: 0.9333rem; margin: 6px 0; }
+  .death .storylines { font-size: 0.9333rem; color: var(--muted); margin: 6px 0; padding-left: 18px; }
+  .death .advice { font-size: 0.9333rem; border-left: 3px solid var(--med); background: var(--med-bg); padding: 6px 10px;
                    border-radius: 4px; margin: 8px 0; }
-  .chip { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .chip { font-size: 0.8667rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
   .chip.lived { background: var(--good-bg); color: var(--good); }
   .chip.close { background: var(--med-bg); color: var(--med); }
   .chip.died { background: var(--low-bg); color: var(--low); }
@@ -128,11 +140,11 @@
   .chip.avoid { background: var(--med-bg); color: var(--med); }
   .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
   @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
-  .col { background: var(--bg); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
-  .col h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .col { background: var(--bg); border-radius: 6px; padding: 8px 10px; font-size: 0.9333rem; }
+  .col h4 { margin: 0 0 6px; font-size: 0.8667rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
   .col .item { margin: 4px 0; }
-  .col .item .sub { color: var(--muted); font-size: 12px; }
-  .col .none { color: var(--muted); font-size: 12px; }
+  .col .item .sub { color: var(--muted); font-size: 0.8667rem; }
+  .col .none { color: var(--muted); font-size: 0.8667rem; }
   .recap th, .recap td { text-align: left; }
   .recap td.hit { color: var(--high); }
   .recap td.heal { color: var(--good); }
@@ -146,16 +158,16 @@
   .verdict li.act { color: var(--text); }
   .verdict .mark { width: 14px; flex: none; font-weight: 700; color: var(--good); }
   .verdict li.act .mark { color: var(--med); }
-  .verdict .ex { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .verdict .ex { display: block; font-size: 0.8667rem; color: var(--muted); margin-top: 2px; }
   .verdict .ex span { display: block; }
   .verdict + details { margin-top: 6px; }
-  details > summary { color: var(--accent); font-weight: 500; font-size: 13px; }
+  details > summary { color: var(--accent); font-weight: 500; font-size: 0.9333rem; }
   #studyBtn { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; padding: 20px; max-width: 1280px; margin: 0 auto; }
   .layout > * { min-width: 0; }  /* let wide tables scroll inside their panel, not the page */
   @media (max-width: 860px) { .layout { grid-template-columns: 1fr; padding: 16px; } }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  h2 { font-size: 0.9333rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
   .paste { display: flex; gap: 8px; margin-bottom: 16px; }
   input, select { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
                   background: var(--bg); color: var(--text); font: inherit; }
@@ -168,27 +180,27 @@
   .run:hover:not([disabled]), .run.active { border-color: var(--accent); }
   .run[disabled] { opacity: .5; cursor: default; }
   .run .top { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
-  .run .sub { color: var(--muted); font-size: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
-  .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
+  .run .sub { color: var(--muted); font-size: 0.8667rem; display: flex; gap: 8px; flex-wrap: wrap; }
+  .tag { font-size: 0.8667rem; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
   .tag.timed { background: var(--good-bg); color: var(--good); }
   .tag.depleted { background: var(--low-bg); color: var(--low); }
   .tag.done { background: var(--med-bg); color: var(--med); }
   .empty { color: var(--muted); padding: 24px 4px; text-align: center; }
   .runhead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
-  .runhead h3 { margin: 0; font-size: 20px; }
-  .meta { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .runhead h3 { margin: 0; font-size: 1.4667rem; }
+  .meta { color: var(--muted); font-size: 0.9333rem; margin-bottom: 16px; }
   .finding { border: 1px solid var(--line); border-left: 4px solid var(--low); border-radius: 8px; padding: 12px 14px;
              margin-bottom: 10px; background: var(--panel); }
   .finding.high { border-left-color: var(--high); }
   .finding.med { border-left-color: var(--med); }
   .finding .row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-  .finding .when { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; min-width: 42px; }
+  .finding .when { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.9333rem; min-width: 42px; }
   .finding .title { font-weight: 600; flex: 1; }
-  .sev { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+  .sev { font-size: 0.8667rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
   .sev.high { background: var(--high-bg); color: var(--high); }
   .sev.med { background: var(--med-bg); color: var(--med); }
   .sev.low { background: var(--low-bg); color: var(--low); }
-  .finding .pull { color: var(--muted); font-size: 12px; margin: 2px 0 6px 52px; }
+  .finding .pull { color: var(--muted); font-size: 0.8667rem; margin: 2px 0 6px 52px; }
   .finding ul { margin: 0 0 0 52px; padding-left: 16px; }
   .finding li { margin: 2px 0; white-space: pre-wrap; }
   @media (max-width: 600px) { .finding .pull, .finding ul { margin-left: 0; } }
@@ -198,12 +210,12 @@
   details { margin-top: 18px; }
   summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
   .tablewrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 0.9333rem; }
   th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
   th { color: var(--muted); font-weight: 600; }
   td.worse { color: var(--high); font-weight: 600; }
-  .progress { font-family: ui-monospace, Consolas, monospace; font-size: 13px; color: var(--muted); }
+  .progress { font-family: ui-monospace, Consolas, monospace; font-size: 0.9333rem; color: var(--muted); }
   .progress div:last-child { color: var(--text); }
   .error { color: var(--high); }
   .actions { display: flex; gap: 8px; margin-left: auto; }
@@ -217,25 +229,80 @@
   .member > div { min-width: 0; }
   .member .bar { width: 4px; align-self: stretch; flex: none; margin: -8px 0; }
   .member .who { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .member .spec { color: var(--muted); font-size: 12px; display: block; }
-  .member .note { font-size: 11px; color: var(--med); }
-  .brings { list-style: none; margin: 6px 0 0; padding: 0; font-size: 11px; color: var(--text); }
+  .member .spec { color: var(--muted); font-size: 0.8667rem; display: block; }
+  .member .note { font-size: 0.8667rem; color: var(--med); }
+  .brings { list-style: none; margin: 6px 0 0; padding: 0; font-size: 0.8667rem; color: var(--text); }
   .brings li { line-height: 1.35; margin-top: 2px; }
   .brings li span { display: block; padding-left: 10px; }
   .brings li span { color: var(--muted); }
   .brings li.warn span { color: var(--warning); font-weight: 600; }
   .brings i { display: inline-block; width: 6px; height: 6px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
-  .role { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
-  .compnote { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+  .role { font-size: 0.8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .compnote { color: var(--muted); font-size: 0.8667rem; margin-bottom: 16px; }
   .ctx { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 8px 0 6px 52px;
-         padding: 8px 10px; background: var(--bg); border-radius: 6px; font-size: 13px; }
+         padding: 8px 10px; background: var(--bg); border-radius: 6px; font-size: 0.9333rem; }
   .ctx dt { color: var(--muted); font-weight: 600; }
   .ctx dd { margin: 0; }
   @media (max-width: 600px) { .ctx { margin-left: 0; } }
+  /* ---------- page structure: every block is a card; calm headers; wide but bounded ---------- */
+  .layout { max-width: 1800px; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; padding: 24px; }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 16px; }
+    .runs { max-height: 240px; overflow-y: auto; }  /* keep the analysis near the top on phones */
+  }
+  main.panel { background: none; border: 0; padding: 0; }
+  .layout > aside { align-self: start; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin: 0 0 16px; }
+  @media (max-width: 600px) { .card { padding: 14px; border-radius: 10px; } }
+  section.sec { margin: 0 0 16px; }
+  .sechead { border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 12px; }
+  .sechead .ico { background: var(--low-bg); color: var(--acc); }
+  .sechead h2 { font-size: 1rem; text-transform: none; letter-spacing: 0; }
+  .sechead .badge { color: var(--muted); }
+  .secnav { background: var(--bg); border: 0; padding: 10px 0; margin: 0 0 12px; }
+  .secnav a { border-left: 1px solid var(--line); background: var(--panel); padding: 4px 12px; }
+  .secnav a::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+                      background: var(--acc); margin-right: 6px; vertical-align: middle; }
+  .runhead h3 { font-size: 1.4667rem; }
+  .meta { margin-bottom: 14px; }
+  .group { margin-bottom: 0; }
+  /* timeline header: scope, pull, presets, lanes menu */
+  .tl-title { font-size: 1rem; }
+  .tl-head .sp { flex: 1; }
+  .seg { display: inline-flex; }
+  .seg .tlbtn { border-radius: 0; margin-left: -1px; }
+  .seg .tlbtn:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+  .seg .tlbtn:last-child { border-radius: 0 6px 6px 0; }
+  .tlbtn.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); position: relative; }
+  .tlbtn { padding: 5px 11px; }
+  details.lanes { position: relative; margin: 0; }
+  details.lanes > summary { list-style: none; margin: 0; color: var(--text); font-weight: 400; }
+  details.lanes > summary::-webkit-details-marker { display: none; }
+  details.lanes > summary::after { content: " ▾"; }
+  .lanemenu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 7; background: var(--panel); border: 1px solid var(--line);
+              border-radius: 10px; padding: 12px 14px; box-shadow: 0 8px 24px rgba(0,0,0,.18); display: grid;
+              grid-template-columns: repeat(2, max-content); gap: 6px 22px; font-size: 0.9333rem; }
+  @media (max-width: 600px) { .lanemenu { grid-template-columns: 1fr; left: auto; right: 0; } }
+  .lanemenu fieldset { border: 0; margin: 0; padding: 0; }
+  .lanemenu legend { font-size: 0.8667rem; color: var(--muted); font-weight: 600; padding: 0; margin-bottom: 4px; }
+  .lanemenu label { display: flex; align-items: center; gap: 6px; padding: 2px 0; white-space: nowrap; cursor: pointer; }
+  details.legend { margin: 0 0 8px; display: block; }
+  details.legend > summary { color: var(--muted); font-size: 0.8667rem; font-weight: 500; margin: 0 0 6px; }
+  .legend-items { display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 0.8667rem; color: var(--muted); }
+  .legend-items .hint { flex-basis: 100%; opacity: .8; }
+  .legend i.tick, .lanemenu i.tick { width: 3px; height: 12px; background: var(--muted); border-radius: 2px; }
+  .legend i.dot, .lanemenu i.dot { width: 10px; height: 10px; border-radius: 50%; }
+  .lanemenu i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; }
+  .lanemenu i.box { height: 8px; width: 12px; border-radius: 2px; }
+  .lanemenu i.dash { background: repeating-linear-gradient(90deg, var(--ink-muted) 0 4px, transparent 4px 7px); }
+  .sym { display: inline-block; width: 14px; text-align: center; margin-right: 4px; }
+  #tlSection.pinned { border-radius: 0 0 12px 12px; padding: 10px 20px 8px; }
+  #tlSection.pinned details.legend { display: none; }
+  #textSize.on { border-color: var(--accent); color: var(--accent); }
   dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text);
            padding: 20px; width: min(420px, calc(100vw - 32px)); }
   dialog::backdrop { background: rgba(0,0,0,.4); }
-  dialog label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  dialog label { display: block; font-size: 0.8667rem; color: var(--muted); margin: 10px 0 4px; }
   dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 </style>
 </head>
@@ -244,6 +311,7 @@
   <h1>Healer Review</h1>
   <span class="budget" id="budget"></span>
   <button class="pill" id="studyBtn" title="Top-player study the analysis compares against">Top-player study</button>
+  <button class="pill" id="textSize" title="Text size">Text: Normal</button>
   <button class="pill" id="charBtn">Set character</button>
 </header>
 
@@ -259,7 +327,7 @@
   </aside>
 
   <main class="panel" id="main">
-    <div class="empty">Pick a key on the left, or paste a log URL.</div>
+    <div class="card empty">Pick a key on the left, or paste a log URL.</div>
   </main>
 </div>
 
@@ -343,7 +411,7 @@ function sevLabel(s) { return s >= 70 ? "High" : s >= 45 ? "Medium" : "Low"; }
 async function analyze(url, fresh = false) {
   current = url;
   document.querySelectorAll(".run").forEach((el) => el.classList.toggle("active", el.dataset.url === url));
-  $("main").innerHTML = `<h2>Analyzing</h2><div class="progress" id="progress"><div>Starting...</div></div>`;
+  $("main").innerHTML = `<div class="card"><h2>Analyzing</h2><div class="progress" id="progress"><div>Starting...</div></div></div>`;
   try {
     const {job} = await api("/api/analyze", {method: "POST", body: JSON.stringify({url, fresh})});
     while (true) {
@@ -355,7 +423,7 @@ async function analyze(url, fresh = false) {
       if (j.status === "error") throw new Error(j.error);
     }
   } catch (e) {
-    $("main").innerHTML = `<h2>Couldn't analyze this run</h2><p class="error">${esc(e.message)}</p>`;
+    $("main").innerHTML = `<div class="card"><h2>Couldn't analyze this run</h2><p class="error">${esc(e.message)}</p></div>`;
     loadBudget();
   }
 }
@@ -374,7 +442,7 @@ function renderGroup(res) {
       <span class="spec">${esc([m.spec, m.class].filter(Boolean).join(" "))}</span>
       ${m.note ? `<div class="note">${esc(m.note)}</div>` : ""}${renderBrings(m)}</div></div>`).join("");
   const notes = (res.comp_notes || []).map((n) => `<div>${esc(n)}</div>`).join("");
-  return `<h2>Group</h2><div class="group">${members}</div><div class="compnote">${notes}</div>`;
+  return `<div class="group">${members}</div>${notes ? `<div class="compnote">${notes}</div>` : ""}`;
 }
 
 // Group / external cooldowns a member brings, flagged when never pressed or never up for a big group hit.
@@ -433,30 +501,62 @@ function pullShort(label) {
 }
 
 // ---------- timeline ----------
+// Marker lanes: [marker kind, label, toggle key, short label for narrow screens].
 const LANES = [
-  ["cooldown", "Healing cooldowns"], ["personal", "Personal"], ["trinket", "Trinkets & potions"],
-  ["hit", "Big group hits"], ["death", "Deaths"], ["finding", "Findings"],
+  ["cooldown", "Healing cooldowns", "l:cooldown", "Cooldowns"], ["personal", "Personal", "l:personal", "Personal"],
+  ["trinket", "Trinkets & potions", "l:trinket", "Trinkets"], ["hit", "Big group hits", "l:hit", "Hits"],
+  ["death", "Deaths", "deaths", "Deaths"], ["finding", "Findings", "l:finding", "Findings"],
 ];
 const SCOPE_COLOR = {personal: "var(--series-1)", external: "var(--series-3)", group: "var(--series-7)"};
 let TL = null;  // {res, pull, view, mark, tips}
-// Legend entries double as toggles: [key, swatch html, label]. Hidden keys are remembered per browser.
-const LEGEND = [
-  ["group", `<i style="background:var(--series-1)"></i>`, "Group HP"],
-  ["lowest", `<i style="background:var(--series-2)"></i>`, "Lowest player"],
-  ["top", `<i class="dash"></i>`, "Top groups (median; middle half shaded)"],
-  ["uncovered", `<i class="box" style="background:var(--critical);opacity:.35"></i>`, "Big hit with no defensives up"],
-  ["avoid", `<i class="box" style="background:var(--warning)"></i>`, "Avoidable hit (dot) / kickable cast went through (◆)"],
-  ["personal", `<i class="box" style="background:var(--series-1)"></i>`, "Personal"],
-  ["external", `<i class="box" style="background:var(--series-3)"></i>`, "External"],
-  ["groupdef", `<i class="box" style="background:var(--series-7)"></i>`, "Group defensive"],
-  ["chain", "", "⛓ Chain pull (orange = went in risky)"],
-  ["deaths", "", "✕ Deaths"],
-  ["lust", "", "⚡ Bloodlust"],
-  ["ready", `<i class="box" style="background:var(--good)"></i>`, "Cooldown sat ready (overview)"],
+// Everything the chart can show: [key, group, swatch html, label]. They double as the legend.
+const TOGGLES = [
+  ["group", "HP", `<i style="background:var(--series-1)"></i>`, "Group HP"],
+  ["lowest", "HP", `<i style="background:var(--series-2)"></i>`, "Lowest player"],
+  ["top", "HP", `<i class="dash"></i>`, "Top groups (median, middle half shaded)"],
+  ["uncovered", "HP", `<i class="box" style="background:var(--critical);opacity:.35"></i>`, "Big hit, no defensive up"],
+  ["l:cooldown", "Lanes", `<i class="box" style="background:var(--text)"></i>`, "Your healing cooldowns"],
+  ["l:hit", "Lanes", `<i class="tick"></i>`, "Big group hits"],
+  ["deaths", "Lanes", `<span class="sym" style="color:var(--critical)">✕</span>`, "Deaths"],
+  ["l:personal", "Lanes", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Your personal"],
+  ["l:trinket", "Lanes", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Trinkets & potions"],
+  ["l:finding", "Lanes", `<i class="dot" style="background:var(--warning)"></i>`, "Finding dots"],
+  ["mana", "Lanes", `<i style="background:var(--series-1)"></i>`, "Your mana"],
+  ["party", "Party", "", "Party defensive lanes"],
+  ["personal", "Party", `<i class="box" style="background:var(--series-1)"></i>`, "Personal defensives"],
+  ["external", "Party", `<i class="box" style="background:var(--series-3)"></i>`, "Externals"],
+  ["groupdef", "Party", `<i class="box" style="background:var(--series-7)"></i>`, "Group defensives"],
+  ["avoid", "Party", `<i class="dot" style="background:var(--warning)"></i>`, "Avoidable hit / ◆ kick went through"],
+  ["chain", "Run", `<span class="sym">⛓</span>`, "Chain pulls (orange = risky)"],
+  ["lust", "Run", `<span class="sym" style="color:var(--high)">⚡</span>`, "Bloodlust"],
+  ["ready", "Run", `<i class="box" style="background:var(--good)"></i>`, "Cooldown sat ready (overview)"],
 ];
 const SCOPE_KEY = {personal: "personal", external: "external", group: "groupdef"};
-const TL_HIDDEN = new Set((lsGet("tlHidden") || "").split(",").filter(Boolean));
+// Presets switch whole sets of toggles; any change in the Lanes menu makes it "custom".
+const PRESETS = {
+  healing: {label: "Healing", on: ["group", "lowest", "top", "l:cooldown", "l:hit", "deaths", "chain"]},
+  party: {label: "Party", on: ["group", "lowest", "top", "uncovered", "l:cooldown", "l:hit", "deaths", "chain", "l:personal",
+                               "party", "personal", "external", "groupdef", "avoid"]},
+  everything: {label: "Everything", on: TOGGLES.map((t) => t[0])},
+};
+let TL_PRESET = PRESETS[lsGet("tlPreset")] || lsGet("tlPreset") === "custom" ? lsGet("tlPreset") : "healing";
+const TL_HIDDEN = new Set(TL_PRESET === "custom" ? (lsGet("tlHidden") || "").split(",").filter(Boolean)
+  : TOGGLES.map((t) => t[0]).filter((k) => !PRESETS[TL_PRESET].on.includes(k)));
 const isOn = (k) => !TL_HIDDEN.has(k);
+
+function applyPreset(name) {
+  TL_PRESET = name;
+  TL_HIDDEN.clear();
+  if (PRESETS[name]) TOGGLES.forEach(([k]) => { if (!PRESETS[name].on.includes(k)) TL_HIDDEN.add(k); });
+  lsSet("tlPreset", name);
+  lsSet("tlHidden", [...TL_HIDDEN].join(","));
+}
+
+// Sizes follow the text size (html font-size): timeline text is 13px at Normal, lanes scale with it.
+function tlMetrics(W, pinned) {
+  const fs = parseFloat(getComputedStyle(document.documentElement).fontSize) * 0.8667;
+  return {fs, L: Math.round(fs * (W < 560 ? 6.5 : 10.5)), laneH: Math.round(fs * (pinned ? 1.4 : 1.9))};
+}
 
 function fmtClock(s) { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -467,18 +567,22 @@ function renderTimelineShell(res) {
   if (!t || !t.pulls.length) return "";
   const opts = `<option value="-1">Whole run (${fmtClock(t.pulls[0].start_s)}-${fmtClock(t.pulls[t.pulls.length - 1].end_s)})</option>`
     + t.pulls.map((p, i) => `<option value="${i}">${esc(p.label)} (${fmtClock(p.start_s)})</option>`).join("");
-  return `<div id="tlSection">
-    <div class="tl-head"><strong style="font-size:13px">Timeline</strong>
+  const groups = [...new Set(TOGGLES.map((x) => x[1]))];
+  const menu = groups.map((gname) => `<fieldset><legend>${gname}</legend>${TOGGLES.filter((x) => x[1] === gname)
+    .map(([k, , sw, label]) => `<label><input type="checkbox" data-k="${k}"> ${sw}${esc(label)}</label>`).join("")}</fieldset>`).join("");
+  return `<div id="tlSection" class="card">
+    <div class="tl-head"><strong class="tl-title">Timeline</strong>
       <span class="scope" id="tlScope"></span>
       <select id="tlPull" aria-label="Pull">${opts}</select>
       <button class="tlbtn" id="tlWhole" title="Show the whole key (or double-click the overview)">Show whole run</button>
       <button class="tlbtn" id="tlZoomOut" hidden>Show whole pull</button>
+      <span class="sp"></span>
+      <div class="seg" role="group" aria-label="Timeline preset">${Object.entries(PRESETS).map(([k, p]) =>
+        `<button class="tlbtn" data-preset="${k}">${p.label}</button>`).join("")}</div>
+      <details class="lanes" id="tlLanes"><summary class="tlbtn">Lanes</summary><div class="lanemenu">${menu}</div></details>
       <button class="tlbtn" id="tlPin" title="Keep the timeline on screen while you read">📌 Pin</button>
       <button class="tlbtn" id="tlFold" hidden>Hide chart</button></div>
-    <div class="legend">${LEGEND.map(([k, sw, label]) =>
-      `<button class="lg${TL_HIDDEN.has(k) ? " off" : ""}" data-k="${k}" aria-pressed="${!TL_HIDDEN.has(k)}"
-        title="Click to show / hide">${sw}${label}</button>`).join("")}
-      <span>Click an item to hide it · overview: click a pull or drag a range to zoom</span></div>
+    <details class="legend" id="tlLegend"><summary>Legend</summary><div class="legend-items" id="tlLegendItems"></div></details>
     <div class="tlwrap" id="ovWrap"><svg id="ovSvg" role="img" aria-label="Whole run overview: click a pull or drag a range to zoom"></svg>
       <div class="tip" id="ovTip"></div></div>
     <div class="tlwrap" id="tlWrap"><svg id="tlSvg" role="img" aria-label="Group HP, events and defensives over the selected pull"></svg>
@@ -518,10 +622,12 @@ function overviewScale(t, L, plotW) {
 function drawOverview() {
   const t = TL.res.timeline, svg = $("ovSvg"), wrap = $("ovWrap");
   const pinned = $("tlSection").classList.contains("pinned");
-  const W = Math.max(320, wrap.clientWidth), L = W < 560 ? 84 : 128, R = 8, plotW = W - L - R;
+  const W = Math.max(320, wrap.clientWidth), R = 8, {fs, L} = tlMetrics(W, pinned), plotW = W - L - R;
   const ready = pinned || !isOn("ready") ? [] : (t.ready_lanes || []);
-  const top = 14, hpH = pinned ? 26 : 40, laneH = 9, readyTop = top + hpH + 6;
+  const top = Math.round(fs + 6), hpH = pinned ? 30 : Math.round(fs * 3.6), laneH = Math.round(fs * 1.35);
+  const readyTop = top + hpH + 8;
   const H = readyTop + ready.length * laneH + (ready.length ? 6 : 0);
+  const chained = new Set(t.pulls.map((q, i) => q.chain ? i : -1));
   const {segs, x, toS} = overviewScale(t, L, plotW);
   const y = (v) => top + (1 - v) * hpH;
   let g = "";
@@ -534,9 +640,14 @@ function drawOverview() {
     for (let b = Math.floor(sg.p.start_s / t.bin_s); b <= Math.min(t.group.length - 1, Math.ceil(sg.p.end_s / t.bin_s)); b += 3)
       d += `${d ? "L" : "M"}${x(b * t.bin_s).toFixed(1)},${y(t.group[b]).toFixed(1)}`;
     if (isOn("group")) g += `<path d="${d}" fill="none" stroke="var(--series-1)" stroke-width="1.2" pointer-events="none"/>`;
-    const label = pullShort(sg.p.label);
-    if (sg.x1 - sg.x0 > label.length * 5.5 + 6) g += `<text x="${sg.x0 + 3}" y="${top - 3}" ${sg.p.boss ? 'style="font-weight:700"' : ""}>${esc(label)}</text>`;
-    if (sg.p.deaths && isOn("deaths")) g += `<text x="${sg.x1 - 3}" y="${top + hpH - 3}" text-anchor="end" style="fill:var(--critical);font-weight:700">✕${sg.p.deaths}</text>`;
+    // ⛓ badge on a pull that was chained into, then the name where it fits
+    const badge = chained.has(i) && isOn("chain"), risky = badge && (t.markers.find((m) => m.kind === "chain"
+      && Math.abs(m.t_s - sg.p.start_s) < 2) || {}).risky;
+    if (badge && sg.x1 - sg.x0 > fs + 2)
+      g += `<text x="${sg.x0 + 2}" y="${top - 4}" style="fill:${risky ? "var(--warning)" : "var(--muted)"}">⛓</text>`;
+    const label = pullShort(sg.p.label), lx = sg.x0 + (badge ? fs + 6 : 3);
+    if (sg.x1 - lx > label.length * fs * 0.58) g += `<text x="${lx}" y="${top - 4}" ${sg.p.boss ? 'style="font-weight:700"' : ""}>${esc(label)}</text>`;
+    if (sg.p.deaths && isOn("deaths")) g += `<text x="${sg.x1 - 3}" y="${top + hpH - 4}" text-anchor="end" style="fill:var(--critical);font-weight:700">✕${sg.p.deaths}</text>`;
   });
   if (TL.view) {
     const [a, b] = TL.view;
@@ -544,24 +655,19 @@ function drawOverview() {
   }
   t.markers.filter((m) => m.kind === "death" && isOn("deaths")).forEach((m) =>
     g += `<line x1="${x(m.t_s)}" x2="${x(m.t_s)}" y1="${top}" y2="${top + hpH}" stroke="var(--critical)" stroke-width="1.5" pointer-events="none"/>`);
-  t.markers.filter((m) => m.kind === "cooldown").forEach((m) =>
-    g += `<rect x="${x(m.t_s) - 2}" y="${top + hpH - 6}" width="4" height="6" fill="var(--text)" pointer-events="none"/>`);
-  t.markers.filter((m) => m.kind === "trinket" || m.kind === "potion").forEach((m) =>
-    g += `<circle cx="${x(m.t_s)}" cy="${top + hpH - 9}" r="1.8" fill="var(--series-3)" pointer-events="none"/>`);
-  t.markers.filter((m) => m.kind === "chain" && isOn("chain")).forEach((m) =>
-    g += `<text x="${x(m.t_s) - OV_GAP / 2}" y="${top + hpH / 2 + 4}" text-anchor="middle"
-      style="fill:${m.risky ? "var(--warning)" : "var(--ink-muted)"};font-size:10px" pointer-events="none">⛓</text>`);
+  if (isOn("l:cooldown")) t.markers.filter((m) => m.kind === "cooldown").forEach((m) =>
+    g += `<rect x="${x(m.t_s) - 2}" y="${top + hpH - 7}" width="4" height="7" fill="var(--text)" pointer-events="none"/>`);
   (isOn("lust") ? t.lust || [] : []).forEach((l) =>
-    g += `<text x="${x(l.t_s)}" y="${top + 9}" text-anchor="middle" style="fill:var(--high)" pointer-events="none">⚡</text>`);
+    g += `<text x="${x(l.t_s)}" y="${top + fs}" text-anchor="middle" style="fill:var(--high)" pointer-events="none">⚡</text>`);
   ready.forEach((ln, i) => {
     const yc = readyTop + i * laneH;
-    g += `<rect x="${L}" y="${yc}" width="${plotW}" height="${laneH - 3}" fill="var(--grid)" opacity=".6" pointer-events="none"/>`;
-    ln.ready.forEach(([a, b]) => g += `<rect x="${x(a)}" y="${yc}" width="${Math.max(1, x(b) - x(a))}" height="${laneH - 3}"
+    g += `<rect x="${L}" y="${yc}" width="${plotW}" height="${laneH - 4}" fill="var(--grid)" opacity=".6" pointer-events="none"/>`;
+    ln.ready.forEach(([a, b]) => g += `<rect x="${x(a)}" y="${yc}" width="${Math.max(1, x(b) - x(a))}" height="${laneH - 4}"
       fill="var(--good)" opacity=".7" pointer-events="none"/>`);
   });
   // labels
-  g += `<text class="lane" x="8" y="${top + 12}">Whole run</text>`;
-  ready.forEach((ln, i) => g += `<text class="lane" x="8" y="${readyTop + i * laneH + 6}" style="font-size:9px">${esc(ln.name)} ready</text>`);
+  g += `<text class="lane" x="8" y="${top + fs + 2}">Whole run</text>`;
+  ready.forEach((ln, i) => g += `<text class="lane" x="8" y="${readyTop + i * laneH + laneH * 0.62}">${esc(ln.name)}</text>`);
   g += `<rect id="ovDrag" x="0" y="0" width="0" height="${H}" fill="var(--accent)" opacity=".15" pointer-events="none"/>`;
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.setAttribute("height", H);
@@ -618,16 +724,21 @@ function drawTimeline() {
   $("tlWhole").hidden = whole;
   $("tlScope").textContent = whole ? "Whole run" : TL.view ? `${pullShort(p.label)} · zoomed` : pullShort(p.label);
   const svg = $("tlSvg"), wrap = $("tlWrap");
-  const W = Math.max(320, wrap.clientWidth);
-  const L = W < 560 ? 84 : 128, R = 8, plotW = W - L - R;
-  const hpTop = 22, hpH = pinned ? 64 : 160, laneH = pinned ? 11 : 18, lanesTop = hpTop + hpH + 8;
-  const partyTop = lanesTop + LANES.length * laneH + 8;
-  const lanes = t.lanes || [];
-  const manaTop = partyTop + lanes.length * laneH + 10, manaH = pinned ? 0 : 36;
-  const axisY = manaTop + manaH + 4, H = axisY + 20;
+  const W = Math.max(320, wrap.clientWidth), R = 8, {fs, L, laneH} = tlMetrics(W, pinned), plotW = W - L - R;
   // Whole run: the overview's scale (pulls side by side, gaps squeezed). One pull: linear over the pull or zoom.
   const last = t.pulls[t.pulls.length - 1];
   const [s0, s1] = whole ? [t.pulls[0].start_s, last.end_s] : TL.view || [p.start_s, Math.max(p.end_s, p.start_s + 1)];
+  // Only the lanes the preset shows - plus any lane holding the event a time link just pointed at.
+  const marked = (kind) => TL.mark && t.markers.some((m) => markerKind(m) === kind
+    && m.t_s >= TL.mark[0] - 1 && m.t_s <= TL.mark[1] + 1);
+  const shownLanes = LANES.filter(([kind, , key]) => isOn(key) || marked(kind));
+  const lanes = isOn("party") ? t.lanes || [] : [];
+  const hpTop = Math.round(fs + 10), hpH = pinned ? Math.round(fs * 5) : Math.max(180, Math.round(fs * 13));
+  const lanesTop = hpTop + hpH + 10;
+  const partyTop = lanesTop + shownLanes.length * laneH + (lanes.length ? 10 : 0);
+  const manaH = pinned || !isOn("mana") ? 0 : Math.round(fs * 3);
+  const manaTop = partyTop + lanes.length * laneH + (manaH ? 12 : 0);
+  const axisY = manaTop + manaH + 4, H = Math.round(axisY + fs + 10);
   const span = s1 - s0;
   const sc = whole ? overviewScale(t, L, plotW) : null;
   const x = whole ? sc.x : (s) => L + (s - s0) / span * plotW;
@@ -656,16 +767,16 @@ function drawTimeline() {
   if (whole) {  // pull boundaries and names instead of phase names
     sc.segs.forEach((sg) => {
       if (sg.p.boss) g += `<rect x="${sg.x0}" y="${hpTop}" width="${sg.x1 - sg.x0}" height="${axisY - hpTop}" fill="var(--phase-a)"/>`;
-      g += `<line x1="${sg.x0}" x2="${sg.x0}" y1="${hpTop - 14}" y2="${axisY}" stroke="var(--axis)" stroke-dasharray="2 3"/>`;
+      g += `<line x1="${sg.x0}" x2="${sg.x0}" y1="${hpTop - fs}" y2="${axisY}" stroke="var(--axis)" stroke-dasharray="2 3"/>`;
       const label = pullShort(sg.p.label);
-      if (sg.x1 - sg.x0 > label.length * 6 + 6)
+      if (sg.x1 - sg.x0 > label.length * fs * 0.6 + 6)
         g += `<text x="${sg.x0 + 3}" y="${hpTop - 5}" ${sg.p.boss ? 'style="font-weight:700"' : ""}>${esc(label)}</text>`;
     });
   } else p.phases.forEach((ph, i) => {
     const xa = x(ph.start_s), xb = x(Math.min(ph.end_s, p.end_s));
     if (i % 2 === 1) g += `<rect x="${xa}" y="${hpTop}" width="${xb - xa}" height="${axisY - hpTop}" fill="var(--phase-a)"/>`;
-    g += `<line x1="${xa}" x2="${xa}" y1="${hpTop - 14}" y2="${axisY}" stroke="var(--axis)" stroke-dasharray="2 3"/>`;
-    g += `<text x="${xa + 4}" y="${hpTop - 5}">${esc(ph.name)}</text>`;
+    g += `<line x1="${xa}" x2="${xa}" y1="${hpTop - fs}" y2="${axisY}" stroke="var(--axis)" stroke-dasharray="2 3"/>`;
+    if (xb - xa > ph.name.length * fs * 0.55) g += `<text x="${xa + 4}" y="${hpTop - 5}">${esc(ph.name)}</text>`;
   });
   if (TL.mark) {
     const [ma, mb] = TL.mark;
@@ -675,7 +786,10 @@ function drawTimeline() {
   t.markers.filter((m) => m.kind === "chain" && isOn("chain") && m.t_s >= s0 - 1 && m.t_s <= s1).forEach((m) => {
     const xm = Math.max(L + 1, x(m.t_s)), col = m.risky ? "var(--warning)" : "var(--axis)";
     g += `<line x1="${xm}" x2="${xm}" y1="${hpTop}" y2="${hpTop + hpH}" stroke="${col}" stroke-width="2" stroke-dasharray="4 3"/>`;
-    g += `<text x="${xm + 3}" y="${hpTop + 12}" style="fill:${col};font-weight:700" ${tipAttr(m.tip)}>${whole ? "⛓" : "⛓ Chain"}</text>`;
+    // In the label row, after a phase name that starts at the same moment - never on top of the HP lines.
+    const ph = whole ? null : p.phases.find((q) => Math.abs(q.start_s - m.t_s) < 2);
+    const lx = xm + 4 + (ph ? ph.name.length * fs * 0.58 + 8 : 0);
+    if (!whole) g += `<text x="${lx}" y="${hpTop - 5}" style="fill:${m.risky ? "var(--warning)" : "var(--muted)"};font-weight:700" ${tipAttr(m.tip)}>⛓ chained in</text>`;
   });
   (isOn("uncovered") ? t.uncovered_hits || [] : []).filter((s) => s >= s0 && s <= s1).forEach((s) =>
     g += `<rect x="${x(s) - 2}" y="${hpTop}" width="4" height="${hpH}" fill="var(--critical)" opacity=".25"/>`);
@@ -691,11 +805,12 @@ function drawTimeline() {
   if (isOn("lowest")) g += `<path d="${pts(t.lowest, yHp)}" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linejoin="round"/>`;
   if (isOn("group")) g += `<path d="${pts(t.group, yHp)}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>`;
   const inView = t.markers.filter((m) => m.t_s >= s0 && m.t_s <= s1 && (!whole || pullAt(m.t_s))
-    && !(m.kick && !isOn("avoid")) && !(m.kind === "death" && !isOn("deaths")));
+    && !(m.kick && !isOn("avoid")));
   const near = (m) => TL.mark && m.t_s >= TL.mark[0] - 1 && m.t_s <= TL.mark[1] + 1 ? ` class="flashmark"` : "";
   // Whole run: markers closer than CLUSTER_PX merge into one, drawn as the most important of them,
   // with a tooltip listing them all.
-  const CLUSTER_PX = 9;
+  const CLUSTER_PX = Math.round(fs * 0.8);
+  const r = Math.max(4, Math.round(fs * 0.38));  // marker half-size
   const weight = (m) => (m.severity || 0) + (m.covered === false ? 50 : 0) + (m.kick || m.avoid ? 20 : 0);
   const clusters = (ms) => {
     if (!whole) return ms.map((m) => [m]);
@@ -710,36 +825,36 @@ function drawTimeline() {
     `${grp.length} × ${label} · ${fmtClock(grp[0].t_s)}-${fmtClock(grp[grp.length - 1].t_s)}`,
     ...grp.slice(0, 6).map((m) => `${fmtClock(m.t_s)} ${m.label}${m.avoid ? ` (${m.avoid})` : ""}`),
     ...(grp.length > 6 ? [`+${grp.length - 6} more - pick the pull to see them`] : [])];
-  LANES.forEach(([kind, label], i) => {
+  shownLanes.forEach(([kind, label], i) => {
     const yc = lanesTop + i * laneH + laneH / 2;
     g += `<line x1="${L}" x2="${W - R}" y1="${yc}" y2="${yc}" stroke="var(--grid)"/>`;
     clusters(inView.filter((m) => markerKind(m) === kind)).forEach((grp) => {
       const m = grp.reduce((best, c) => weight(c) > weight(best) ? c : best, grp[0]);
       const xm = x(m.t_s), tip = tipAttr(clusterTip(grp, label));
-      if (grp.length > 2 && !pinned) g += `<text x="${xm + 6}" y="${yc - 3}" style="font-size:9px" pointer-events="none">${grp.length}</text>`;
       if (kind === "death") {
-        g += `<path${near(m)} d="M${xm - 4},${yc - 4}L${xm + 4},${yc + 4}M${xm + 4},${yc - 4}L${xm - 4},${yc + 4}" stroke="var(--critical)" stroke-width="2.5" ${tip}/>`;
-        g += `<rect x="${xm - 7}" y="${yc - 7}" width="14" height="14" fill="transparent" ${tip}/>`;
+        g += `<path${near(m)} d="M${xm - r},${yc - r}L${xm + r},${yc + r}M${xm + r},${yc - r}L${xm - r},${yc + r}" stroke="var(--critical)" stroke-width="2.5" ${tip}/>`;
+        g += `<rect x="${xm - r - 3}" y="${yc - r - 3}" width="${2 * r + 6}" height="${2 * r + 6}" fill="transparent" ${tip}/>`;
       } else if (kind === "finding") {
         const col = m.severity >= 70 ? "var(--critical)" : m.severity >= 45 ? "var(--warning)" : "var(--ink-muted)";
-        g += `<circle${near(m)} cx="${xm}" cy="${yc}" r="5" fill="${col}" stroke="var(--panel)" stroke-width="2" data-f="${m.index}" ${tip}/>`;
+        g += `<circle${near(m)} cx="${xm}" cy="${yc}" r="${r + 1}" fill="${col}" stroke="var(--panel)" stroke-width="2" data-f="${m.index}" ${tip}/>`;
       } else if (kind === "hit" && m.kick) {
-        g += `<path${near(m)} d="M${xm},${yc - 5}L${xm + 5},${yc}L${xm},${yc + 5}L${xm - 5},${yc}Z" fill="var(--warning)" ${tip}/>`;
+        g += `<path${near(m)} d="M${xm},${yc - r - 1}L${xm + r + 1},${yc}L${xm},${yc + r + 1}L${xm - r - 1},${yc}Z" fill="var(--warning)" ${tip}/>`;
       } else if (kind === "hit") {
-        g += `<line${near(m)} x1="${xm}" x2="${xm}" y1="${yc - 5}" y2="${yc + 5}" stroke="${m.covered === false ? "var(--critical)" : "var(--muted)"}"
+        g += `<line${near(m)} x1="${xm}" x2="${xm}" y1="${yc - r - 1}" y2="${yc + r + 1}" stroke="${m.covered === false ? "var(--critical)" : "var(--muted)"}"
           stroke-width="3" stroke-linecap="round" ${tip}/>`;
-        if (m.avoid && isOn("avoid")) g += `<circle cx="${xm}" cy="${yc - 7}" r="2.5" fill="var(--warning)" pointer-events="none"/>`;
+        if (m.avoid && isOn("avoid")) g += `<circle cx="${xm}" cy="${yc - r - 4}" r="2.5" fill="var(--warning)" pointer-events="none"/>`;
       } else {
-        g += `<rect${near(m)} x="${xm - 4}" y="${yc - 6}" width="8" height="12" rx="2" fill="var(--text)" opacity=".75" ${tip}/>`;
+        g += `<rect${near(m)} x="${xm - r}" y="${yc - r - 2}" width="${2 * r}" height="${2 * r + 4}" rx="2" fill="var(--text)" opacity=".75" ${tip}/>`;
       }
     });
   });
+  const barH = Math.max(8, laneH - 8);
   lanes.forEach((ln, i) => {
     const yc = partyTop + i * laneH + laneH / 2;
     g += `<line x1="${L}" x2="${W - R}" y1="${yc}" y2="${yc}" stroke="var(--grid)"/>`;
     (t.defense || []).filter((d) => d.lane === ln.id && isOn(SCOPE_KEY[d.scope]) && d.end_s >= s0 && d.start_s <= s1).forEach((d) => {
       const xa = x(Math.max(d.start_s, s0)), xb = x(Math.min(d.end_s, s1));
-      g += `<rect x="${xa}" y="${yc - 5}" width="${Math.max(3, xb - xa)}" height="10" rx="2" fill="${SCOPE_COLOR[d.scope]}"
+      g += `<rect x="${xa}" y="${yc - barH / 2}" width="${Math.max(3, xb - xa)}" height="${barH}" rx="2" fill="${SCOPE_COLOR[d.scope]}"
         opacity="${d.protective ? .85 : .4}" ${tipAttr(d.tip)}/>`;
     });
   });
@@ -749,25 +864,29 @@ function drawTimeline() {
   }
   g += `</g>`;
   // labels outside the clip
-  [0, 0.5, 1].forEach((v) => g += `<text x="${L - 6}" y="${yHp(v) + 4}" text-anchor="end">${v * 100}%</text>`);
-  g += `<text class="lane" x="8" y="${hpTop + 12}">HP</text>`;
-  LANES.forEach(([, label], i) => g += `<text class="lane" x="8" y="${lanesTop + i * laneH + laneH / 2 + 4}">${label}</text>`);
+  const mid = fs * 0.35;  // baseline offset that centres text on a lane
+  [0, 0.5, 1].forEach((v) => g += `<text x="${L - 6}" y="${yHp(v) + mid}" text-anchor="end">${v * 100}%</text>`);
+  g += `<text class="lane" x="8" y="${hpTop + fs}">HP</text>`;
+  shownLanes.forEach(([, label, , short], i) =>
+    g += `<text class="lane" x="8" y="${lanesTop + i * laneH + laneH / 2 + mid}">${W < 560 ? short : label}</text>`);
   lanes.forEach((ln, i) => {
     const yc = partyTop + i * laneH + laneH / 2;
-    g += `<rect x="8" y="${yc - 5}" width="3" height="10" fill="${CLASS_COLORS[ln.class] || "var(--line)"}"/>
-      <text class="lane" x="15" y="${yc + 4}">${esc(ln.name)}</text>`;
+    g += `<rect x="8" y="${yc - fs / 2}" width="3" height="${fs}" fill="${CLASS_COLORS[ln.class] || "var(--line)"}"/>
+      <text class="lane" x="16" y="${yc + mid}">${esc(ln.name)}</text>`;
   });
-  if (manaH) g += `<text class="lane" x="8" y="${manaTop + 12}">Your mana</text>`;
+  if (manaH) g += `<text class="lane" x="8" y="${manaTop + fs}">Your mana</text>`;
+  const tickY = axisY + fs + 2;
   if (whole) {  // run time at pull starts that have room for a label
     let lastX = -1e9;
     t.pulls.forEach((q) => {
       const xq = x(q.start_s);
-      if (xq - lastX >= 40) { g += `<text x="${xq}" y="${axisY + 14}" text-anchor="start">${fmtClock(q.start_s)}</text>`; lastX = xq; }
+      if (xq - lastX >= fs * 4) { g += `<text x="${xq}" y="${tickY}" text-anchor="start">${fmtClock(q.start_s)}</text>`; lastX = xq; }
     });
   } else {
-    const step = span > 240 ? 60 : span > 100 ? 30 : span > 40 ? 10 : 5;
+    const minStep = span / (plotW / (fs * 5));  // labels at least ~5 characters apart
+    const step = [5, 10, 15, 30, 60, 120, 300].find((s) => s >= minStep) || 600;
     for (let s = Math.ceil(s0 / step) * step; s <= s1; s += step)
-      g += `<text x="${x(s)}" y="${axisY + 14}" text-anchor="middle">${fmtClock(s)}</text>`;
+      g += `<text x="${x(s)}" y="${tickY}" text-anchor="middle">${fmtClock(s)}</text>`;
   }
   g += `<line id="tlCross" x1="0" x2="0" y1="${hpTop}" y2="${axisY}" stroke="var(--text)" stroke-width="1" opacity="0" pointer-events="none"/>`;
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -862,6 +981,15 @@ function setPinned(on) {
   updatePinHeight();
 }
 
+// Preset buttons, Lanes checkboxes and the legend (only what is shown) follow TL_HIDDEN.
+function syncToggles() {
+  document.querySelectorAll("#tlSection [data-preset]").forEach((b) => b.classList.toggle("on", b.dataset.preset === TL_PRESET));
+  document.querySelectorAll("#tlLanes input[data-k]").forEach((cb) => { cb.checked = isOn(cb.dataset.k); });
+  $("tlLegendItems").innerHTML = TOGGLES.filter(([k]) => isOn(k) && k !== "party")
+    .map(([, , sw, label]) => `<span>${sw}${esc(label)}</span>`).join("")
+    + `<span class="hint">Overview: click a pull to open it, drag a range to zoom, double-click for the whole run</span>`;
+}
+
 function updatePinHeight() {
   const sec = $("tlSection");
   const h = sec && sec.classList.contains("pinned") ? sec.offsetHeight : 0;
@@ -876,14 +1004,22 @@ function initTimeline(res) {
   TL.pull = Math.max(0, start);
   $("tlPull").onchange = (e) => selectPull(+e.target.value);
   $("tlWhole").onclick = () => selectPull(-1);
-  document.querySelectorAll("#tlSection .lg").forEach((b) => b.onclick = () => {
-    const k = b.dataset.k, off = !TL_HIDDEN.has(k);
-    if (off) TL_HIDDEN.add(k); else TL_HIDDEN.delete(k);
-    b.classList.toggle("off", off);
-    b.setAttribute("aria-pressed", String(!off));
-    lsSet("tlHidden", [...TL_HIDDEN].join(","));
+  document.querySelectorAll("#tlSection [data-preset]").forEach((b) => b.onclick = () => {
+    applyPreset(b.dataset.preset);
+    syncToggles();
     drawTimeline();
   });
+  document.querySelectorAll("#tlLanes input[data-k]").forEach((cb) => cb.onchange = () => {
+    if (cb.checked) TL_HIDDEN.delete(cb.dataset.k); else TL_HIDDEN.add(cb.dataset.k);
+    TL_PRESET = Object.keys(PRESETS).find((p) => TOGGLES.every(([k]) => PRESETS[p].on.includes(k) === isOn(k))) || "custom";
+    lsSet("tlPreset", TL_PRESET);
+    lsSet("tlHidden", [...TL_HIDDEN].join(","));
+    syncToggles();
+    drawTimeline();
+  });
+  $("tlLegend").open = lsGet("tlLegend") === "1";
+  $("tlLegend").ontoggle = () => lsSet("tlLegend", $("tlLegend").open ? "1" : "0");
+  syncToggles();
   $("tlZoomOut").onclick = () => { TL.view = null; drawTimeline(); };
   $("tlPin").onclick = () => setPinned(!$("tlSection").classList.contains("pinned"));
   $("tlFold").onclick = () => {
@@ -978,7 +1114,7 @@ function sec(id, count, body, emptyText, foldable = true) {
   const s = SECTIONS[id];
   const tools = foldable && count ? `<button onclick="foldAll('${id}', true)">Expand all</button>
     <button onclick="foldAll('${id}', false)">Collapse all</button>` : "";
-  return `<section class="sec" id="sec-${id}" style="--acc:${s.color}">
+  return `<section class="sec card" id="sec-${id}" style="--acc:${s.color}">
     <div class="sechead"><span class="ico">${s.icon}</span><h2>${s.title}</h2>
       <span class="badge">${count}</span><span class="sp"></span>${tools}</div>
     ${count ? body : `<div class="secempty">${esc(emptyText)}</div>`}</section>`;
@@ -1152,15 +1288,16 @@ function render(res, url) {
                   items: todo(v.items), spells: todo(v.spells), pulls: todo(v.pulls), good: res.good_calls.length};
 
   $("main").innerHTML = `
+    <div class="card">
     <div class="runhead"><h3>${esc(r.dungeon)} +${r.level}</h3>
       <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span>
       <div class="actions"><a class="link" href="${esc(url)}" target="_blank" rel="noopener">Open log</a>
       <button class="link" id="fresh">Re-analyze</button></div></div>
-    <div class="meta">${esc(r.player)} · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"} ·
+    <div class="meta">${esc(r.player)} (${esc(SP.label)}) · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"} ·
       compared with ${c.count} top ${esc(SP.label)} logs (${levels})${(c.skipped || []).length
         ? ` <span title="${esc(c.skipped.map((s) => `${s.player} +${s.key}: ${s.reasons.join(", ")}`).join("\n"))}">(${c.skipped.length} skipped: incomplete data)</span>`
         : ""}${c.model ? ` · context from top runs ${esc(c.model)}` : ""}</div>
-    ${renderGroup(res)}
+    ${renderGroup(res)}</div>
     ${renderTimelineShell(res)}
     ${nav(counts)}
     ${sec("look", res.findings.length, `<div class="lookbar" id="lookBar" hidden></div>`
@@ -1257,9 +1394,29 @@ $("studyBtn").onclick = async () => {
   loadStudy();
 };
 
+// Text size: Normal (15px root) / Large (17px); everything is in rem, the timeline re-measures.
+function setTextSize(large) {
+  document.documentElement.classList.toggle("large", large);
+  $("textSize").textContent = `Text: ${large ? "Large" : "Normal"}`;
+  $("textSize").classList.toggle("on", large);
+  lsSet("textSize", large ? "large" : "normal");
+  if (TL && $("tlSvg")) { drawTimeline(); updatePinHeight(); }
+}
+$("textSize").onclick = () => setTextSize(!document.documentElement.classList.contains("large"));
+setTextSize(lsGet("textSize") === "large");
 loadRuns();
 loadBudget();
 loadStudy();
+// Links: ?run=<log url> opens that run (&at=<element id> scrolls to it, &pull=<n|whole> picks the timeline view);
+// ?theme=dark|light overrides the system theme.
+(async () => {
+  const q = new URLSearchParams(location.search);
+  if (["dark", "light"].includes(q.get("theme"))) document.documentElement.dataset.theme = q.get("theme");
+  if (!q.get("run")) return;
+  await analyze(q.get("run"));
+  if (TL && q.get("pull")) selectPull(q.get("pull") === "whole" ? -1 : +q.get("pull") - 1);
+  if (q.get("at") && $(q.get("at"))) $(q.get("at")).scrollIntoView({block: "start"});
+})();
 </script>
 </body>
 </html>
