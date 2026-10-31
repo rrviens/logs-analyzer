@@ -152,7 +152,7 @@ top-group line is a curve - what top groups' HP did through the same pull (media
   personals / externals / group defensives from real buff uptimes; big hits with nothing up are shaded red.
   Each player's lane also shows their potions, healthstones and on-use trinkets (outlined icons).
 - Timeline zoom and selection: Ctrl+wheel (or trackpad pinch) zooms around the cursor, drag pans when zoomed,
-  double-click resets. Drag (Shift+drag when zoomed) selects a range: "Selection" sums up group HP vs top groups,
+  double-click resets. Drag (Shift+drag when zoomed) selects a range and zooms to exactly it (a range across pulls in the whole-run view stays shaded instead): "Selection" sums up group HP vs top groups,
   damage taken and its avoidable share, your casts and cooldowns, defensives, potions, deaths and findings in it.
 
 ## Group composition

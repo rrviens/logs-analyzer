@@ -974,7 +974,7 @@ function drawTimeline() {
     for (let s = Math.ceil(s0 / step) * step; s <= s1; s += step)
       g += `<text x="${x(s)}" y="${tickY}" text-anchor="middle">${fmtClock(s)}</text>`;
   }
-  if (TL.sel && TL.sel[1] >= s0 && TL.sel[0] <= s1) {  // the analyzed selection
+  if (TL.sel && TL.selBand && TL.sel[1] >= s0 && TL.sel[0] <= s1) {  // a selection that couldn't be zoomed to
     const xa = x(Math.max(TL.sel[0], s0)), xb = x(Math.min(TL.sel[1], s1));
     g += `<rect x="${xa}" y="${hpTop}" width="${Math.max(2, xb - xa)}" height="${axisY - hpTop}" fill="var(--accent)" opacity=".12"
       stroke="var(--accent)" stroke-dasharray="3 3" pointer-events="none"/>`;
@@ -1064,7 +1064,21 @@ function drawTimeline() {
     TL.noClick = true;
     if (!d.pan) {
       const s = Math.min(s1, Math.max(s0, toS(ev)));
-      if (Math.abs(s - d.s0) >= 1) { TL.sel = [Math.min(s, d.s0), Math.max(s, d.s0)]; renderSelection(); }
+      if (Math.abs(s - d.s0) >= 1) {
+        const a = Math.min(s, d.s0), b = Math.max(s, d.s0);
+        TL.sel = [a, b];
+        renderSelection();
+        // Inside one pull: zoom to exactly the selection (the zoom replaces the band). Across pulls the whole-run
+        // scale can't zoom linearly, so the band stays.
+        const i = t.pulls.findIndex((q) => a >= q.start_s - 1 && b <= q.end_s + 1);
+        TL.selBand = i < 0;
+        if (i >= 0) {
+          if (TL.pull !== i) { TL.pull = i; lsSet(`pull:${TL.url}`, i); filterLook(i); }
+          const q = t.pulls[i];
+          TL.view = [Math.max(q.start_s, a), Math.min(Math.max(q.end_s, q.start_s + 1), b)];
+          TL.mark = null;
+        }
+      }
       drawTimeline();
     }
   };
@@ -1124,9 +1138,7 @@ function renderSelection() {
   const name = (id) => ((t.lanes || []).find((l) => l.id === id) || {}).name || "?";
   const uses = (t.uses || []).filter((u) => inside(u.t_s));
   const findings = marks(["finding"]);
-  const onePull = t.pulls.find((q) => a >= q.start_s - 1 && b <= q.end_s + 1);
   box.innerHTML = `<div class="tlselhead"><b>Selection ${fmtClock(a)}-${fmtClock(b)} <span style="font-weight:400">(${Math.round(secs)}s)</span></b>
-      ${onePull ? `<button class="tlbtn" id="tlSelZoom">Zoom to it</button>` : ""}
       <button class="tlbtn" id="tlSelClose" aria-label="Close selection">✕</button></div>
     <ul>
       <li><strong>Group HP:</strong> ${pct(avg(t.group))} average, lowest player ${pct(lowest)}${top != null
@@ -1144,7 +1156,6 @@ function renderSelection() {
     </ul>`;
   box.hidden = false;
   $("tlSelClose").onclick = () => { TL.sel = null; box.hidden = true; drawTimeline(); updatePinHeight(); };
-  if (onePull) $("tlSelZoom").onclick = () => focusTimeline(a, b);
   box.querySelectorAll("[data-sf]").forEach((el) => el.onclick = (e) => { e.preventDefault(); flashFinding(+el.dataset.sf); });
   updatePinHeight();
 }
