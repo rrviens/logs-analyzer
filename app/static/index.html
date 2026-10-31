@@ -280,12 +280,24 @@
   details.lanes > summary::-webkit-details-marker { display: none; }
   details.lanes > summary::after { content: " ▾"; }
   .lanemenu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 7; background: var(--panel); border: 1px solid var(--line);
-              border-radius: 10px; padding: 12px 14px; box-shadow: 0 8px 24px rgba(0,0,0,.18); display: grid;
-              grid-template-columns: repeat(2, max-content); gap: 6px 22px; font-size: 0.9333rem; }
-  @media (max-width: 600px) { .lanemenu { grid-template-columns: 1fr; left: auto; right: 0; } }
-  .lanemenu fieldset { border: 0; margin: 0; padding: 0; }
-  .lanemenu legend { font-size: 0.8667rem; color: var(--muted); font-weight: 600; padding: 0; margin-bottom: 4px; }
-  .lanemenu label { display: flex; align-items: center; gap: 6px; padding: 2px 0; white-space: nowrap; cursor: pointer; }
+              border-radius: 10px; padding: 14px 16px; box-shadow: 0 8px 24px rgba(0,0,0,.18); width: max-content;
+              max-width: min(760px, calc(100vw - 32px)); font-size: 0.9333rem; }
+  .lm-presets { display: flex; gap: 6px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .lm-groups { display: grid; grid-template-columns: repeat(3, minmax(190px, max-content)); gap: 0 28px; }
+  @media (max-width: 700px) {  /* phones: a sheet along the bottom of the screen instead of a dropdown */
+    .lm-groups { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .lanemenu { position: fixed; left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; max-width: none;
+                max-height: 70vh; overflow-y: auto; }
+  }
+  .lanemenu fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .lanemenu legend { font-size: 0.8rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+                     padding: 0; margin-bottom: 6px; }
+  .lanemenu label { display: grid; grid-template-columns: 18px 20px 1fr; align-items: center; column-gap: 6px;
+                    min-height: 28px; cursor: pointer; border-radius: 6px; padding: 0 4px; margin: 0 -4px; }
+  .lanemenu label:hover { background: var(--bg); }
+  .lanemenu input { margin: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+  .lanemenu .sw { display: flex; justify-content: center; align-items: center; }
+  .lanemenu .sw i, .lanemenu .sw .sym { margin: 0; }
   details.legend { margin: 0 0 8px; display: block; }
   details.legend > summary { color: var(--muted); font-size: 0.8667rem; font-weight: 500; margin: 0 0 6px; }
   .legend-items { display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 0.8667rem; color: var(--muted); }
@@ -511,25 +523,25 @@ const SCOPE_COLOR = {personal: "var(--series-1)", external: "var(--series-3)", g
 let TL = null;  // {res, pull, view, mark, tips}
 // Everything the chart can show: [key, group, swatch html, label]. They double as the legend.
 const TOGGLES = [
-  ["group", "HP", `<i style="background:var(--series-1)"></i>`, "Group HP"],
-  ["lowest", "HP", `<i style="background:var(--series-2)"></i>`, "Lowest player"],
-  ["top", "HP", `<i class="dash"></i>`, "Top groups (median, middle half shaded)"],
-  ["uncovered", "HP", `<i class="box" style="background:var(--critical);opacity:.35"></i>`, "Big hit, no defensive up"],
-  ["l:cooldown", "Lanes", `<i class="box" style="background:var(--text)"></i>`, "Your healing cooldowns"],
-  ["l:hit", "Lanes", `<i class="tick"></i>`, "Big group hits"],
-  ["deaths", "Lanes", `<span class="sym" style="color:var(--critical)">✕</span>`, "Deaths"],
-  ["l:personal", "Lanes", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Your personal"],
-  ["l:trinket", "Lanes", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Trinkets & potions"],
-  ["l:finding", "Lanes", `<i class="dot" style="background:var(--warning)"></i>`, "Finding dots"],
-  ["mana", "Lanes", `<i style="background:var(--series-1)"></i>`, "Your mana"],
-  ["party", "Party", "", "Party defensive lanes"],
+  ["group", "Healing", `<i style="background:var(--series-1)"></i>`, "Group HP"],
+  ["lowest", "Healing", `<i style="background:var(--series-2)"></i>`, "Lowest player"],
+  ["top", "Healing", `<i class="dash"></i>`, "Top groups (band)"],
+  ["uncovered", "Party", `<i class="box" style="background:var(--critical);opacity:.35"></i>`, "Big hit, nothing up"],
+  ["l:cooldown", "Healing", `<i class="box" style="background:var(--text)"></i>`, "Your healing cooldowns"],
+  ["l:hit", "Healing", `<i class="tick"></i>`, "Big group hits"],
+  ["deaths", "Healing", `<span class="sym" style="color:var(--critical)">✕</span>`, "Deaths"],
+  ["l:personal", "Healing", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Your personal"],
+  ["l:trinket", "Other", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Trinkets & potions"],
+  ["l:finding", "Other", `<i class="dot" style="background:var(--warning)"></i>`, "Finding dots"],
+  ["mana", "Healing", `<i style="background:var(--series-1)"></i>`, "Your mana"],
+  ["party", "Party", `<span class="sym">▤</span>`, "Party member lanes"],
   ["personal", "Party", `<i class="box" style="background:var(--series-1)"></i>`, "Personal defensives"],
   ["external", "Party", `<i class="box" style="background:var(--series-3)"></i>`, "Externals"],
   ["groupdef", "Party", `<i class="box" style="background:var(--series-7)"></i>`, "Group defensives"],
-  ["avoid", "Party", `<i class="dot" style="background:var(--warning)"></i>`, "Avoidable hit / ◆ kick went through"],
-  ["chain", "Run", `<span class="sym">⛓</span>`, "Chain pulls (orange = risky)"],
-  ["lust", "Run", `<span class="sym" style="color:var(--high)">⚡</span>`, "Bloodlust"],
-  ["ready", "Run", `<i class="box" style="background:var(--good)"></i>`, "Cooldown sat ready (overview)"],
+  ["avoid", "Party", `<i class="dot" style="background:var(--warning)"></i>`, "Avoidable / ◆ not kicked"],
+  ["chain", "Other", `<span class="sym">⛓</span>`, "Chain pulls"],
+  ["lust", "Other", `<span class="sym" style="color:var(--high)">⚡</span>`, "Bloodlust"],
+  ["ready", "Other", `<i class="box" style="background:var(--good)"></i>`, "Cooldown sat ready"],
 ];
 const SCOPE_KEY = {personal: "personal", external: "external", group: "groupdef"};
 // Presets switch whole sets of toggles; any change in the Lanes menu makes it "custom".
@@ -568,8 +580,12 @@ function renderTimelineShell(res) {
   const opts = `<option value="-1">Whole run (${fmtClock(t.pulls[0].start_s)}-${fmtClock(t.pulls[t.pulls.length - 1].end_s)})</option>`
     + t.pulls.map((p, i) => `<option value="${i}">${esc(p.label)} (${fmtClock(p.start_s)})</option>`).join("");
   const groups = [...new Set(TOGGLES.map((x) => x[1]))];
-  const menu = groups.map((gname) => `<fieldset><legend>${gname}</legend>${TOGGLES.filter((x) => x[1] === gname)
-    .map(([k, , sw, label]) => `<label><input type="checkbox" data-k="${k}"> ${sw}${esc(label)}</label>`).join("")}</fieldset>`).join("");
+  // Lanes menu: the presets on top, then one column per group; each row = checkbox | swatch | label.
+  const menu = `<div class="lm-presets">${Object.entries(PRESETS).map(([k, p]) =>
+      `<button class="tlbtn" data-preset="${k}">${p.label}</button>`).join("")}</div>
+    <div class="lm-groups">${groups.map((gname) => `<fieldset><legend>${gname}</legend>${TOGGLES.filter((x) => x[1] === gname)
+      .map(([k, , sw, label]) => `<label><input type="checkbox" data-k="${k}"><span class="sw">${sw}</span><span>${esc(label)}</span></label>`)
+      .join("")}</fieldset>`).join("")}</div>`;
   return `<div id="tlSection" class="card">
     <div class="tl-head"><strong class="tl-title">Timeline</strong>
       <span class="scope" id="tlScope"></span>
@@ -1416,6 +1432,7 @@ loadStudy();
   await analyze(q.get("run"));
   if (TL && q.get("pull")) selectPull(q.get("pull") === "whole" ? -1 : +q.get("pull") - 1);
   if (q.get("at") && $(q.get("at"))) $(q.get("at")).scrollIntoView({block: "start"});
+  if (q.get("open") && $(q.get("open"))) $(q.get("open")).open = true;  // e.g. &open=tlLanes
 })();
 </script>
 </body>
