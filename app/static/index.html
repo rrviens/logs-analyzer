@@ -365,6 +365,9 @@
 <dialog id="charDialog">
   <form method="dialog" id="charForm">
     <strong>Your character</strong>
+    <div id="cMineRow" hidden><label for="cMine">Your characters</label>
+      <select id="cMine"><option value="">Pick one of your characters...</option></select></div>
+    <div class="hint" id="cMineHint" hidden></div>
     <label for="cName">Name</label><input id="cName" required>
     <label for="cServer">Server</label><input id="cServer" required placeholder="e.g. Kazzak" list="realmList" autocomplete="off"><datalist id="realmList"></datalist>
     <label for="cRegion">Region</label>
@@ -1587,7 +1590,25 @@ async function fillRealms() {
   if (!REALMS) REALMS = await api("/api/realms").catch(() => ({}));
   $("realmList").innerHTML = (REALMS[$("cRegion").value] || []).map((r) => `<option value="${esc(r)}">`).join("");
 }
-function openChar() { $("charError").textContent = ""; $("charDialog").showModal(); fillRealms(); }
+// Signed in with Warcraft Logs: pick from your own claimed characters instead of typing (fills the fields below).
+let MINE = null;
+async function fillMine() {
+  if (!MINE) MINE = await api("/api/my-characters").catch(() => ({characters: []}));
+  const chars = MINE.characters || [];
+  $("cMineRow").hidden = !chars.length;
+  $("cMine").innerHTML = `<option value="">Pick one of your characters...</option>` + chars.map((c, i) =>
+    `<option value="${i}">${esc(c.name)} · ${esc(c.server)} ${esc(c.region.toUpperCase())}${c.level ? ` · ${c.level}` : ""}</option>`).join("");
+  $("cMineHint").hidden = !!MINE.local || chars.length > 0;
+  $("cMineHint").textContent = MINE.relogin ? "Sign out and in again to pick from your own characters."
+    : "No characters claimed on your Warcraft Logs account - claim them there, or type one in.";
+}
+$("cMine").onchange = () => {
+  const c = (MINE.characters || [])[+$("cMine").value];
+  if (!c || $("cMine").value === "") return;
+  $("cName").value = c.name; $("cServer").value = c.server; $("cRegion").value = c.region;
+  fillRealms();
+};
+function openChar() { $("charError").textContent = ""; $("charDialog").showModal(); fillRealms(); fillMine(); }
 $("charBtn").onclick = openChar;
 $("cRegion").onchange = fillRealms;
 // Enter in Name or Server submits Save (Cancel is type="button", so it is never the form's default button).

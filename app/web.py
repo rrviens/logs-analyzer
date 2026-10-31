@@ -14,6 +14,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
@@ -43,6 +44,9 @@ query($name: String!, $server: String!, $region: String!, $limit: Int) {
   } }
 }
 """
+
+MY_CHARACTERS_QUERY = "{ userData { currentUser { characters { name level server { name region { slug } } } } } }"
+MY_CHARACTERS_TTL_S = 3600
 
 app = FastAPI()
 app_client = WCLClient(*wcl_credentials(), CACHE_PATH)
@@ -116,6 +120,21 @@ def new_job(w: Who, progress: list[str] | None = None) -> tuple[str, dict]:
 def index():
     # no-store: an open tab otherwise keeps serving an old page after an update
     return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/my-characters")
+def my_characters(w: Who = Depends(who)):
+    """The signed-in visitor's claimed Warcraft Logs characters, for the character picker. Local mode has no
+    account (manual entry); sessions from before the view-user-profile scope need to sign in again."""
+    if not w.user_id:
+        return {"characters": [], "local": True}
+    try:
+        user = w.client.query(MY_CHARACTERS_QUERY, ttl=MY_CHARACTERS_TTL_S)["userData"]["currentUser"]
+    except (WCLError, httpx.HTTPError, KeyError, TypeError):  # e.g. a session from before the scope
+        return {"characters": [], "relogin": True}
+    chars = [{"name": c["name"], "server": c["server"]["name"], "region": c["server"]["region"]["slug"].lower(),
+              "level": c.get("level") or 0} for c in (user or {}).get("characters") or [] if c.get("server")]
+    return {"characters": sorted(chars, key=lambda c: (-c["level"], c["name"]))}
 
 
 @app.get("/api/realms")

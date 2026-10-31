@@ -49,8 +49,9 @@ def start_login(client: WCLClient) -> tuple[str, str]:
         client.db.execute("DELETE FROM oauth_states WHERE created < ?", (time.time() - STATE_TTL_S,))
         client.db.execute("INSERT INTO oauth_states VALUES (?, ?, ?)", (state, verifier, time.time()))
         client.db.commit()
+    # view-user-profile: lets the page list the visitor's claimed characters (character picker).
     params = {"client_id": wcl_credentials()[0], "redirect_uri": REDIRECT_URI, "response_type": "code",
-              "state": state, "code_challenge": challenge, "code_challenge_method": "S256"}
+              "scope": "view-user-profile", "state": state, "code_challenge": challenge, "code_challenge_method": "S256"}
     return f"{AUTHORIZE_URL}?{urllib.parse.urlencode(params)}", state
 
 
