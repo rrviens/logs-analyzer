@@ -5,35 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Healer Review</title>
 <style>
+  /* Design tokens. Dark is the default (WCL / Raider.io-like); light via the header toggle or ?theme=light. */
   :root {
-    --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #5d6673; --line: #e3e6ea;
-    --accent: #2563eb; --accent-text: #ffffff;
+    --bg: #0c0f13; --panel: #141920; --panel-2: #1a2029; --text: #e8ecf1; --muted: #8d98a7; --line: #232b35;
+    --line-strong: #2f3945; --accent: #4f8cff; --accent-text: #ffffff; --accent-soft: rgba(79,140,255,.14);
+    --high: #ff7a59; --high-bg: rgba(255,122,89,.12); --med: #f0b43c; --med-bg: rgba(240,180,60,.12);
+    --low: #a7b0bc; --low-bg: rgba(167,176,188,.10); --good: #45d483; --good-bg: rgba(69,212,131,.12);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-7: #9085e9;
+    --grid: #1f262f; --axis: #2f3945; --ink-muted: #7d8794;
+    --critical: #e5484d; --serious: #ec835a; --warning: #fab219; --phase-a: rgba(255,255,255,0.035);
+    --radius: 12px; --radius-sm: 8px; --radius-xs: 6px;
+    --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 10px 30px -12px rgba(0,0,0,.6);
+    --shadow-pop: 0 16px 40px -12px rgba(0,0,0,.7);
+    --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+    --pin-h: 0px;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f6f9; --panel: #ffffff; --panel-2: #f7f9fb; --text: #161b22; --muted: #5b6573; --line: #e2e6eb;
+    --line-strong: #cfd5dd; --accent: #2563eb; --accent-text: #ffffff; --accent-soft: rgba(37,99,235,.10);
     --high: #c2410c; --high-bg: #fff1e8; --med: #a16207; --med-bg: #fdf6e3; --low: #4b5563; --low-bg: #f1f3f5;
     --good: #15803d; --good-bg: #ecfdf3;
     --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-7: #6250d6;
-    --grid: #e1e0d9; --axis: #c3c2b7; --ink-muted: #898781;
-    --critical: #d03b3b; --serious: #ec835a; --warning: #fab219; --phase-a: rgba(11,11,11,0.035);
-    --pin-h: 0px;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #111418; --panel: #1a1e24; --text: #e6e9ed; --muted: #9aa3ae; --line: #2a3038;
-      --accent: #4c8dff; --accent-text: #0b0d10;
-      --high: #ff8a50; --high-bg: #2b1a12; --med: #e3b341; --med-bg: #29230f; --low: #aab2bd; --low-bg: #20252c;
-      --good: #4ade80; --good-bg: #12241a;
-      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-7: #9085e9;
-      --grid: #2c2c2a; --axis: #383835; --phase-a: rgba(255,255,255,0.04);
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #111418; --panel: #1a1e24; --text: #e6e9ed; --muted: #9aa3ae; --line: #2a3038;
-    --accent: #4c8dff; --accent-text: #0b0d10;
-    --high: #ff8a50; --high-bg: #2b1a12; --med: #e3b341; --med-bg: #29230f; --low: #aab2bd; --low-bg: #20252c;
-    --good: #4ade80; --good-bg: #12241a;
-    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-7: #9085e9;
-    --grid: #2c2c2a; --axis: #383835; --phase-a: rgba(255,255,255,0.04);
-  }
-  /* time links: every m:ss on the page jumps the timeline there */
+    --grid: #e6e8ec; --axis: #c9ced6; --ink-muted: #898781;
+    --critical: #d03b3b; --serious: #ec835a; --warning: #d89a0f; --phase-a: rgba(11,11,11,0.035);
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 6px 18px -10px rgba(16,24,40,.12);
+    --shadow-pop: 0 16px 40px -12px rgba(16,24,40,.25);
+    color-scheme: light;
+  }  /* time links: every m:ss on the page jumps the timeline there */
   a.tl { color: inherit; text-decoration: underline dotted var(--accent); text-underline-offset: 2px; cursor: pointer; }
   a.tl:hover { color: var(--accent); }
   /* sections */
@@ -335,13 +334,77 @@
   dialog::backdrop { background: rgba(0,0,0,.4); }
   dialog label { display: block; font-size: 0.8667rem; color: var(--muted); margin: 10px 0 4px; }
   dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-</style>
+  /* ---------- design pass: type, surfaces, controls, focus ---------- */
+  body { font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; font-feature-settings: "cv11", "ss01";
+         -webkit-font-smoothing: antialiased; letter-spacing: -0.005em; }
+  .when, .tip, table, .budget, .tl-head .scope, a.tl, .dpslist, .run .sub { font-variant-numeric: tabular-nums; }
+  .tlwrap text { font-family: "Inter", system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+  header { padding: 10px 24px; gap: 10px; }  /* not sticky: the pinned timeline owns the top edge */
+  header h1 { display: flex; align-items: center; gap: 10px; font-size: 1.0667rem; font-weight: 700; letter-spacing: -0.01em; }
+  header h1 .logo { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: #fff;
+                    background: linear-gradient(135deg, var(--accent), var(--series-7)); }
+  header h1 .logo svg { width: 15px; height: 15px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-color: var(--line);
+          background: var(--panel-2); font-size: 0.9333rem; transition: border-color .15s, background .15s, color .15s; }
+  .pill:hover { border-color: var(--line-strong); background: var(--panel); }
+  .pill svg { width: 15px; height: 15px; opacity: .8; }
+  .card, .panel { border-color: var(--line); box-shadow: var(--shadow); border-radius: var(--radius); }
+  main.panel { box-shadow: none; }
+  .sechead { gap: 10px; }
+  .sechead .ico { width: 28px; height: 28px; border-radius: 8px; background: color-mix(in srgb, var(--acc) 16%, transparent);
+                  color: var(--acc); }
+  .sechead .ico svg { width: 16px; height: 16px; }
+  .sechead h2 { font-size: 1.0333rem; font-weight: 650; }
+  .sechead .badge { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 0 8px;
+                    font-size: 0.8rem; color: var(--muted); }
+  .sechead button { border-radius: var(--radius-xs); padding: 3px 8px; }
+  .sechead button:hover { background: var(--accent-soft); }
+  h2 { font-size: 0.8rem; font-weight: 700; letter-spacing: .07em; }
+  .runhead h3 { font-weight: 700; letter-spacing: -0.015em; }
+  input, select { background: var(--panel-2); border-color: var(--line); border-radius: var(--radius-sm);
+                  transition: border-color .15s, box-shadow .15s; }
+  input:hover, select:hover { border-color: var(--line-strong); }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  button.primary { border-radius: var(--radius-sm); transition: filter .15s, transform .05s; }
+  button.primary:hover:not(:disabled) { filter: brightness(1.1); }
+  button.primary:active:not(:disabled) { transform: translateY(1px); }
+  :is(button, a, summary, .run, select, input):focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--radius-xs); }
+  .run { background: var(--panel-2); border-color: var(--line); border-radius: var(--radius-sm);
+         transition: border-color .15s, background .15s, transform .15s; }
+  .run:hover:not([disabled]) { border-color: var(--line-strong); background: var(--panel); transform: translateX(2px); }
+  .run.active { border-color: var(--accent); background: var(--accent-soft); }
+  .tag, .chip, .sev, .fix { letter-spacing: .01em; }
+  .finding, details.vsec, .death, .verdict, .member { background: var(--panel-2); border-color: var(--line); }
+  details.finding > summary, details.vsec > summary, .death > summary { transition: background .15s; border-radius: var(--radius-sm); }
+  details.finding > summary:hover, details.vsec > summary:hover, .death > summary:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
+  @keyframes reveal { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+  details[open] > :not(summary) { animation: reveal .18s ease-out; }
+  .secnav { background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); }
+  .secnav a { background: var(--panel-2); border-color: var(--line); transition: border-color .15s, background .15s; }
+  .secnav a:hover { border-color: var(--line-strong); background: var(--panel); }
+  .tlbtn { background: var(--panel-2); border-color: var(--line); border-radius: var(--radius-xs); transition: border-color .15s, background .15s; }
+  .tlbtn:hover { border-color: var(--line-strong); }
+  .tl-head .scope { background: var(--accent-soft); border-color: transparent; }
+  .lanemenu, .tip, dialog { border-color: var(--line-strong); box-shadow: var(--shadow-pop); }
+  .tip { background: var(--panel-2); border-radius: var(--radius-sm); }
+  dialog { border-radius: var(--radius); }
+  dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
+  .ctx, .col { background: color-mix(in srgb, var(--bg) 70%, var(--panel-2)); }
+  th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: .05em; }
+  tr:hover td { background: color-mix(in srgb, var(--text) 3%, transparent); }
+  ::selection { background: var(--accent-soft); }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
 </head>
 <body>
 <header>
-  <h1>Healer Review</h1>
+  <h1><span class="logo"><i data-lucide="heart-pulse"></i></span>Healer Review</h1>
   <span class="budget" id="budget"></span>
   <button class="pill" id="studyBtn" title="Top-player study the analysis compares against">Top-player study</button>
+  <button class="pill" id="themeBtn" title="Dark / light theme"><i data-lucide="sun-moon"></i><span>Dark</span></button>
   <button class="pill" id="textSize" title="Text size">Text: Normal</button>
   <button class="pill" id="charBtn">Set character</button>
 </header>
@@ -1275,14 +1338,14 @@ window.addEventListener("resize", () => { if (TL && $("tlSvg")) { drawTimeline()
 
 // ---------- sections ----------
 const SECTIONS = {
-  look: {title: "What to look at", icon: "!", color: "var(--high)"},
-  deaths: {title: "Death recaps", icon: "✕", color: "var(--critical)"},
-  phases: {title: "Boss phases", icon: "◐", color: "var(--series-7)"},
-  items: {title: "Trinkets & consumables", icon: "◆", color: "var(--series-3)"},
-  spells: {title: "Single-target vs group heal", icon: "≈", color: "var(--series-1)"},
-  dps: {title: "DPS windows", icon: "⚔", color: "var(--series-3)"},
-  pulls: {title: "Pulls vs top groups", icon: "▤", color: "var(--ink-muted)"},
-  good: {title: "Good calls", icon: "✓", color: "var(--good)"},
+  look: {title: "What to look at", icon: "!", lucide: "triangle-alert", color: "var(--high)"},
+  deaths: {title: "Death recaps", icon: "✕", lucide: "skull", color: "var(--critical)"},
+  phases: {title: "Boss phases", icon: "◐", lucide: "layers", color: "var(--series-7)"},
+  items: {title: "Trinkets & consumables", icon: "◆", lucide: "flask-conical", color: "var(--series-3)"},
+  spells: {title: "Single-target vs group heal", icon: "≈", lucide: "split", color: "var(--series-1)"},
+  dps: {title: "DPS windows", icon: "⚔", lucide: "swords", color: "var(--series-3)"},
+  pulls: {title: "Pulls vs top groups", icon: "▤", lucide: "rows-3", color: "var(--ink-muted)"},
+  good: {title: "Good calls", icon: "✓", lucide: "circle-check", color: "var(--good)"},
 };
 
 function sec(id, count, body, emptyText, foldable = true) {
@@ -1290,7 +1353,7 @@ function sec(id, count, body, emptyText, foldable = true) {
   const tools = foldable && count ? `<button onclick="foldAll('${id}', true)">Expand all</button>
     <button onclick="foldAll('${id}', false)">Collapse all</button>` : "";
   return `<section class="sec card" id="sec-${id}" style="--acc:${s.color}">
-    <div class="sechead"><span class="ico">${s.icon}</span><h2>${s.title}</h2>
+    <div class="sechead"><span class="ico"><i data-lucide="${s.lucide}">${s.icon}</i></span><h2>${s.title}</h2>
       <span class="badge">${count}</span><span class="sp"></span>${tools}</div>
     ${count ? body : `<div class="secempty">${esc(emptyText)}</div>`}</section>`;
 }
@@ -1570,7 +1633,11 @@ function render(res, url) {
   $("fresh").onclick = () => analyze(url, true);
   initTimeline(res, url);
   drawDps();
+  paintIcons();
 }
+
+// Lucide UI icons (pinned CDN build): <i data-lucide="name">fallback glyph</i> becomes an SVG; offline, the glyph stays.
+function paintIcons() { try { if (window.lucide) lucide.createIcons({attrs: {"stroke-width": 2}}); } catch {} }
 
 // ---------- "What to look at" for the selected pull ----------
 // null = whole dungeon. Set when a pull is picked (dropdown / overview click), not by time links.
@@ -1705,10 +1772,19 @@ async function startApp() {
 const appReady = startApp();
 appReady.then((ok) => { if (ok) { loadRuns(); loadBudget(); loadStudy(); } });
 // Links: ?run=<log url> opens that run (&at=<element id> scrolls to it, &pull=<n|whole> picks the timeline view);
-// ?theme=dark|light overrides the system theme.
+// Theme: dark by default; the header toggle remembers light. ?theme=dark|light overrides for this page.
+function setTheme(theme, save = true) {
+  document.documentElement.dataset.theme = theme;
+  $("themeBtn").querySelector("span").textContent = theme === "light" ? "Light" : "Dark";
+  if (save) lsSet("theme", theme);
+  if (TL && $("tlSvg")) { drawTimeline(); drawDps(); }
+}
+$("themeBtn").onclick = () => setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+setTheme(lsGet("theme") === "light" ? "light" : "dark", false);
+paintIcons();
 (async () => {
   const q = new URLSearchParams(location.search);
-  if (["dark", "light"].includes(q.get("theme"))) document.documentElement.dataset.theme = q.get("theme");
+  if (["dark", "light"].includes(q.get("theme"))) setTheme(q.get("theme"), false);
   if (!q.get("run") || !(await appReady)) return;
   await analyze(q.get("run"));
   if (TL && PRESETS[q.get("preset")]) { applyPreset(q.get("preset")); syncToggles(); drawTimeline(); }
