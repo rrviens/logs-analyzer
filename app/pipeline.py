@@ -3,6 +3,7 @@
 Results are cached per run + rules version, so reopening a key is instant. Bump
 RULES_VERSION when findings logic changes.
 """
+import os
 import statistics
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -35,7 +36,9 @@ from app.wcl import WCLClient
 
 RULES_VERSION = 36
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
-TOP_WORKERS = 3  # top logs fetched in parallel (cold cache: each is several pages of events); 429s back off
+# Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
+# memory at once; set TOP_WORKERS=1 on a small (512 MB) host.
+TOP_WORKERS = max(1, int(os.getenv("TOP_WORKERS", "3")))
 CURVE_POINTS = 60
 LUST_SPELLS = {"Heroism", "Bloodlust", "Time Warp", "Fury of the Aspects", "Primal Rage", "Ancient Hysteria",
                "Netherwinds", "Drums of the Maelstrom"}

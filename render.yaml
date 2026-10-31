@@ -16,6 +16,8 @@ services:
         value: wcl
       - key: DATA_DIR
         value: /data
+      - key: TOP_WORKERS
+        value: "1"  # one top log at a time keeps memory within the Starter plan's 512 MB
       - key: WCL_CLIENT_ID
         sync: false
       - key: WCL_CLIENT_SECRET

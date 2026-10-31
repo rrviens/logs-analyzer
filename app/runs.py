@@ -162,8 +162,9 @@ def fetch_run(client: WCLClient, fight: Fight, healer_id: int, spec: Spec) -> Ru
 
 
 def _events(client: WCLClient, fight: Fight, data_type: str, hostility: str | None = None,
-            source_id: int | None = None, ability_id: int | None = None, resources: bool = False) -> list[dict]:
-    events: list[dict] = []
+            source_id: int | None = None, ability_id: int | None = None, resources: bool = False):
+    """Yields the events page by page: callers trim each event as it comes, so the raw pages (10,000 events
+    each, with every field) never pile up in memory - a 512 MB host would otherwise run out on long keys."""
     start = fight.start
     while start is not None:
         data = client.query(
@@ -182,6 +183,6 @@ def _events(client: WCLClient, fight: Fight, data_type: str, hostility: str | No
             ttl=0,
         )
         page = data["reportData"]["report"]["events"]
-        events.extend(page["data"])
         start = page["nextPageTimestamp"]
-    return events
+        del data
+        yield from page["data"]
