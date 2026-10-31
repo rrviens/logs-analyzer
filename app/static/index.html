@@ -1212,6 +1212,7 @@ function drawTimeline() {
   svg.onmousedown = (ev) => {
     if (ev.button !== 0) return;
     ev.preventDefault();
+    TL.noClick = false;  // a drag sets it to skip its own click; browsers don't always send that click, so reset here
     TL.drag = {x0: ev.clientX, s0: toS(ev), pan: !!TL.view && !whole && !ev.shiftKey, moved: false,
                view: TL.view && [...TL.view], perPx: span / plotW * (W / svg.getBoundingClientRect().width)};
   };
@@ -1240,9 +1241,9 @@ function drawTimeline() {
         const a = Math.min(s, d.s0), b = Math.max(s, d.s0);
         TL.sel = [a, b];
         renderSelection();
-        // Inside one pull: zoom to exactly the selection (the zoom replaces the band). Across pulls the whole-run
-        // scale can't zoom linearly, so the band stays.
-        const i = t.pulls.findIndex((q) => a >= q.start_s - 1 && b <= q.end_s + 1);
+        // A pull view zooms to exactly the selection (the zoom replaces the band). The whole run keeps its view and
+        // shows the selection as a band - it may span several pulls.
+        const i = whole ? -1 : t.pulls.findIndex((q) => a >= q.start_s - 1 && b <= q.end_s + 1);
         TL.selBand = i < 0;
         if (i >= 0) {
           if (TL.pull !== i) { TL.pull = i; lsSet(`pull:${TL.url}`, i); filterLook(i); }
@@ -1279,9 +1280,14 @@ function zoomAt(s, f) {
 function renderSelection() {
   const box = $("tlSel"), t = TL.res.timeline, [a, b] = TL.sel;
   const b0 = Math.max(0, Math.floor(a / t.bin_s)), b1 = Math.min(t.group.length - 1, Math.ceil(b / t.bin_s));
+  // Only in-combat time counts: a range across pulls leaves out the gaps between them.
+  const inPull = (s) => t.pulls.some((q) => s >= q.start_s && s <= q.end_s);
   const bins = [];
-  for (let k = b0; k <= b1; k++) bins.push(k);
-  const secs = Math.max(1, b - a), pct = (v) => v == null ? "-" : `${Math.round(v * 100)}%`;
+  for (let k = b0; k <= b1; k++) if (inPull(k * t.bin_s)) bins.push(k);
+  const pullsIn = t.pulls.filter((q) => q.end_s >= a && q.start_s <= b);
+  const fight = pullsIn.reduce((s, q) => s + Math.max(0, Math.min(b, q.end_s) - Math.max(a, q.start_s)), 0);
+  const secs = Math.max(1, fight), pct = (v) => v == null ? "-" : `${Math.round(v * 100)}%`;
+  const gapNote = pullsIn.length > 1 ? ` · ${pullsIn.length} pulls, ${Math.round(fight)}s in combat (gaps between pulls left out)` : "";
   const avg = (arr) => { const v = bins.map((k) => arr[k]).filter((x) => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
   const lowest = Math.min(...bins.map((k) => t.lowest[k] ?? 1));
   // Top groups at the same point of each overlapping pull (their middle line), averaged.
@@ -1310,7 +1316,9 @@ function renderSelection() {
   const name = (id) => ((t.lanes || []).find((l) => l.id === id) || {}).name || "?";
   const uses = (t.uses || []).filter((u) => inside(u.t_s));
   const findings = marks(["finding"]);
-  box.innerHTML = `<div class="tlselhead"><b>Selection ${fmtClock(a)}-${fmtClock(b)} <span style="font-weight:400">(${Math.round(secs)}s)</span></b>
+  const onePull = TL.pull < 0 && pullsIn.length === 1 ? t.pulls.indexOf(pullsIn[0]) : -1;  // whole run: offer the zoom
+  box.innerHTML = `<div class="tlselhead"><b>Selection ${fmtClock(a)}-${fmtClock(b)} <span style="font-weight:400">(${pullsIn.length > 1 ? esc(gapNote.slice(3)) : `${Math.round(secs)}s`})</span></b>
+      ${onePull >= 0 ? `<button class="tlbtn" id="tlSelZoom">Zoom to it</button>` : ""}
       <button class="tlbtn" id="tlSelClose" aria-label="Close selection">✕</button></div>
     <ul>
       <li><strong>Group HP:</strong> ${pct(avg(t.group))} average, lowest player ${pct(lowest)}${top != null
@@ -1328,6 +1336,12 @@ function renderSelection() {
     </ul>`;
   box.hidden = false;
   $("tlSelClose").onclick = () => { TL.sel = null; box.hidden = true; drawTimeline(); updatePinHeight(); };
+  if (onePull >= 0) $("tlSelZoom").onclick = () => {
+    const q = t.pulls[onePull];
+    TL.pull = onePull; lsSet(`pull:${TL.url}`, onePull); filterLook(onePull);
+    TL.view = [Math.max(q.start_s, a), Math.min(q.end_s, b)]; TL.mark = null; TL.selBand = false;
+    drawTimeline(); renderSelection();
+  };
   box.querySelectorAll("[data-sf]").forEach((el) => el.onclick = (e) => { e.preventDefault(); flashFinding(+el.dataset.sf); });
   updatePinHeight();
 }
