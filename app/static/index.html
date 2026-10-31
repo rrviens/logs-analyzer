@@ -956,12 +956,17 @@ function drawTimeline() {
   $("tlPull").value = TL.pull;
   $("tlZoomOut").hidden = !TL.view;
   $("tlWhole").hidden = whole;
-  $("tlScope").textContent = whole ? "Whole run" : TL.view ? `${pullShort(p.label)} · zoomed` : pullShort(p.label);
+  $("tlZoomOut").textContent = whole ? "Show whole run" : "Show whole pull";
+  $("tlScope").textContent = (whole ? "Whole run" : pullShort(p.label)) + (TL.view ? " · zoomed" : "");
   const svg = $("tlSvg"), wrap = $("tlWrap");
   const W = Math.max(320, wrap.clientWidth), R = 8, {fs, L, laneH} = tlMetrics(W, pinned), plotW = W - L - R;
   // Whole run: the overview's scale (pulls side by side, gaps squeezed). One pull: linear over the pull or zoom.
   const last = t.pulls[t.pulls.length - 1];
-  const [s0, s1] = whole ? [t.pulls[0].start_s, last.end_s] : TL.view || [p.start_s, Math.max(p.end_s, p.start_s + 1)];
+  const [s0, s1] = TL.view || (whole ? [t.pulls[0].start_s, last.end_s] : [p.start_s, Math.max(p.end_s, p.start_s + 1)]);
+  // Whole run, zoomed: the pulls inside the view, cut to it - still side by side with the gaps squeezed.
+  const wpulls = whole ? t.pulls.filter((q) => q.end_s >= s0 && q.start_s <= s1)
+    .map((q) => ({...q, start_s: Math.max(q.start_s, s0), end_s: Math.min(q.end_s, s1), full: q})) : [];
+  const dense = whole && !TL.view;  // the full squeezed run: merged marks, no frequent icons
   // Only the lanes the preset shows - plus any lane holding the event a time link just pointed at.
   const marked = (kind) => TL.mark && t.markers.some((m) => markerKind(m) === kind
     && m.t_s >= TL.mark[0] - 1 && m.t_s <= TL.mark[1] + 1);
@@ -978,13 +983,13 @@ function drawTimeline() {
   const manaTop = partyTop + lanes.length * laneH + (manaH ? 12 : 0);
   const axisY = manaTop + manaH + 4, H = Math.round(axisY + fs + 10);
   const span = s1 - s0;
-  const sc = whole ? overviewScale(t, L, plotW) : null;
+  const sc = whole ? overviewScale({pulls: wpulls}, L, plotW) : null;
   const x = whole ? sc.x : (s) => L + (s - s0) / span * plotW;
-  const shown = whole ? t.pulls : [p];
-  const pullAt = (s) => whole ? t.pulls.find((q) => s >= q.start_s && s <= q.end_s) : p;
+  const shown = whole ? wpulls.map((q) => q.full) : [p];
+  const pullAt = (s) => whole ? (s >= s0 && s <= s1 ? t.pulls.find((q) => s >= q.start_s && s <= q.end_s) : undefined) : p;
   const yHp = (v) => hpTop + (1 - v) * hpH;
   const yMana = (v) => manaTop + (1 - v) * manaH;
-  const ranges = whole ? t.pulls.map((q) => [q.start_s, q.end_s]) : [[s0, s1]];
+  const ranges = whole ? wpulls.map((q) => [q.start_s, q.end_s]) : [[s0, s1]];
   const stride = whole ? Math.max(1, Math.round(span / t.bin_s / plotW)) : 1;  // ~1 point per pixel
   const pts = (arr, y) => {
     let d = "";
@@ -1034,8 +1039,9 @@ function drawTimeline() {
   [0, 0.5, 1].forEach((v) => g += `<line x1="${L}" x2="${W - R}" y1="${yHp(v)}" y2="${yHp(v)}" stroke="var(--grid)"/>`);
   shown.filter((q) => q.top_curve && isOn("top")).forEach((q) => {
     const xs = (f) => x(q.start_s + f * (q.end_s - q.start_s));
-    const upper = q.top_curve.map(([f, , , hi]) => `${xs(f).toFixed(1)},${yHp(hi).toFixed(1)}`);
-    const lower = q.top_curve.slice().reverse().map(([f, lo]) => `${xs(f).toFixed(1)},${yHp(lo).toFixed(1)}`);
+    const inV = q.top_curve.filter(([f]) => { const s = q.start_s + f * (q.end_s - q.start_s); return s >= s0 - 1 && s <= s1 + 1; });
+    const upper = inV.map(([f, , , hi]) => `${xs(f).toFixed(1)},${yHp(hi).toFixed(1)}`);
+    const lower = inV.slice().reverse().map(([f, lo]) => `${xs(f).toFixed(1)},${yHp(lo).toFixed(1)}`);
     g += `<polygon points="${upper.concat(lower).join(" ")}" fill="var(--ink-muted)" opacity=".16"/>`;
     g += `<path d="M${q.top_curve.map(([f, , med]) => `${xs(f).toFixed(1)},${yHp(med).toFixed(1)}`).join("L")}"
       fill="none" stroke="var(--ink-muted)" stroke-dasharray="4 3" stroke-width="1.5"/>`;
@@ -1051,7 +1057,7 @@ function drawTimeline() {
   const r = Math.max(4, Math.round(fs * 0.38));  // marker half-size
   const weight = (m) => (m.severity || 0) + (m.covered === false ? 50 : 0) + (m.kick || m.avoid ? 20 : 0);
   const clusters = (ms) => {
-    if (!whole) return ms.map((m) => [m]);
+    if (!dense) return ms.map((m) => [m]);
     const out = [];
     for (const m of ms.slice().sort((a, b) => a.t_s - b.t_s)) {
       const c = out[out.length - 1];
@@ -1081,7 +1087,7 @@ function drawTimeline() {
         g += `<line${near(m)} x1="${xm}" x2="${xm}" y1="${yc - r - 1}" y2="${yc + r + 1}" stroke="${m.covered === false ? "var(--critical)" : "var(--muted)"}"
           stroke-width="3" stroke-linecap="round" ${tip}/>`;
         if (m.avoid && isOn("avoid")) g += `<circle cx="${xm}" cy="${yc - r - 4}" r="2.5" fill="var(--warning)" pointer-events="none"/>`;
-      } else if (m.icon && (!whole || ((kind === "trinket" || kind === "potion") && grp.every((c) => c.icon === m.icon)))) {
+      } else if (m.icon && (!dense || ((kind === "trinket" || kind === "potion") && grp.every((c) => c.icon === m.icon)))) {
         // The spell's icon; name and details on hover. Whole run: only rare items, and only when a merged group is all
         // the same item - frequent presses (cooldowns, personals) merge, so one icon would misname the others.
         const s = laneH - 4;
@@ -1104,13 +1110,13 @@ function drawTimeline() {
       // The icon at the start of the bar says what was pressed; icons of overlapping spans sit side by side.
       // Whole run: bars only (too squeezed - icons would drift off their bars); the name is on hover.
       const slot = all.slice(0, k).filter((o) => o.end_s > d.start_s && x(d.start_s) - x(o.start_s) < barH).length;
-      if (d.icon && !whole && (w >= barH || slot)) g += iconSvg(d.icon, xa + slot * (barH + 1), yc - barH / 2, barH, tip);
+      if (d.icon && !dense && (w >= barH || slot)) g += iconSvg(d.icon, xa + slot * (barH + 1), yc - barH / 2, barH, tip);
     });
     // That player's potions / healthstones / trinkets: an icon in pull view, a small dot in the squeezed whole run.
     if (isOn("uses") && ln.id !== "group") (t.uses || []).filter((u) => u.lane === ln.id && u.t_s >= s0 && u.t_s <= s1
         && (!whole || pullAt(u.t_s))).forEach((u) => {
       const xu = x(u.t_s), tip = tipAttr(u.tip), s = Math.round(barH * 0.85);
-      g += !whole && u.icon
+      g += !dense && u.icon
         ? `<g>${iconSvg(u.icon, xu - s / 2, yc - s / 2, s, tip)}<rect x="${xu - s / 2 - 1.5}" y="${yc - s / 2 - 1.5}"
             width="${s + 3}" height="${s + 3}" rx="3" fill="none" stroke="var(--high)" stroke-width="1.5" pointer-events="none"/></g>`
         : `<circle cx="${xu}" cy="${yc}" r="${Math.max(3, r * 0.7)}" fill="var(--text)" stroke="var(--panel)" stroke-width="1.5" ${tip}/>`;
@@ -1134,17 +1140,24 @@ function drawTimeline() {
   });
   if (manaH) g += `<text class="lane" x="8" y="${manaTop + fs}">Your mana</text>`;
   const tickY = axisY + fs + 2;
-  if (whole) {  // run time at pull starts that have room for a label
+  if (dense) {  // run time at pull starts that have room for a label
     let lastX = -1e9;
-    t.pulls.forEach((q) => {
+    wpulls.forEach((q) => {
       const xq = x(q.start_s);
       if (xq - lastX >= fs * 4) { g += `<text x="${xq}" y="${tickY}" text-anchor="start">${fmtClock(q.start_s)}</text>`; lastX = xq; }
     });
-  } else {
-    const minStep = span / (plotW / (fs * 5));  // labels at least ~5 characters apart
+  } else {  // a pull, or the whole run zoomed in: regular clock steps (only inside pulls when zoomed across several)
+    const fight = whole ? wpulls.reduce((s, q) => s + q.end_s - q.start_s, 0) : span;
+    const minStep = fight / (plotW / (fs * 5));  // labels at least ~5 characters apart
     const step = [5, 10, 15, 30, 60, 120, 300].find((s) => s >= minStep) || 600;
-    for (let s = Math.ceil(s0 / step) * step; s <= s1; s += step)
-      g += `<text x="${x(s)}" y="${tickY}" text-anchor="middle">${fmtClock(s)}</text>`;
+    let lastX = -1e9;
+    for (let s = Math.ceil(s0 / step) * step; s <= s1; s += step) {
+      if (whole && !pullAt(s)) continue;
+      const xs = x(s);
+      if (xs - lastX < fs * 3.5) continue;
+      g += `<text x="${xs}" y="${tickY}" text-anchor="middle">${fmtClock(s)}</text>`;
+      lastX = xs;
+    }
   }
   if (TL.sel && TL.selBand && TL.sel[1] >= s0 && TL.sel[0] <= s1) {  // a selection that couldn't be zoomed to
     const xa = x(Math.max(TL.sel[0], s0)), xb = x(Math.min(TL.sel[1], s1));
@@ -1194,26 +1207,16 @@ function drawTimeline() {
     if (!ev.ctrlKey) return;
     ev.preventDefault();
     const s = toS(ev), f = ev.deltaY > 0 ? 1.25 : 0.8;
-    if (whole) {  // zooming into the whole run opens the pull under the cursor
-      if (f > 1) return;
-      const q = pullAt(s);
-      if (!q) return;
-      TL.pull = t.pulls.indexOf(q);
-      lsSet(`pull:${TL.url}`, TL.pull);
-      filterLook(TL.pull);
-      TL.view = null;
-    } else {
-      zoomAt(s, f);
-    }
+    zoomAt(s, f);
     drawTimeline();
   };
-  svg.ondblclick = () => { if (!whole && TL.view) { TL.view = null; drawTimeline(); } };
+  svg.ondblclick = () => { if (TL.view) { TL.view = null; drawTimeline(); } };
   // Drag: pans when zoomed into a pull; otherwise (or with Shift) selects a range to analyze.
   svg.onmousedown = (ev) => {
     if (ev.button !== 0) return;
     ev.preventDefault();
     TL.noClick = false;  // a drag sets it to skip its own click; browsers don't always send that click, so reset here
-    TL.drag = {x0: ev.clientX, s0: toS(ev), pan: !!TL.view && !whole && !ev.shiftKey, moved: false,
+    TL.drag = {x0: ev.clientX, s0: toS(ev), pan: !!TL.view && !ev.shiftKey, moved: false,
                view: TL.view && [...TL.view], perPx: span / plotW * (W / svg.getBoundingClientRect().width)};
   };
   TL.dragMove = (ev) => {
@@ -1221,7 +1224,7 @@ function drawTimeline() {
     if (Math.abs(ev.clientX - d.x0) > 4) d.moved = true;
     if (!d.moved) return;
     if (d.pan) {
-      const lo = p.start_s, hi = Math.max(p.end_s, p.start_s + 1), w = d.view[1] - d.view[0];
+      const [lo, hi] = viewBounds(), w = d.view[1] - d.view[0];
       const a = Math.min(hi - w, Math.max(lo, d.view[0] - (ev.clientX - d.x0) * d.perPx));
       TL.view = [a, a + w];
       drawTimeline();
@@ -1241,16 +1244,11 @@ function drawTimeline() {
         const a = Math.min(s, d.s0), b = Math.max(s, d.s0);
         TL.sel = [a, b];
         renderSelection();
-        // A pull view zooms to exactly the selection (the zoom replaces the band). The whole run keeps its view and
-        // shows the selection as a band - it may span several pulls.
-        const i = whole ? -1 : t.pulls.findIndex((q) => a >= q.start_s - 1 && b <= q.end_s + 1);
-        TL.selBand = i < 0;
-        if (i >= 0) {
-          if (TL.pull !== i) { TL.pull = i; lsSet(`pull:${TL.url}`, i); filterLook(i); }
-          const q = t.pulls[i];
-          TL.view = [Math.max(q.start_s, a), Math.min(Math.max(q.end_s, q.start_s + 1), b)];
-          TL.mark = null;
-        }
+        // Zoom to exactly the selection, in a pull or in the whole run (there it may span several pulls).
+        const [lo, hi] = viewBounds();
+        TL.view = [Math.max(lo, a), Math.min(hi, b)];
+        TL.selBand = false;
+        TL.mark = null;
       }
       drawTimeline();
     }
@@ -1259,7 +1257,7 @@ function drawTimeline() {
     if (TL.noClick) { TL.noClick = false; return; }
     const f = ev.target.closest("[data-f]");
     if (f) return flashFinding(+f.dataset.f);
-    if (whole) {  // click a pull in the whole-run view to open it
+    if (whole && !TL.view) {  // click a pull in the whole-run view to open it (zoomed: double-click resets instead)
       const q = pullAt(toS(ev));
       if (q) selectPull(t.pulls.indexOf(q));
     }
@@ -1267,9 +1265,15 @@ function drawTimeline() {
   drawOverview();
 }
 
-// Zoom the open pull by factor f around run time s (f < 1 zooms in); back to the whole pull when it covers it.
+// The time range a view can show: the open pull, or the whole run.
+function viewBounds() {
+  const pulls = TL.res.timeline.pulls, p = pulls[TL.pull];
+  return p ? [p.start_s, Math.max(p.end_s, p.start_s + 1)] : [pulls[0].start_s, pulls[pulls.length - 1].end_s];
+}
+
+// Zoom the open pull or the whole run by factor f around run time s (f < 1 zooms in); unzoomed when it covers it.
 function zoomAt(s, f) {
-  const p = TL.res.timeline.pulls[TL.pull], lo = p.start_s, hi = Math.max(p.end_s, lo + 1);
+  const [lo, hi] = viewBounds();
   const [v0, v1] = TL.view || [lo, hi], w = Math.min(hi - lo, Math.max(5, (v1 - v0) * f));
   if (w >= hi - lo - 0.5) { TL.view = null; return; }
   const a = Math.min(hi - w, Math.max(lo, s - (s - v0) * (w / (v1 - v0))));
@@ -1316,7 +1320,7 @@ function renderSelection() {
   const name = (id) => ((t.lanes || []).find((l) => l.id === id) || {}).name || "?";
   const uses = (t.uses || []).filter((u) => inside(u.t_s));
   const findings = marks(["finding"]);
-  const onePull = TL.pull < 0 && pullsIn.length === 1 ? t.pulls.indexOf(pullsIn[0]) : -1;  // whole run: offer the zoom
+  const onePull = -1;  // selecting zooms to the range itself now
   box.innerHTML = `<div class="tlselhead"><b>Selection ${fmtClock(a)}-${fmtClock(b)} <span style="font-weight:400">(${pullsIn.length > 1 ? esc(gapNote.slice(3)) : `${Math.round(secs)}s`})</span></b>
       ${onePull >= 0 ? `<button class="tlbtn" id="tlSelZoom">Zoom to it</button>` : ""}
       <button class="tlbtn" id="tlSelClose" aria-label="Close selection">✕</button></div>
@@ -2014,6 +2018,8 @@ paintIcons();
   await analyze(q.get("run"));
   if (TL && PRESETS[q.get("preset")]) { applyPreset(q.get("preset")); syncToggles(); drawTimeline(); }
   if (TL && q.get("pull")) selectPull(q.get("pull") === "whole" ? -1 : +q.get("pull") - 1);
+  const zoom = (q.get("view") || "").match(/^(\d+)-(\d+)$/);  // &view=<from s>-<to s>: open zoomed to that range
+  if (TL && zoom && +zoom[2] > +zoom[1]) { TL.view = [+zoom[1], +zoom[2]]; drawTimeline(); }
   if (q.get("at") && $(q.get("at"))) $(q.get("at")).scrollIntoView({block: "start"});
   const toOpen = q.get("open") && $(q.get("open"));  // e.g. &open=tlLanes (a menu) or &open=dispBtn (a button)
   if (toOpen) { if (toOpen.tagName === "DETAILS") toOpen.open = true; else toOpen.click(); }
