@@ -1109,75 +1109,7 @@ const SECTIONS = {
   dps: {title: "DPS windows", icon: "⚔", color: "var(--series-3)"},
   pulls: {title: "Pulls vs top groups", icon: "▤", color: "var(--ink-muted)"},
   good: {title: "Good calls", icon: "✓", color: "var(--good)"},
-  compare: {title: "You vs a top player", icon: "⇄", color: "var(--accent)"},
 };
-
-// ---------- compare: you vs one top player, pull by pull ----------
-function renderCompareShell() {
-  return sec("compare", "", "", "", false).replace('<div class="secempty"></div>', `
-    <div class="paste" style="flex-wrap:wrap">
-      <select id="cmpPick" aria-label="Top player log" style="flex:1 1 280px"><option value="">Loading top logs...</option></select>
-      <input id="cmpUrl" placeholder="...or paste any log URL" style="flex:1 1 200px">
-      <button class="primary" id="cmpGo">Compare</button></div>
-    <div id="cmpOut" class="secempty">Pick a top player's run at your key level to see what they did differently, pull by pull.</div>`);
-}
-
-async function initCompare(url) {
-  try {
-    const {candidates} = await api(`/api/compare/candidates?url=${encodeURIComponent(url)}`);
-    $("cmpPick").innerHTML = candidates.length ? candidates.map((c) =>
-      `<option value="${esc(c.url)}">${esc(c.player)} · +${c.key} ${c.timed ? "timed" : "not timed"} · ${c.duration_min} min${c.region ? " · " + esc(c.region) : ""}</option>`).join("")
-      : `<option value="">No comparable top logs</option>`;
-  } catch (e) { $("cmpPick").innerHTML = `<option value="">${esc(e.message)}</option>`; }
-  $("cmpGo").onclick = () => runCompare(url, $("cmpUrl").value.trim() || $("cmpPick").value);
-}
-
-async function runCompare(url, other) {
-  if (!other) return;
-  $("cmpOut").innerHTML = `<div class="progress">Comparing...</div>`;
-  try {
-    const {job} = await api("/api/compare", {method: "POST", body: JSON.stringify({url, other_url: other})});
-    while (true) {
-      await new Promise((r) => setTimeout(r, 1200));
-      const j = await api(`/api/jobs/${job}`);
-      if (j.status === "done") { renderCompare(j.result); return; }
-      if (j.status === "error") throw new Error(j.error);
-    }
-  } catch (e) { $("cmpOut").innerHTML = `<p class="error">${esc(e.message)}</p>`; }
-}
-
-function renderCompare(r) {
-  const side = (s) => `${esc(s.player)} +${s.key} ${s.timed ? "timed" : "not timed"}, ${s.duration_min} min, ${s.deaths} death${s.deaths === 1 ? "" : "s"}`;
-  const pct = (v) => v == null ? "-" : `${Math.round(v * 100)}%`;
-  const fmt = (st) => ({
-    "Group HP": pct(st.group_hp), "Deaths": st.deaths, "Length": `${st.duration_s}s`,
-    "Damage taken / s": `${(st.intake * 100).toFixed(1)}% of group HP`,
-    "Avoidable damage": st.avoidable == null ? "-" : `${pct(st.avoidable)}${st.avoidable_names.length ? ` (${st.avoidable_names.join(", ")})` : ""}`,
-    "Cooldowns": st.cooldowns.map(([n, t]) => `${n} (${t}s in)`).join(", ") || "-",
-    "Trinkets / potions": st.items.length, [`${SP.maintenance || "HoTs"} before hits`]: st.riptides_before_hits ?? "-",
-    [`${SP.group} with 2+ injured`]: pct(st.ch_share_busy),
-    "Dispels": st.dispels.map(([who, what, t]) => `${who === "self" ? "self" : "other"}: ${what} (${t}s in)`).join(", ") || "-",
-    "Group defensives": st.group_defensives.join(", ") || "-",
-  });
-  const cards = r.verdicts.map((v) => {
-    const a = fmt(v.you), b = fmt(v.them);
-    return `<details class="finding med"><summary><span class="pl">${esc(v.pull)}</span>
-        <span class="title">${esc(v.headline)}</span><span class="fix">${esc(v.cause)}</span></summary>
-      <div class="body"><ul>
-        ${v.outcome.map((x) => `<li><strong>Outcome:</strong> ${esc(x)}</li>`).join("")}
-        ${v.healer.map((x) => `<li><strong>They did:</strong> ${esc(x)}</li>`).join("")}
-        ${v.why.map((x) => `<li><strong>Not your healing:</strong> ${esc(x)}</li>`).join("")}</ul>
-        <details><summary>Show data</summary><div class="tablewrap"><table><tr><th></th><th>You</th><th>${esc(r.them.player)}</th></tr>
-          ${Object.keys(a).map((k) => `<tr><td>${k}</td><td>${esc(a[k])}</td><td>${esc(b[k])}</td></tr>`).join("")}</table></div></details>
-      </div></details>`;
-  }).join("");
-  $("cmpOut").className = "";
-  $("cmpOut").innerHTML = `<div class="compnote">${side(r.you)} vs ${side(r.them)} ·
-      <a class="link" href="${esc(r.them.url)}" target="_blank" rel="noopener">their log</a></div>
-    ${cards || `<div class="secempty">No pull where they clearly did better.</div>`}
-    <div class="compnote">${r.same} pull${r.same === 1 ? "" : "s"} played out the same or better for you${r.unmatched
-      ? `; ${r.unmatched} couldn't be matched (different route)` : ""}.</div>`;
-}
 
 function sec(id, count, body, emptyText, foldable = true) {
   const s = SECTIONS[id];
@@ -1456,7 +1388,6 @@ function render(res, url) {
       ${rows}</table></div></details>`), "No pulls to compare.", false)}
     ${sec("good", res.good_calls.length, `<details class="vsec ok"><summary>✓ ${res.good_calls.length} cooldowns pressed at the right moment</summary>
       <div class="body">${good}</div></details>`, "Good calls: none recorded.", false)}
-    ${renderCompareShell()}
     <div class="caveat">${(res.encounter || {}).covered
       ? "Ability notes (ℹ) are our own, written from log evidence across top runs; the Wowhead guide has the full strategy."
       : "No ability notes for this dungeon yet: everything here is read from combat logs, not the encounter journal - if a "
@@ -1465,7 +1396,6 @@ function render(res, url) {
   $("fresh").onclick = () => analyze(url, true);
   initTimeline(res, url);
   drawDps();
-  initCompare(url);
 }
 
 // ---------- "What to look at" for the selected pull ----------

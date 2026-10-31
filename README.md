@@ -150,8 +150,7 @@ top-group line is a curve - what top groups' HP did through the same pull (media
   The badge next to "Timeline" always says what is shown.
 - Timeline: hover any marker or bar for details (who, when, numbers). One lane per party member shows active
   personals / externals / group defensives from real buff uptimes; big hits with nothing up are shaded red.
-- "You vs a top player": pick a quality-checked top log at your key level (or paste one) for pull-by-pull verdicts -
-  what they did differently, whether it mattered, and whether it came from healing or from damage taken / route.
+  A Potions lane shows every group member's potions.
 
 ## Group composition
 

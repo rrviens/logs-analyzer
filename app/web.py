@@ -20,12 +20,8 @@ from pydantic import BaseModel
 
 from app import auth
 from app.config import AUTH_MODE, CACHE_PATH, DATA_DIR, PROJECT_ROOT, SECURE_COOKIES, wcl_credentials
-from app.pipeline import AnalysisError, cache_key, pick_healer, run_analysis
-from app.baseline import comparable_fights, top_rankings
-from app.compare import compare_runs
-from app.quality import check as quality_check
-from app.reports import get_fights, get_players, parse_report_url, pick_fight
-from app.runs import fetch_run
+from app.pipeline import AnalysisError, cache_key, run_analysis
+from app.reports import get_fights, get_players
 from app.specs import SPECS, spec_for
 from app.study_runner import DEFAULT_RUNS, run_study, study_info
 from app.wcl import WCLClient, WCLError
@@ -249,50 +245,6 @@ def start_analysis(req: AnalyzeRequest, w: Who = Depends(who)):
         except (AnalysisError, WCLError, ValueError, StopIteration) as e:
             job["status"], job["error"] = "error", str(e) or "Could not read that log."
         except Exception as e:  # surface API/network failures to the page instead of hanging
-            job["status"], job["error"] = "error", f"{type(e).__name__}: {e}"
-
-    threading.Thread(target=work, daemon=True).start()
-    return {"job": job_id}
-
-
-class CompareRequest(BaseModel):
-    url: str
-    other_url: str
-
-
-@app.get("/api/compare/candidates")
-def compare_candidates(url: str, w: Who = Depends(who)):
-    """Top logs for the same dungeon and key level that pass the data-quality gate."""
-    client, pub = w.client, w.client.public()  # top logs are public: shared cache
-    code, fid = parse_report_url(url)
-    fight = pick_fight(get_fights(client, code), fid)
-    _, spec = pick_healer(get_players(client, fight), (load_settings(w) or {}).get("name"))
-    ranks = {r["name"]: r for lvl in {fight.keystone_level - 1, fight.keystone_level, fight.keystone_level + 1}
-             for r in top_rankings(pub, fight.encounter_id, spec.class_name, spec.spec_name, lvl - 1)}
-    out = []
-    for f, p in comparable_fights(pub, fight, spec.class_name, spec.spec_name, 12):
-        run = fetch_run(pub, f, p.id, spec) if pub.get_cached(f"run:v2:{f.report_code}:{f.id}:{p.id}") else None
-        if run:
-            ok, _ = quality_check(run.damage, run.player_ids, f.duration_s, fight.duration_s)
-            if not ok:
-                continue
-        server = (ranks.get(p.name) or {}).get("server") or {}
-        out.append({"player": p.name, "key": f.keystone_level, "timed": bool(f.kill),
-                    "region": (server.get("region") or "").upper(), "duration_min": round(f.duration_s / 60, 1),
-                    "url": f"https://www.warcraftlogs.com/reports/{f.report_code}#fight={f.id}"})
-    return {"candidates": out}
-
-
-@app.post("/api/compare")
-def start_compare(req: CompareRequest, w: Who = Depends(who)):
-    job_id, job = new_job(w, ["Comparing..."])
-    s = load_settings(w) or {}
-
-    def work():
-        try:
-            job["result"] = compare_runs(w.client, req.url, req.other_url, s.get("name"))
-            job["status"] = "done"
-        except Exception as e:  # surface to the page
             job["status"], job["error"] = "error", f"{type(e).__name__}: {e}"
 
     threading.Thread(target=work, daemon=True).start()
