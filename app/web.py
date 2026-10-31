@@ -8,6 +8,7 @@ Run: python -m uvicorn app.web:app --port 8000
 """
 import json
 import logging
+import os
 import re
 import threading
 import unicodedata
@@ -34,6 +35,7 @@ TOP_LOGS = 8
 RECENT_REPORTS = 12
 RECENT_TTL_S = 300  # recent reports may still be live-logging
 RECENT_FIRST = 5  # reports checked on first load; "Load more" checks all RECENT_REPORTS
+AUTO_ANALYZE = int(os.environ.get("AUTO_ANALYZE", "2"))  # newest unanalyzed keys queued in the background
 FINISHED_REPORT_MS = 24 * 3600 * 1000  # reports older than this are finished: fight lists cached for good
 MIN_RUN_MIN = 5  # shorter "runs" are resets
 MIN_UNTIMED_MIN = 10  # short untimed attempts are bricked keys, not worth reviewing
@@ -318,7 +320,18 @@ def recent(limit: int = RECENT_FIRST, w: Who = Depends(who)):
            "more": limit < len(reports)}
     if not partial:
         client.set_cached(saved_key, out)  # shown when Warcraft Logs is busy next time
+    _auto_analyze(w, runs, s)
     return out
+
+
+def _auto_analyze(w: Who, runs: list[dict], s: dict) -> None:
+    """Queue your newest keys that aren't analyzed yet (up to AUTO_ANALYZE), so they're ready when you click.
+    Marks each queued run, so the list can say so."""
+    for r in runs[:AUTO_ANALYZE]:
+        if r["analyzable"] and not r["analyzed"] and not queue.pending(w.user_id, "analyze", r["url"]):
+            queue.submit(w.user_id, "analyze", {"url": r["url"], "name": s["name"], "fresh": False, "auto": True})
+    for r in runs:
+        r["queued"] = not r["analyzed"] and bool(queue.pending(w.user_id, "analyze", r["url"]))
 
 
 def _report_runs(client: WCLClient, rep: dict, s: dict, seen: list, ttl: float | None) -> list[dict]:
@@ -410,7 +423,8 @@ def start_analysis(req: AnalyzeRequest, w: Who = Depends(who)):
     stored = stored_analysis(w.client, code, fid, name, TOP_LOGS) if fid is not None and name and not req.fresh else None
     if stored and stored.get("rules_version") == RULES_VERSION:
         return {"result": stored}
-    job_id = queue.submit(w.user_id, "analyze", {"url": req.url, "name": name, "fresh": req.fresh})
+    job_id = (None if req.fresh else queue.pending(w.user_id, "analyze", req.url)) or \
+        queue.submit(w.user_id, "analyze", {"url": req.url, "name": name, "fresh": req.fresh})  # already queued: reuse
     return {"job": job_id, "result": stored, "stale": bool(stored)}
 
 

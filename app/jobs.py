@@ -57,6 +57,13 @@ class Jobs:
         self.wake.set()
         return job_id
 
+    def pending(self, owner: int, kind: str, url: str) -> str | None:
+        """An unfinished job of this owner for this URL (so a click or a refresh doesn't queue it twice)."""
+        with self.c.lock:
+            rows = self.c.db.execute("SELECT id, payload FROM jobs WHERE owner = ? AND kind = ? AND status IN "
+                                     "('queued', 'running', 'waiting') ORDER BY rowid DESC", (owner, kind)).fetchall()
+        return next((jid for jid, p in rows if json.loads(p).get("url") == url), None)
+
     def get(self, job_id: str) -> dict | None:
         with self.c.lock:
             row = self.c.db.execute("SELECT id, owner, kind, payload, status, attempts, next_at, note, error, result_key "

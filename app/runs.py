@@ -13,6 +13,9 @@ from app.wcl import WCLClient
 
 CACHE_VERSION = 2
 FETCH_STREAMS = int(os.environ.get("FETCH_STREAMS", "3"))  # event streams of one run fetched at once
+# Events per request (WCL allows up to 10000). Smaller pages keep less in memory at once - a small host can then
+# fetch more logs in parallel - at the cost of more round trips.
+EVENT_PAGE = max(500, min(10000, int(os.environ.get("EVENT_PAGE", "10000"))))
 
 RUN_QUERY = """
 query($code: String!) {
@@ -25,11 +28,11 @@ query($code: String!) {
 
 EVENTS_QUERY = """
 query($code: String!, $fightIDs: [Int], $start: Float, $end: Float, $dataType: EventDataType,
-      $hostility: HostilityType, $sourceID: Int, $abilityID: Float, $resources: Boolean) {
+      $hostility: HostilityType, $sourceID: Int, $abilityID: Float, $resources: Boolean, $limit: Int) {
   reportData { report(code: $code) {
     events(fightIDs: $fightIDs, startTime: $start, endTime: $end, dataType: $dataType,
            hostilityType: $hostility, sourceID: $sourceID, abilityID: $abilityID,
-           includeResources: $resources, limit: 10000) {
+           includeResources: $resources, limit: $limit) {
       data
       nextPageTimestamp
     }
@@ -186,6 +189,7 @@ def _events(client: WCLClient, fight: Fight, data_type: str, hostility: str | No
                 "sourceID": source_id,
                 "abilityID": ability_id,
                 "resources": resources,
+                "limit": EVENT_PAGE,
             },
             ttl=0,
         )

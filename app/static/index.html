@@ -193,6 +193,7 @@
   .tag.timed { background: var(--good-bg); color: var(--good); }
   .tag.depleted { background: var(--low-bg); color: var(--low); }
   .tag.done { background: var(--med-bg); color: var(--med); }
+  .tag.prep { background: var(--accent-soft); color: var(--accent); }
   .empty { color: var(--muted); padding: 24px 4px; text-align: center; }
   .runhead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
   .runhead h3 { margin: 0; font-size: 1.4667rem; }
@@ -576,9 +577,12 @@ async function loadRuns(limit = RUNS_LIMIT) {
           <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span></div>
         <div class="sub"><span>${ago(r.started)}</span><span>${r.duration_min} min</span>
           ${r.analyzable ? "" : `<span>${esc(r.spec || "not in group")}</span>`}
-          ${r.analyzed ? `<span class="tag done">Analyzed</span>` : ""}</div>
+          ${r.analyzed ? `<span class="tag done">Analyzed</span>` : r.queued ? `<span class="tag prep" title="Being analyzed in the background - ready soon">Preparing...</span>` : ""}</div>
       </button>`).join("") + note + (more ? `<div class="empty">${more}</div>` : "");
     document.querySelectorAll(".run:not([disabled])").forEach((el) => el.onclick = () => analyze(el.dataset.url));
+    // Keys being prepared in the background: refresh the list until they're done.
+    clearTimeout(window.prepPoll);
+    if (data.runs.some((r) => r.queued)) window.prepPoll = setTimeout(() => loadRuns(), 20000);
   } catch (e) {
     reportError("keys", "Loading your recent keys", e.message, () => loadRuns(), e.ref);
     $("runs").innerHTML = `<div class="empty">Couldn't load your recent keys.<br><br>${retry}</div>`;

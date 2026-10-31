@@ -117,6 +117,10 @@ someone under 25% or the group under 50%).
 - Signing in and page loads need no Warcraft Logs calls; a session lasts as long as the WCL token (logged at sign-in).
 - Signed out, a link to a public run opens its saved analysis; analyzing new runs or private logs needs a sign-in.
 - The recent-keys list falls back to the last saved list with a quiet note, and refreshes itself.
+- Your newest unanalyzed keys (AUTO_ANALYZE, default 2) are queued in the background when the list loads, marked
+  "Preparing...", so they usually open instantly when you click them.
+- EVENT_PAGE sets events per WCL request (default 10000). Smaller pages barely save memory (measured: 25 vs 17 MB per
+  log at 3000) and make fetching ~50% slower, so on a 512 MB host keep TOP_WORKERS=1 rather than shrinking pages.
 - Every failure is logged with context (route or job, report/fight, reason, a short ref) - never tokens or codes.
 
 ## Healing overlaps
