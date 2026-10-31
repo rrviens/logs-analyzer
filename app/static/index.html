@@ -597,10 +597,12 @@ async function analyze(url, fresh = false) {
     if (r.result && !r.job) { clearError("analysis"); render(r.result, url); return; }  // stored, current rules: instant
     // A stored analysis from older rules shows at once while the new one is made in the background.
     if (r.result) { render(r.result, url); setUpdateNote("Updating to the latest rules..."); }
+    let previewed = false;
     while (true) {
       await new Promise((res) => setTimeout(res, 1500));
       if (current !== url) return;
-      const j = await api(`/api/jobs/${r.job}`);
+      const j = await api(`/api/jobs/${r.job}${previewed || r.result ? "?skip_preview=true" : ""}`);
+      if (j.preview && !previewed && !r.result) { renderPreview(j.preview, url); previewed = true; }
       const status = j.status === "queued" ? `Queued${j.position ? ` (${j.position} ahead)` : ""}...`
         : j.status === "waiting" ? j.note : null;
       if (r.result) setUpdateNote(status || "Updating to the latest rules...");
@@ -618,6 +620,20 @@ async function analyze(url, fresh = false) {
     $("retryAnalyze").onclick = () => analyze(url, fresh);
     loadBudget();
   }
+}
+
+// Your run alone (header, group, timeline) while the top logs download; the full analysis replaces it.
+function renderPreview(res, url) {
+  const r = res.run;
+  $("main").innerHTML = `<div class="card"><div class="runhead"><h3>${esc(r.dungeon)} +${r.level}</h3>
+      <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span></div>
+      <div class="meta">${esc(r.player)} (${esc(res.spec.label)}) · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"}</div>
+      ${renderGroup(res)}</div>
+    <div class="card"><h2>Comparing with top players</h2><p class="secempty">Your timeline is below; findings, top-group
+      bands and death recaps appear when the comparison is done.</p><div class="progress" id="progress"></div></div>
+    ${renderTimelineShell(res)}`;
+  initTimeline(res, url);
+  paintIcons();
 }
 
 // A quiet line above a shown analysis while a newer one is on its way (not an error).

@@ -4,6 +4,7 @@ Results are cached per run + rules version, so reopening a key is instant. Bump
 RULES_VERSION when findings logic changes.
 """
 import os
+import logging
 import statistics
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -16,7 +17,7 @@ from app.context_model import load_dungeon
 from app.chains import OUTCOME_S, Chain, find_chains
 from app.dps_windows import calm_bins, calm_dps, damage_model, fetch_damage_done, find_windows, median_rate, summarize
 from app.encounters import Encounter, load_encounter
-from app.findings import Finding, TopRun, analyze
+from app.findings import Analysis, Finding, TopRun, analyze
 from app.metrics import hot_refreshes, hots_active
 from app.reports import ability_icons, get_fights, get_players, get_trinkets, parse_report_url, pick_fight
 from app.runs import fetch_run
@@ -36,6 +37,7 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
+log = logging.getLogger("uvicorn.error")
 RULES_VERSION = 47
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
@@ -90,6 +92,24 @@ def cache_key(code: str, fight_id: int, player: str, top: int) -> str:
     return f"analysis:v{RULES_VERSION}:{code}:{fight_id}:{player.lower()}:{top}"
 
 
+def _preview(client, fight, run, tl, segs, me, spec, players, state, effects) -> dict:
+    """Your run alone, before any top log: header, group and the timeline (HP, your cooldowns, deaths, party
+    defensives). Top-player bands, findings and comparisons come with the full result."""
+    group_casts = fetch_group_casts(client, fight, {p.id for p in players})
+    spans = fetch_defense_spans(client, fight, run, players, load_defensives())
+    timeline = _timeline(run, tl, segs, [None] * len(segs), {}, state, get_trinkets(client, fight).get(me.id, []),
+                         Analysis([], [], []), (), (), players, spans, group_casts, None, (), spec,
+                         ability_icons(client, fight.report_code), load_encounter(run.dungeon), get_trinkets(client, fight))
+    timeline["dps_windows"] = []
+    return {"preview": True,
+            "run": {"code": fight.report_code, "fight_id": fight.id, "dungeon": fight.name, "level": fight.keystone_level,
+                    "timed": bool(fight.kill), "player": me.name, "duration_min": round(fight.duration_s / 60, 1),
+                    "deaths": len(run.deaths)},
+            "spec": {"key": spec.key, "label": spec.label, "plural": spec.plural},
+            "group": _with_brings(describe(players, effects), players, run, segs, group_casts),
+            "findings": [], "timeline": timeline}
+
+
 def latest_key(code: str, fight_id: int, player: str, top: int) -> str:
     return f"analysis_latest:{code}:{fight_id}:{player.lower()}:{top}"
 
@@ -101,7 +121,9 @@ def stored_analysis(client: WCLClient, code: str, fight_id: int, player: str, to
 
 
 def run_analysis(client: WCLClient, url: str, player_name: str | None = None, top: int = 8,
-                 progress: Callable[[str], None] = lambda msg: None, use_cache: bool = True) -> dict:
+                 progress: Callable[[str], None] = lambda msg: None, use_cache: bool = True,
+                 preview: Callable[[dict], None] | None = None) -> dict:
+    """preview: called once with your run alone (header, group, timeline) while the top logs still download."""
     t0, report = time.time(), progress
     progress = lambda msg: report(f"[{time.time() - t0:4.0f}s] {msg}")  # elapsed time shows which step is slow
     code, fight_id = parse_report_url(url)
@@ -162,16 +184,30 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     # TOP_WORKERS at a time, in batches of exactly what is still missing, so no log is fetched for nothing.
     pending = found.result()
     progress(f"Fetching {min(top, len(pending))} top logs, {TOP_WORKERS} at a time...")
-    with ThreadPoolExecutor(TOP_WORKERS) as pool:
-        while pending and len(tops) < top:
-            batch, pending = pending[:top - len(tops)], pending[top - len(tops):]
-            for (f, p), (loaded, reasons) in zip(batch, pool.map(load_top, batch)):  # keeps ranking order
-                if not loaded:
-                    skipped.append({"player": p.name, "key": f.keystone_level, "reasons": reasons})
-                    continue
-                candidates.append((f, p))
-                tops.append(loaded[:2])
-                top_boss.append((loaded[0].run, loaded[1], loaded[2]))
+
+    def load_tops():
+        nonlocal pending
+        with ThreadPoolExecutor(TOP_WORKERS) as pool:
+            while pending and len(tops) < top:
+                batch, pending = pending[:top - len(tops)], pending[top - len(tops):]
+                for (f, p), (loaded, reasons) in zip(batch, pool.map(load_top, batch)):  # keeps ranking order
+                    if not loaded:
+                        skipped.append({"player": p.name, "key": f.keystone_level, "reasons": reasons})
+                        continue
+                    candidates.append((f, p))
+                    tops.append(loaded[:2])
+                    top_boss.append((loaded[0].run, loaded[1], loaded[2]))
+
+    # The top logs download in the background; meanwhile your own run goes to the page as a preview.
+    loader = ThreadPoolExecutor(1)
+    tops_done = loader.submit(load_tops)
+    loader.shutdown(wait=False)
+    if preview:
+        try:
+            preview(_preview(client, fight, run, tl, segs, me, spec, my_players, my_state, effects))
+        except Exception:  # noqa: BLE001 - a preview is a nice-to-have; the full analysis still follows
+            log.warning("preview failed for %s fight %s", code, fight.id, exc_info=True)
+    tops_done.result()
 
     progress("Analyzing...")
     top_rip = [(hots_active(tr.run, otl) if spec.maintenance else None, hot_refreshes(tr.run, spec))

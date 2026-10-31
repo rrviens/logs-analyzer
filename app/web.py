@@ -378,9 +378,10 @@ def public_latest_key(code: str, fight_id: int) -> str:
 
 
 @queue.handler("analyze")
-def _analyze_job(owner: int, p: dict, progress) -> str:
+def _analyze_job(owner: int, p: dict, progress, preview) -> str:
     client = client_for(owner)
-    out = run_analysis(client, p["url"], p.get("name"), TOP_LOGS, progress=progress, use_cache=not p.get("fresh"))
+    out = run_analysis(client, p["url"], p.get("name"), TOP_LOGS, progress=progress, use_cache=not p.get("fresh"),
+                       preview=preview)
     if owner:  # hosted: a public report's analysis can also be opened by anyone with the link, signed out
         try:
             if client.query(PUBLIC_REPORT_QUERY, {"code": out["key"].split(":")[2]})["reportData"]["report"]["visibility"] == "public":
@@ -429,12 +430,14 @@ def public_analysis(url: str):
 
 
 @app.get("/api/jobs/{job_id}")
-def job_status(job_id: str, w: Who = Depends(who)):
+def job_status(job_id: str, skip_preview: bool = False, w: Who = Depends(who)):
     job = queue.get(job_id)
     if not job or job["owner"] != w.user_id:
         raise HTTPException(404, "Unknown job")
-    out = {k: job[k] for k in ("status", "progress", "note", "error", "position", "attempts")}
+    out = {k: job[k] for k in ("status", "progress", "note", "error", "position", "attempts", "preview")}
     out["ref"] = job_id[:8]
+    if skip_preview:  # the page already shows it; it's large
+        out["preview"] = None
     if job["status"] == "done":
         out["result"] = w.client.get_cached(job["result_key"])
     return out

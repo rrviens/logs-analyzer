@@ -25,6 +25,7 @@ class Jobs:
         self.c = db_client
         self.handlers: dict[str, Callable] = {}
         self.progress: dict[str, list[str]] = {}
+        self.previews: dict[str, dict] = {}  # partial results to show while a job runs (memory only)
         self.wake = threading.Event()
         with self.c.lock:
             self.c.db.execute("CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, owner INTEGER, kind TEXT, payload TEXT, "
@@ -66,6 +67,7 @@ class Jobs:
         job = dict(zip(keys, row))
         job["payload"] = json.loads(job["payload"])
         job["progress"] = self.progress.get(job_id, [])
+        job["preview"] = self.previews.get(job_id) if job["status"] in ("running", "waiting", "queued") else None
         job["position"] = self._position(job) if job["status"] == "queued" else None
         return job
 
@@ -102,7 +104,9 @@ class Jobs:
             self._set(job_id, status="running", note=None)
             progress = self.progress.setdefault(job_id, [])
             try:
-                key = self.handlers[kind](owner, json.loads(payload), progress.append)
+                key = self.handlers[kind](owner, json.loads(payload), progress.append,
+                                          lambda part, j=job_id: self.previews.__setitem__(j, part))
+                self.previews.pop(job_id, None)
                 self._set(job_id, status="done", result_key=key, note=None)
             except WCLError as e:
                 if e.rate_limited and attempts + 1 < MAX_ATTEMPTS:
