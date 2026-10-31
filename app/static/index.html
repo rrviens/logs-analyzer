@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Healer Review</title>
+<script>try { const t = localStorage.getItem("theme"); document.documentElement.dataset.theme = t === "light" || t === "dark" ? t
+  : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; } catch {}</script>
 <style>
   /* Design tokens. Dark is the default (WCL / Raider.io-like); light via the header toggle or ?theme=light. */
   :root {
@@ -357,7 +359,18 @@
   .errlist .msg { margin: 2px 0 6px; }  [hidden] { display: none !important; }  /* flex/inline-flex components must still hide */
   a.primary { background: var(--accent); color: var(--accent-text); border-radius: var(--radius-sm); padding: 8px 14px;
               font-weight: 600; text-decoration: none; }
-  /* ---------- design pass: type, surfaces, controls, focus ---------- */
+  /* header: feature actions, then a quiet display-preferences icon at the edge */
+  .display { position: relative; margin-left: 4px; padding-left: 10px; border-left: 1px solid var(--line); }
+  .iconbtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 999px; border: 0;
+             background: none; color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
+  .iconbtn:hover, .iconbtn[aria-expanded="true"] { background: var(--panel-2); color: var(--text); }
+  .iconbtn svg { width: 17px; height: 17px; }
+  .dispmenu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 9; background: var(--panel); width: max-content;
+              border: 1px solid var(--line-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-pop); padding: 10px 12px; }
+  .dm-label { font-size: 0.8rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 2px 0 6px; }
+  .dm-label + .seg { margin-bottom: 10px; }
+  .dispmenu .seg:last-child { margin-bottom: 0; }
+  @media (max-width: 600px) { .display { margin-left: auto; } }  /* wrapped header: keep it at the right edge */  /* ---------- design pass: type, surfaces, controls, focus ---------- */
   body { font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; font-feature-settings: "cv11", "ss01";
          -webkit-font-smoothing: antialiased; letter-spacing: -0.005em; }
   .when, .tip, table, .budget, .tl-head .scope, a.tl, .dpslist, .run .sub { font-variant-numeric: tabular-nums; }
@@ -427,10 +440,23 @@
   <h1><span class="logo"><i data-lucide="heart-pulse"></i></span>Healer Review</h1>
   <span class="budget" id="budget"></span>
   <button class="pill" id="studyBtn" title="Top-player study the analysis compares against">Top-player study</button>
-  <button class="pill" id="errBtn" title="Errors in this session" hidden><i data-lucide="circle-alert"></i><span>Errors</span><b id="errCount">0</b></button>
-  <button class="pill" id="themeBtn" title="Dark / light theme"><i data-lucide="sun-moon"></i><span>Dark</span></button>
-  <button class="pill" id="textSize" title="Text size">Text: Normal</button>
   <button class="pill" id="charBtn">Set character</button>
+  <button class="pill" id="errBtn" title="Errors in this session" hidden><i data-lucide="circle-alert"></i><span>Errors</span><b id="errCount">0</b></button>
+  <!-- display preferences: one quiet icon at the edge, apart from the feature buttons -->
+  <div class="display">
+    <button class="iconbtn" id="dispBtn" title="Display: theme and text size" aria-label="Display settings"
+            aria-haspopup="true" aria-expanded="false"><i data-lucide="settings-2">⚙</i></button>
+    <div class="dispmenu" id="dispMenu" hidden>
+      <div class="dm-label">Theme</div>
+      <div class="seg" role="group" aria-label="Theme">
+        <button class="tlbtn" data-theme-pick="system">System</button><button class="tlbtn" data-theme-pick="dark">Dark</button><button class="tlbtn" data-theme-pick="light">Light</button>
+      </div>
+      <div class="dm-label">Text size</div>
+      <div class="seg" role="group" aria-label="Text size">
+        <button class="tlbtn" data-size-pick="normal">Normal</button><button class="tlbtn" data-size-pick="large">Large</button>
+      </div>
+    </div>
+  </div>
 </header>
 <div class="errbanner" id="errBanner" role="alert" hidden></div>
 <dialog id="errDialog"><div class="errlisthead"><strong>Errors in this session</strong>
@@ -1829,13 +1855,21 @@ $("studyBtn").onclick = async () => {
 // Text size: Normal (15px root) / Large (17px); everything is in rem, the timeline re-measures.
 function setTextSize(large) {
   document.documentElement.classList.toggle("large", large);
-  $("textSize").textContent = `Text: ${large ? "Large" : "Normal"}`;
-  $("textSize").classList.toggle("on", large);
+  document.querySelectorAll("[data-size-pick]").forEach((b) => b.classList.toggle("on", (b.dataset.sizePick === "large") === large));
   lsSet("textSize", large ? "large" : "normal");
   if (TL && $("tlSvg")) { drawTimeline(); updatePinHeight(); }
 }
-$("textSize").onclick = () => setTextSize(!document.documentElement.classList.contains("large"));
+document.querySelectorAll("[data-size-pick]").forEach((b) => b.onclick = () => setTextSize(b.dataset.sizePick === "large"));
 setTextSize(lsGet("textSize") === "large");
+// The Display menu (theme + text size) opens from the icon at the header's edge; a click elsewhere closes it.
+$("dispBtn").onclick = (e) => {
+  e.stopPropagation();
+  $("dispMenu").hidden = !$("dispMenu").hidden;
+  $("dispBtn").setAttribute("aria-expanded", String(!$("dispMenu").hidden));
+};
+document.addEventListener("click", (e) => {
+  if (!$("dispMenu").hidden && !e.target.closest(".display")) { $("dispMenu").hidden = true; $("dispBtn").setAttribute("aria-expanded", "false"); }
+});
 
 // Hosted mode: sign in with Warcraft Logs first; your analyses then run on your own account.
 async function startApp() {
@@ -1867,14 +1901,19 @@ const appReady = startApp();
 appReady.then((ok) => { if (ok) { loadRuns(); loadBudget(); loadStudy(); } });
 // Links: ?run=<log url> opens that run (&at=<element id> scrolls to it, &pull=<n|whole> picks the timeline view);
 // Theme: dark by default; the header toggle remembers light. ?theme=dark|light overrides for this page.
-function setTheme(theme, save = true) {
-  document.documentElement.dataset.theme = theme;
-  $("themeBtn").querySelector("span").textContent = theme === "light" ? "Light" : "Dark";
-  if (save) lsSet("theme", theme);
+// Theme: follows the OS (prefers-color-scheme), dark when it says nothing; the Display menu overrides and is remembered.
+// ?theme=dark|light overrides for this page only.
+const OS_LIGHT = matchMedia("(prefers-color-scheme: light)");
+function setTheme(pick, save = true) {
+  document.documentElement.dataset.theme = pick === "system" ? (OS_LIGHT.matches ? "light" : "dark") : pick;
+  document.querySelectorAll("[data-theme-pick]").forEach((b) => b.classList.toggle("on", b.dataset.themePick === pick));
+  if (save) lsSet("theme", pick);
   if (TL && $("tlSvg")) { drawTimeline(); drawDps(); }
 }
-$("themeBtn").onclick = () => setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
-setTheme(lsGet("theme") === "light" ? "light" : "dark", false);
+const themePick = () => ["dark", "light"].includes(lsGet("theme")) ? lsGet("theme") : "system";
+document.querySelectorAll("[data-theme-pick]").forEach((b) => b.onclick = () => setTheme(b.dataset.themePick));
+OS_LIGHT.addEventListener("change", () => { if (themePick() === "system") setTheme("system", false); });
+setTheme(themePick(), false);
 paintIcons();
 (async () => {
   const q = new URLSearchParams(location.search);
@@ -1884,7 +1923,8 @@ paintIcons();
   if (TL && PRESETS[q.get("preset")]) { applyPreset(q.get("preset")); syncToggles(); drawTimeline(); }
   if (TL && q.get("pull")) selectPull(q.get("pull") === "whole" ? -1 : +q.get("pull") - 1);
   if (q.get("at") && $(q.get("at"))) $(q.get("at")).scrollIntoView({block: "start"});
-  if (q.get("open") && $(q.get("open"))) $(q.get("open")).open = true;  // e.g. &open=tlLanes
+  const toOpen = q.get("open") && $(q.get("open"));  // e.g. &open=tlLanes (a menu) or &open=dispBtn (a button)
+  if (toOpen) { if (toOpen.tagName === "DETAILS") toOpen.open = true; else toOpen.click(); }
 })();
 </script>
 </body>
