@@ -529,8 +529,8 @@ function pullShort(label) {
 // Marker lanes: [marker kind, label, toggle key, short label for narrow screens].
 const LANES = [
   ["cooldown", "Healing cooldowns", "l:cooldown", "Cooldowns"], ["personal", "Personal", "l:personal", "Personal"],
-  ["trinket", "Trinkets & potions", "l:trinket", "Trinkets"], ["hit", "Big group hits", "l:hit", "Hits"],
-  ["death", "Deaths", "deaths", "Deaths"], ["finding", "Findings", "l:finding", "Findings"],
+  ["trinket", "Your trinkets", "l:trinket", "Trinkets"], ["potion", "Potions (group)", "l:potion", "Potions"],
+  ["hit", "Big group hits", "l:hit", "Hits"], ["death", "Deaths", "deaths", "Deaths"], ["finding", "Findings", "l:finding", "Findings"],
 ];
 const SCOPE_COLOR = {personal: "var(--series-1)", external: "var(--series-3)", group: "var(--series-7)"};
 let TL = null;  // {res, pull, view, mark, tips}
@@ -544,7 +544,8 @@ const TOGGLES = [
   ["l:hit", "Healing", `<i class="tick"></i>`, "Big group hits"],
   ["deaths", "Healing", `<span class="sym" style="color:var(--critical)">✕</span>`, "Deaths"],
   ["l:personal", "Healing", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Your personal"],
-  ["l:trinket", "Other", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Trinkets & potions"],
+  ["l:trinket", "Other", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Your trinkets"],
+  ["l:potion", "Party", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Potions (whole group)"],
   ["l:finding", "Other", `<i class="dot" style="background:var(--warning)"></i>`, "Finding dots"],
   ["mana", "Healing", `<i style="background:var(--series-1)"></i>`, "Your mana"],
   ["party", "Party", `<span class="sym">▤</span>`, "Party member lanes"],
@@ -562,7 +563,7 @@ const SCOPE_KEY = {personal: "personal", external: "external", group: "groupdef"
 const PRESETS = {
   healing: {label: "Healing", on: ["group", "lowest", "top", "l:cooldown", "l:hit", "deaths", "chain"]},
   party: {label: "Party", on: ["group", "lowest", "top", "uncovered", "l:cooldown", "l:hit", "deaths", "chain", "l:personal",
-                               "party", "personal", "external", "groupdef", "avoid"]},
+                               "party", "personal", "external", "groupdef", "avoid", "l:potion"]},
   everything: {label: "Everything", on: TOGGLES.map((t) => t[0])},
 };
 let TL_PRESET = PRESETS[lsGet("tlPreset")] || lsGet("tlPreset") === "custom" ? lsGet("tlPreset") : "healing";
@@ -768,7 +769,7 @@ function groupDefenses(defense, members) {
   return out;
 }
 
-function markerKind(m) { return m.kind === "potion" ? "trinket" : m.kind; }
+function markerKind(m) { return m.kind; }
 
 function drawTimeline() {
   const res = TL.res, t = res.timeline, whole = TL.pull < 0, p = whole ? null : t.pulls[TL.pull];

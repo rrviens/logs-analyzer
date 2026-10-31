@@ -36,7 +36,7 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient
 
-RULES_VERSION = 41
+RULES_VERSION = 42
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
 # memory at once; set TOP_WORKERS=1 on a small (512 MB) host.
@@ -502,7 +502,7 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
     for t, aid, target in run.casts:
         name = run.ability_name(aid)
         kind = ("cooldown" if aid in healing else "personal" if aid in personals
-                else "trinket" if name in trinkets else "potion" if "Potion" in name else None)
+                else "trinket" if name in trinkets else None)  # potions: everyone's, below
         if not kind:
             continue
         tip = [f"{name} - {run.player_name(run.healer_id)} at {clock(t)}", where(t), hp_line(t)]
@@ -516,6 +516,12 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
                            else "Pressed as soon as it came back.")
         markers.append({"t_s": rel(t), "kind": kind, "label": name, "tip": tip,
                         "icon": icons[0].get(aid) or icons[1].get(name)})
+    for t, src, aid, _ in group_casts:  # the whole group's potions, healer included
+        name = run.ability_name(aid)
+        if "Potion" in name:
+            markers.append({"t_s": rel(t), "kind": "potion", "label": f"{name} ({pname(src)})",
+                            "tip": [f"{name} - {pname(src)} at {clock(t)}", where(t), hp_line(t)],
+                            "icon": icons[0].get(aid) or icons[1].get(name)})
 
     recap_by = {(r["t"], r["victim"]): r for r in recaps}
     for t, victim, ability in run.deaths:
