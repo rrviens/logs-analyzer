@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+cache.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+# per-user runtime data
+data/settings.json
+data/feedback.json

@@ -1,0 +1,1259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Healer Review</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #5d6673; --line: #e3e6ea;
+    --accent: #2563eb; --accent-text: #ffffff;
+    --high: #c2410c; --high-bg: #fff1e8; --med: #a16207; --med-bg: #fdf6e3; --low: #4b5563; --low-bg: #f1f3f5;
+    --good: #15803d; --good-bg: #ecfdf3;
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-7: #6250d6;
+    --grid: #e1e0d9; --axis: #c3c2b7; --ink-muted: #898781;
+    --critical: #d03b3b; --serious: #ec835a; --warning: #fab219; --phase-a: rgba(11,11,11,0.035);
+    --pin-h: 0px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111418; --panel: #1a1e24; --text: #e6e9ed; --muted: #9aa3ae; --line: #2a3038;
+      --accent: #4c8dff; --accent-text: #0b0d10;
+      --high: #ff8a50; --high-bg: #2b1a12; --med: #e3b341; --med-bg: #29230f; --low: #aab2bd; --low-bg: #20252c;
+      --good: #4ade80; --good-bg: #12241a;
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-7: #9085e9;
+      --grid: #2c2c2a; --axis: #383835; --phase-a: rgba(255,255,255,0.04);
+    }
+  }
+  /* time links: every m:ss on the page jumps the timeline there */
+  a.tl { color: inherit; text-decoration: underline dotted var(--accent); text-underline-offset: 2px; cursor: pointer; }
+  a.tl:hover { color: var(--accent); }
+  /* sections */
+  .secnav { position: sticky; top: var(--pin-h); z-index: 4; display: flex; flex-wrap: wrap; gap: 6px;
+            background: var(--panel); padding: 8px 0; margin: 0 0 8px; border-bottom: 1px solid var(--line); }
+  .secnav a { white-space: nowrap; font-size: 12px; text-decoration: none; color: var(--text); border: 1px solid var(--line);
+              border-radius: 999px; padding: 3px 10px; border-left: 3px solid var(--acc); }
+  .secnav a .n { color: var(--muted); margin-left: 4px; }
+  section.sec { margin: 22px 0 8px; scroll-margin-top: calc(var(--pin-h) + 56px); }
+  .sechead { display: flex; align-items: center; gap: 8px; border-bottom: 2px solid var(--acc); padding-bottom: 6px; margin-bottom: 10px; }
+  .sechead .ico { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; font-size: 13px;
+                  background: var(--acc); color: #fff; flex: none; }
+  .sechead h2 { margin: 0; font-size: 14px; color: var(--text); letter-spacing: .02em; }
+  .sechead .badge { font-size: 12px; font-weight: 700; color: var(--acc); }
+  .sechead .sp { flex: 1; }
+  .sechead button { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; }
+  .secempty { color: var(--muted); font-size: 13px; }
+  /* collapsed findings */
+  details.finding { padding: 0; }
+  details.finding > summary { list-style: none; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+                              padding: 9px 12px; margin: 0; font-weight: 400; color: var(--text); font-size: 14px; }
+  details.finding > summary::-webkit-details-marker, details.vsec > summary::-webkit-details-marker { display: none; }
+  details.finding > summary .when { min-width: 40px; }
+  details.finding > summary .pl { color: var(--muted); font-size: 12px; }
+  details.finding > summary .title { font-weight: 600; flex: 1 1 200px; }
+  .fix { font-size: 12px; font-weight: 600; color: var(--med); background: var(--med-bg); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  details.finding .body { padding: 0 12px 10px; }
+  details.finding .body .pull { margin-left: 0; }
+  details.finding .body ul, details.finding .body .ctx { margin-left: 0; }
+  details.vsec { border: 1px solid var(--line); border-left: 4px solid var(--good); border-radius: 8px; margin: 0; }
+  details.vsec.todo { border-left-color: var(--med); }
+  details.vsec > summary { list-style: none; padding: 9px 12px; margin: 0; color: var(--text); font-weight: 600; font-size: 14px; }
+  details.vsec .body { padding: 0 12px 10px; }
+  details.vsec .verdict { border: 0; padding: 0; }
+  details.finding, details.death, details.vsec { margin: 0 0 6px; }
+  .caveat { color: var(--muted); font-size: 12px; margin-top: 24px; border-top: 1px solid var(--line); padding-top: 10px; }
+  /* timeline pin + zoom */
+  #tlSection { background: var(--panel); }
+  #tlSection.pinned { position: sticky; top: 0; z-index: 5; padding: 8px 0 6px; border-bottom: 1px solid var(--line);
+                      box-shadow: 0 6px 12px -10px rgba(0,0,0,.4); }
+  #tlSection.pinned .legend { display: none; }  /* compact when pinned; the legend is in the unpinned view */
+  #tlSection.pinned .tl-head { margin-bottom: 2px; }
+  #tlSection.pinned.collapsed .tlwrap { display: none; }
+  #tlSection.pinned .tlwrap text { font-size: 9px; }
+  @media (max-width: 700px) { #tlSection.pinned { max-height: 45vh; overflow-y: auto; } }
+  .tlbtn { border: 1px solid var(--line); background: none; color: var(--text); border-radius: 6px; padding: 3px 9px;
+           cursor: pointer; font: inherit; font-size: 12px; }
+  .tlbtn.on { border-color: var(--accent); color: var(--accent); }
+  .legend i.box { height: 8px; width: 12px; border-radius: 2px; }
+  .legend .lg { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+  .legend .lg:hover { color: var(--text); }
+  .legend .lg.off { opacity: .45; text-decoration: line-through; }
+  @keyframes flashmark { 0%, 100% { opacity: 1; } 50% { opacity: .2; } }
+  .flashmark { animation: flashmark .5s ease-in-out 3; }
+  .tl-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .tl-head select { flex: 0 1 340px; }
+  .tl-head .scope { font-size: 12px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent);
+                    border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; }
+  .legend i.dash { background: repeating-linear-gradient(90deg, var(--ink-muted) 0 4px, transparent 4px 7px); }
+  .tlwrap { position: relative; }
+  .tlwrap svg { display: block; width: 100%; }
+  .tlwrap text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink-muted); }
+  .tlwrap text.lane { fill: var(--muted); }
+  .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line);
+         border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12);
+         max-width: 280px; display: none; z-index: 2; }
+  .tip b { font-variant-numeric: tabular-nums; }
+  .jump { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; padding: 0; }
+  .finding.flash { outline: 2px solid var(--accent); }
+  .lookbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+  .lookbar[hidden] { display: none; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: var(--panel);
+           border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; margin-right: auto; }
+  .pill { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; background: none;
+          color: var(--text); cursor: pointer; font: inherit; }
+  .budget { color: var(--muted); font-size: 12px; }
+  .pill.stale { border-color: var(--med); color: var(--med); }
+  h2.sec { margin-top: 24px; }
+  .death { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
+  .death > summary { list-style: none; cursor: pointer; padding: 10px 14px; color: var(--text); font-size: 14px;
+                     display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+  .death > summary::-webkit-details-marker { display: none; }
+  .death .when { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .death .body { padding: 0 14px 12px; }
+  .death .story { font-size: 13px; margin: 6px 0; }
+  .death .storylines { font-size: 13px; color: var(--muted); margin: 6px 0; padding-left: 18px; }
+  .death .advice { font-size: 13px; border-left: 3px solid var(--med); background: var(--med-bg); padding: 6px 10px;
+                   border-radius: 4px; margin: 8px 0; }
+  .chip { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .chip.lived { background: var(--good-bg); color: var(--good); }
+  .chip.close { background: var(--med-bg); color: var(--med); }
+  .chip.died { background: var(--low-bg); color: var(--low); }
+  .chip.save { background: var(--high-bg); color: var(--high); }
+  .chip.avoid { background: var(--med-bg); color: var(--med); }
+  .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+  @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+  .col { background: var(--bg); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+  .col h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .col .item { margin: 4px 0; }
+  .col .item .sub { color: var(--muted); font-size: 12px; }
+  .col .none { color: var(--muted); font-size: 12px; }
+  .recap th, .recap td { text-align: left; }
+  .recap td.hit { color: var(--high); }
+  .recap td.heal { color: var(--good); }
+  .recap td.defensive { color: var(--accent); }
+  .hpbar { display: inline-block; width: 60px; height: 6px; background: var(--line); border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+  .hpbar i { display: block; height: 100%; background: var(--series-1); border-radius: 3px; }
+  .verdict { border: 1px solid var(--line); border-left: 4px solid var(--good); border-radius: 8px; padding: 10px 14px; }
+  .verdict.todo { border-left-color: var(--med); }
+  .verdict ul { list-style: none; margin: 8px 0 0; padding: 0; }
+  .verdict li { display: flex; gap: 8px; margin: 4px 0; color: var(--muted); }
+  .verdict li.act { color: var(--text); }
+  .verdict .mark { width: 14px; flex: none; font-weight: 700; color: var(--good); }
+  .verdict li.act .mark { color: var(--med); }
+  .verdict .ex { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .verdict .ex span { display: block; }
+  .verdict + details { margin-top: 6px; }
+  details > summary { color: var(--accent); font-weight: 500; font-size: 13px; }
+  #studyBtn { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; padding: 20px; max-width: 1280px; margin: 0 auto; }
+  .layout > * { min-width: 0; }  /* let wide tables scroll inside their panel, not the page */
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; padding: 16px; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  .paste { display: flex; gap: 8px; margin-bottom: 16px; }
+  input, select { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+                  background: var(--bg); color: var(--text); font: inherit; }
+  button.primary { background: var(--accent); color: var(--accent-text); border: 0; border-radius: 6px;
+                   padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.primary:disabled { opacity: .5; cursor: default; }
+  .runs { display: flex; flex-direction: column; gap: 6px; }
+  .run { text-align: left; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: none;
+         color: var(--text); cursor: pointer; font: inherit; }
+  .run:hover:not([disabled]), .run.active { border-color: var(--accent); }
+  .run[disabled] { opacity: .5; cursor: default; }
+  .run .top { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+  .run .sub { color: var(--muted); font-size: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
+  .tag.timed { background: var(--good-bg); color: var(--good); }
+  .tag.depleted { background: var(--low-bg); color: var(--low); }
+  .tag.done { background: var(--med-bg); color: var(--med); }
+  .empty { color: var(--muted); padding: 24px 4px; text-align: center; }
+  .runhead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .runhead h3 { margin: 0; font-size: 20px; }
+  .meta { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .finding { border: 1px solid var(--line); border-left: 4px solid var(--low); border-radius: 8px; padding: 12px 14px;
+             margin-bottom: 10px; background: var(--panel); }
+  .finding.high { border-left-color: var(--high); }
+  .finding.med { border-left-color: var(--med); }
+  .finding .row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .finding .when { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; min-width: 42px; }
+  .finding .title { font-weight: 600; flex: 1; }
+  .sev { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+  .sev.high { background: var(--high-bg); color: var(--high); }
+  .sev.med { background: var(--med-bg); color: var(--med); }
+  .sev.low { background: var(--low-bg); color: var(--low); }
+  .finding .pull { color: var(--muted); font-size: 12px; margin: 2px 0 6px 52px; }
+  .finding ul { margin: 0 0 0 52px; padding-left: 16px; }
+  .finding li { margin: 2px 0; white-space: pre-wrap; }
+  @media (max-width: 600px) { .finding .pull, .finding ul { margin-left: 0; } }
+  .good { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .good:last-child { border-bottom: 0; }
+  .good .check { color: var(--good); font-weight: 700; }
+  details { margin-top: 18px; }
+  summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  td.worse { color: var(--high); font-weight: 600; }
+  .progress { font-family: ui-monospace, Consolas, monospace; font-size: 13px; color: var(--muted); }
+  .progress div:last-child { color: var(--text); }
+  .error { color: var(--high); }
+  .actions { display: flex; gap: 8px; margin-left: auto; }
+  .link { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 0; }
+  /* five equal cards in one row (wraps to equal columns on narrow screens); equal height per row */
+  .group { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 8px; margin-bottom: 8px; }
+  @media (max-width: 900px) { .group { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .group { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .member { display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--line); border-radius: 8px;
+            padding: 8px 10px 8px 0; overflow: hidden; min-width: 0; }
+  .member > div { min-width: 0; }
+  .member .bar { width: 4px; align-self: stretch; flex: none; margin: -8px 0; }
+  .member .who { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .member .spec { color: var(--muted); font-size: 12px; display: block; }
+  .member .note { font-size: 11px; color: var(--med); }
+  .brings { list-style: none; margin: 6px 0 0; padding: 0; font-size: 11px; color: var(--text); }
+  .brings li { line-height: 1.35; margin-top: 2px; }
+  .brings li span { display: block; padding-left: 10px; }
+  .brings li span { color: var(--muted); }
+  .brings li.warn span { color: var(--warning); font-weight: 600; }
+  .brings i { display: inline-block; width: 6px; height: 6px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+  .role { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .compnote { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+  .ctx { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 8px 0 6px 52px;
+         padding: 8px 10px; background: var(--bg); border-radius: 6px; font-size: 13px; }
+  .ctx dt { color: var(--muted); font-weight: 600; }
+  .ctx dd { margin: 0; }
+  @media (max-width: 600px) { .ctx { margin-left: 0; } }
+  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text);
+           padding: 20px; width: min(420px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Healer Review</h1>
+  <span class="budget" id="budget"></span>
+  <button class="pill" id="studyBtn" title="Top-player study the analysis compares against">Top-player study</button>
+  <button class="pill" id="charBtn">Set character</button>
+</header>
+
+<div class="layout">
+  <aside class="panel">
+    <h2>Analyze any log</h2>
+    <form class="paste" id="pasteForm">
+      <input id="pasteUrl" placeholder="Paste a Warcraft Logs URL" autocomplete="off">
+      <button class="primary" type="submit">Go</button>
+    </form>
+    <h2>Your recent keys</h2>
+    <div class="runs" id="runs"><div class="empty">Loading...</div></div>
+  </aside>
+
+  <main class="panel" id="main">
+    <div class="empty">Pick a key on the left, or paste a log URL.</div>
+  </main>
+</div>
+
+<dialog id="charDialog">
+  <form method="dialog" id="charForm">
+    <strong>Your character</strong>
+    <label for="cName">Name</label><input id="cName" required>
+    <label for="cServer">Server</label><input id="cServer" required placeholder="e.g. Kazzak">
+    <label for="cRegion">Region</label>
+    <select id="cRegion"><option value="eu">EU</option><option value="us">US</option><option value="kr">KR</option><option value="tw">TW</option></select>
+    <div class="error" id="charError"></div>
+    <div class="row">
+      <button class="pill" value="cancel" formnovalidate>Cancel</button>
+      <button class="primary" id="charSave" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+let current = null;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {headers: {"Content-Type": "application/json"}, ...opts});
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.detail || `Request failed (${res.status})`);
+  return body;
+}
+
+async function loadBudget() {
+  try {
+    const b = await api("/api/budget");
+    $("budget").textContent = `WCL API ${b.used}/${b.limit} this hour · resets in ${Math.ceil(b.reset_in_s / 60)} min`;
+  } catch { $("budget").textContent = ""; }
+}
+
+async function loadSettings() {
+  const s = await api("/api/settings");
+  if (s.name) {
+    $("charBtn").textContent = `${s.name} · ${s.server} ${s.region.toUpperCase()}`;
+    $("cName").value = s.name; $("cServer").value = s.server; $("cRegion").value = s.region;
+  }
+  return s;
+}
+
+function ago(iso) {
+  const mins = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+async function loadRuns() {
+  const s = await loadSettings();
+  if (!s.name) {
+    $("runs").innerHTML = `<div class="empty">Set your character to see recent keys.<br><br><button class="primary" onclick="openChar()">Set character</button></div>`;
+    return;
+  }
+  try {
+    const data = await api("/api/recent");
+    if (!data.runs.length) { $("runs").innerHTML = `<div class="empty">No recent M+ runs found.</div>`; return; }
+    $("runs").innerHTML = data.runs.map((r) => `
+      <button class="run${current === r.url ? " active" : ""}" data-url="${esc(r.url)}" ${r.analyzable ? "" :
+        `disabled title="You played ${esc(r.spec || "another character")} - only Restoration Shaman runs can be analyzed"`}>
+        <div class="top"><span>${esc(r.dungeon)} +${r.level}</span>
+          <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span></div>
+        <div class="sub"><span>${ago(r.started)}</span><span>${r.duration_min} min</span>
+          ${r.analyzable ? "" : `<span>${esc(r.spec || "not in group")}</span>`}
+          ${r.analyzed ? `<span class="tag done">Analyzed</span>` : ""}</div>
+      </button>`).join("");
+    document.querySelectorAll(".run:not([disabled])").forEach((el) => el.onclick = () => analyze(el.dataset.url));
+  } catch (e) {
+    $("runs").innerHTML = `<div class="empty error">${esc(e.message)}</div>`;
+  }
+}
+
+function sevClass(s) { return s >= 70 ? "high" : s >= 45 ? "med" : "low"; }
+function sevLabel(s) { return s >= 70 ? "High" : s >= 45 ? "Medium" : "Low"; }
+
+async function analyze(url, fresh = false) {
+  current = url;
+  document.querySelectorAll(".run").forEach((el) => el.classList.toggle("active", el.dataset.url === url));
+  $("main").innerHTML = `<h2>Analyzing</h2><div class="progress" id="progress"><div>Starting...</div></div>`;
+  try {
+    const {job} = await api("/api/analyze", {method: "POST", body: JSON.stringify({url, fresh})});
+    while (true) {
+      await new Promise((r) => setTimeout(r, 1200));
+      if (current !== url) return;
+      const j = await api(`/api/jobs/${job}`);
+      if (j.progress.length) $("progress").innerHTML = j.progress.map((p) => `<div>${esc(p)}</div>`).join("");
+      if (j.status === "done") { render(j.result, url); loadRuns(); loadBudget(); return; }
+      if (j.status === "error") throw new Error(j.error);
+    }
+  } catch (e) {
+    $("main").innerHTML = `<h2>Couldn't analyze this run</h2><p class="error">${esc(e.message)}</p>`;
+    loadBudget();
+  }
+}
+
+const CLASS_COLORS = {
+  "Death Knight": "#C41E3A", "Demon Hunter": "#A330C9", "Druid": "#FF7C0A", "Evoker": "#33937F",
+  "Hunter": "#AAD372", "Mage": "#3FC7EB", "Monk": "#00FF98", "Paladin": "#F48CBA", "Priest": "#B8B8B8",
+  "Rogue": "#E6D02E", "Shaman": "#0070DD", "Warlock": "#8788EE", "Warrior": "#C69B6D",
+};
+
+function renderGroup(res) {
+  if (!res.group || !res.group.length) return "";
+  const members = res.group.map((m) => `
+    <div class="member"><span class="bar" style="background:${CLASS_COLORS[m.class] || "var(--line)"}"></span>
+      <div><div class="role">${esc(m.role)}</div><span class="who">${esc(m.name)}</span>
+      <span class="spec">${esc([m.spec, m.class].filter(Boolean).join(" "))}</span>
+      ${m.note ? `<div class="note">${esc(m.note)}</div>` : ""}${renderBrings(m)}</div></div>`).join("");
+  const notes = (res.comp_notes || []).map((n) => `<div>${esc(n)}</div>`).join("");
+  return `<h2>Group</h2><div class="group">${members}</div><div class="compnote">${notes}</div>`;
+}
+
+// Group / external cooldowns a member brings, flagged when never pressed or never up for a big group hit.
+function renderBrings(m) {
+  if (!m.brings || !m.brings.length) return "";
+  return `<ul class="brings">${m.brings.map((b) => {
+    const tip = `${b.scope === "group" ? "Group" : "External"} cooldown · pressed ${b.casts}x · up for ${b.on_big_hits} of ${m.big_hits} big group hits${b.casts ? "" : " · may not be talented"}`;
+    // Externals are single-target (tank busters, one dying player): judged only on being pressed, not on group hits.
+    const group = b.scope === "group";
+    const missed = !b.casts || (group && !b.on_big_hits && m.big_hits);
+    const text = !b.casts ? "never pressed" : !group ? `${b.casts}x` : !b.on_big_hits && m.big_hits
+      ? `${b.casts}x, never on a big hit` : `${b.casts}x · ${b.on_big_hits} big hit${b.on_big_hits === 1 ? "" : "s"}`;
+    return `<li class="${missed ? "warn" : ""}" title="${esc(tip)}">
+      <i style="background:${SCOPE_COLOR[b.scope]}"></i>${esc(b.name)} <span>${text}</span></li>`;
+  }).join("")}</ul>`;
+}
+
+function renderItems(res) {
+  if (!res.items || !res.items.length) return "";
+  const pct = (v) => v == null ? "-" : `${Math.round(v * 100)}%`;
+  const rows = res.items.map((i) => `<tr><td>${esc(i.name)}</td><td>${esc(i.kind)}</td><td>${i.uses}</td>
+    <td>${i.top_uses == null ? "-" : i.top_uses}</td><td>${i.top_users}/${i.top_count}</td>
+    <td>${i.ready_pressure_s == null ? "-" : i.ready_pressure_s + "s"}</td>
+    <td>${pct(i.paired)}</td><td>${pct(i.top_paired)}</td></tr>`).join("");
+  return `<details><summary>Show data</summary><div class="tablewrap"><table>
+    <tr><th>Item</th><th>Type</th><th>Your uses</th><th>Top uses*</th><th>Top players using it</th>
+    <th>Ready during pressure</th><th>With HTT/SLT</th><th>Top with HTT/SLT</th></tr>${rows}</table></div>
+    <div class="compnote">* median among the comparable top players who used it, scaled to your run length.
+    "With HTT/SLT" = share of uses within 10s of Healing Tide or Spirit Link.</div></details>`;
+}
+
+// ---------- time links: every m:ss on the page jumps the timeline there ----------
+const toSec = (m, s) => +m * 60 + +s;
+function linkTimes(html) {
+  return html.replace(/(^|[^\d:.])(\d{1,2}):(\d{2})(?:(\s?[-–]\s?)(\d{1,2}):(\d{2}))?(?![\d:])/g,
+    (all, pre, m1, s1, sep, m2, s2) => {
+      const a = toSec(m1, s1), b = m2 != null ? toSec(m2, s2) : "";
+      const text = `${m1}:${s1}` + (m2 != null ? `${sep}${m2}:${s2}` : "");
+      return `${pre}<a class="tl" href="#" data-s="${a}" data-e="${b}">${text}</a>`;
+    });
+}
+const T = (s) => linkTimes(esc(s));
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a.tl");
+  if (!a) return;
+  e.preventDefault();
+  e.stopPropagation();
+  focusTimeline(+a.dataset.s, a.dataset.e ? +a.dataset.e : null);
+});
+
+function pullShort(label) {
+  if (!label || label === "Whole run") return "";
+  const name = (label.split(": ")[1] || label).split(" (boss)")[0].split(" · ")[0];
+  const phase = (label.match(/· (P\d)/) || [])[1];
+  return name.split(" ")[0] + (phase ? ` ${phase}` : "");
+}
+
+// ---------- timeline ----------
+const LANES = [
+  ["cooldown", "Healing cooldowns"], ["personal", "Personal"], ["trinket", "Trinkets & potions"],
+  ["hit", "Big group hits"], ["death", "Deaths"], ["finding", "Findings"],
+];
+const SCOPE_COLOR = {personal: "var(--series-1)", external: "var(--series-3)", group: "var(--series-7)"};
+let TL = null;  // {res, pull, view, mark, tips}
+// Legend entries double as toggles: [key, swatch html, label]. Hidden keys are remembered per browser.
+const LEGEND = [
+  ["group", `<i style="background:var(--series-1)"></i>`, "Group HP"],
+  ["lowest", `<i style="background:var(--series-2)"></i>`, "Lowest player"],
+  ["top", `<i class="dash"></i>`, "Top groups (median; middle half shaded)"],
+  ["uncovered", `<i class="box" style="background:var(--critical);opacity:.35"></i>`, "Big hit with no defensives up"],
+  ["avoid", `<i class="box" style="background:var(--warning)"></i>`, "Avoidable hit (dot) / kickable cast went through (◆)"],
+  ["personal", `<i class="box" style="background:var(--series-1)"></i>`, "Personal"],
+  ["external", `<i class="box" style="background:var(--series-3)"></i>`, "External"],
+  ["groupdef", `<i class="box" style="background:var(--series-7)"></i>`, "Group defensive"],
+  ["chain", "", "⛓ Chain pull (orange = went in risky)"],
+  ["deaths", "", "✕ Deaths"],
+  ["lust", "", "⚡ Bloodlust"],
+  ["ready", `<i class="box" style="background:var(--good)"></i>`, "Cooldown sat ready (overview)"],
+];
+const SCOPE_KEY = {personal: "personal", external: "external", group: "groupdef"};
+const TL_HIDDEN = new Set((lsGet("tlHidden") || "").split(",").filter(Boolean));
+const isOn = (k) => !TL_HIDDEN.has(k);
+
+function fmtClock(s) { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+
+function renderTimelineShell(res) {
+  const t = res.timeline;
+  if (!t || !t.pulls.length) return "";
+  const opts = `<option value="-1">Whole run (${fmtClock(t.pulls[0].start_s)}-${fmtClock(t.pulls[t.pulls.length - 1].end_s)})</option>`
+    + t.pulls.map((p, i) => `<option value="${i}">${esc(p.label)} (${fmtClock(p.start_s)})</option>`).join("");
+  return `<div id="tlSection">
+    <div class="tl-head"><strong style="font-size:13px">Timeline</strong>
+      <span class="scope" id="tlScope"></span>
+      <select id="tlPull" aria-label="Pull">${opts}</select>
+      <button class="tlbtn" id="tlWhole" title="Show the whole key (or double-click the overview)">Show whole run</button>
+      <button class="tlbtn" id="tlZoomOut" hidden>Show whole pull</button>
+      <button class="tlbtn" id="tlPin" title="Keep the timeline on screen while you read">📌 Pin</button>
+      <button class="tlbtn" id="tlFold" hidden>Hide chart</button></div>
+    <div class="legend">${LEGEND.map(([k, sw, label]) =>
+      `<button class="lg${TL_HIDDEN.has(k) ? " off" : ""}" data-k="${k}" aria-pressed="${!TL_HIDDEN.has(k)}"
+        title="Click to show / hide">${sw}${label}</button>`).join("")}
+      <span>Click an item to hide it · overview: click a pull or drag a range to zoom</span></div>
+    <div class="tlwrap" id="ovWrap"><svg id="ovSvg" role="img" aria-label="Whole run overview: click a pull or drag a range to zoom"></svg>
+      <div class="tip" id="ovTip"></div></div>
+    <div class="tlwrap" id="tlWrap"><svg id="tlSvg" role="img" aria-label="Group HP, events and defensives over the selected pull"></svg>
+      <div class="tip" id="tlTip"></div></div></div>`;
+}
+
+// ---------- whole-run overview: pulls side by side, gaps between pulls squeezed ----------
+const OV_GAP = 6;
+function overviewScale(t, L, plotW) {
+  const pulls = t.pulls;
+  const total = pulls.reduce((s, p) => s + (p.end_s - p.start_s), 0) || 1;
+  const wp = plotW - OV_GAP * Math.max(0, pulls.length - 1);
+  let off = L;
+  const segs = pulls.map((p) => {
+    const w = (p.end_s - p.start_s) / total * wp;
+    const seg = {p, x0: off, x1: off + w};
+    off += w + OV_GAP;
+    return seg;
+  });
+  const x = (s) => {
+    for (let i = 0; i < segs.length; i++) {
+      const g = segs[i];
+      if (s <= g.p.end_s) return s < g.p.start_s ? g.x0 - OV_GAP / 2 : g.x0 + (s - g.p.start_s) / (g.p.end_s - g.p.start_s) * (g.x1 - g.x0);
+    }
+    return segs.length ? segs[segs.length - 1].x1 : L;
+  };
+  const toS = (px) => {
+    for (const g of segs) {
+      if (px <= g.x1 + OV_GAP / 2) return g.p.start_s + Math.max(0, Math.min(1, (px - g.x0) / (g.x1 - g.x0))) * (g.p.end_s - g.p.start_s);
+    }
+    const last = segs[segs.length - 1];
+    return last ? last.p.end_s : 0;
+  };
+  return {segs, x, toS};
+}
+
+function drawOverview() {
+  const t = TL.res.timeline, svg = $("ovSvg"), wrap = $("ovWrap");
+  const pinned = $("tlSection").classList.contains("pinned");
+  const W = Math.max(320, wrap.clientWidth), L = W < 560 ? 84 : 128, R = 8, plotW = W - L - R;
+  const ready = pinned || !isOn("ready") ? [] : (t.ready_lanes || []);
+  const top = 14, hpH = pinned ? 26 : 40, laneH = 9, readyTop = top + hpH + 6;
+  const H = readyTop + ready.length * laneH + (ready.length ? 6 : 0);
+  const {segs, x, toS} = overviewScale(t, L, plotW);
+  const y = (v) => top + (1 - v) * hpH;
+  let g = "";
+  segs.forEach((sg, i) => {
+    const sel = i === TL.pull;
+    g += `<rect x="${sg.x0}" y="${top}" width="${Math.max(1, sg.x1 - sg.x0)}" height="${hpH}" fill="${sg.p.boss ? "var(--series-7)" : "var(--ink-muted)"}"
+      opacity="${sg.p.boss ? .14 : .07}" data-pull="${i}" style="cursor:pointer"/>`;
+    if (sel) g += `<rect x="${sg.x0}" y="${top - 1}" width="${sg.x1 - sg.x0}" height="${hpH + 2}" fill="none" stroke="var(--accent)" stroke-width="1.5"/>`;
+    let d = "";
+    for (let b = Math.floor(sg.p.start_s / t.bin_s); b <= Math.min(t.group.length - 1, Math.ceil(sg.p.end_s / t.bin_s)); b += 3)
+      d += `${d ? "L" : "M"}${x(b * t.bin_s).toFixed(1)},${y(t.group[b]).toFixed(1)}`;
+    if (isOn("group")) g += `<path d="${d}" fill="none" stroke="var(--series-1)" stroke-width="1.2" pointer-events="none"/>`;
+    const label = pullShort(sg.p.label);
+    if (sg.x1 - sg.x0 > label.length * 5.5 + 6) g += `<text x="${sg.x0 + 3}" y="${top - 3}" ${sg.p.boss ? 'style="font-weight:700"' : ""}>${esc(label)}</text>`;
+    if (sg.p.deaths && isOn("deaths")) g += `<text x="${sg.x1 - 3}" y="${top + hpH - 3}" text-anchor="end" style="fill:var(--critical);font-weight:700">✕${sg.p.deaths}</text>`;
+  });
+  if (TL.view) {
+    const [a, b] = TL.view;
+    g += `<rect x="${x(a)}" y="${top}" width="${Math.max(2, x(b) - x(a))}" height="${hpH}" fill="var(--accent)" opacity=".18" pointer-events="none"/>`;
+  }
+  t.markers.filter((m) => m.kind === "death" && isOn("deaths")).forEach((m) =>
+    g += `<line x1="${x(m.t_s)}" x2="${x(m.t_s)}" y1="${top}" y2="${top + hpH}" stroke="var(--critical)" stroke-width="1.5" pointer-events="none"/>`);
+  t.markers.filter((m) => m.kind === "cooldown").forEach((m) =>
+    g += `<rect x="${x(m.t_s) - 2}" y="${top + hpH - 6}" width="4" height="6" fill="var(--text)" pointer-events="none"/>`);
+  t.markers.filter((m) => m.kind === "trinket" || m.kind === "potion").forEach((m) =>
+    g += `<circle cx="${x(m.t_s)}" cy="${top + hpH - 9}" r="1.8" fill="var(--series-3)" pointer-events="none"/>`);
+  t.markers.filter((m) => m.kind === "chain" && isOn("chain")).forEach((m) =>
+    g += `<text x="${x(m.t_s) - OV_GAP / 2}" y="${top + hpH / 2 + 4}" text-anchor="middle"
+      style="fill:${m.risky ? "var(--warning)" : "var(--ink-muted)"};font-size:10px" pointer-events="none">⛓</text>`);
+  (isOn("lust") ? t.lust || [] : []).forEach((l) =>
+    g += `<text x="${x(l.t_s)}" y="${top + 9}" text-anchor="middle" style="fill:var(--high)" pointer-events="none">⚡</text>`);
+  ready.forEach((ln, i) => {
+    const yc = readyTop + i * laneH;
+    g += `<rect x="${L}" y="${yc}" width="${plotW}" height="${laneH - 3}" fill="var(--grid)" opacity=".6" pointer-events="none"/>`;
+    ln.ready.forEach(([a, b]) => g += `<rect x="${x(a)}" y="${yc}" width="${Math.max(1, x(b) - x(a))}" height="${laneH - 3}"
+      fill="var(--good)" opacity=".7" pointer-events="none"/>`);
+  });
+  // labels
+  g += `<text class="lane" x="8" y="${top + 12}">Whole run</text>`;
+  ready.forEach((ln, i) => g += `<text class="lane" x="8" y="${readyTop + i * laneH + 6}" style="font-size:9px">${esc(ln.name)} ready</text>`);
+  g += `<rect id="ovDrag" x="0" y="0" width="0" height="${H}" fill="var(--accent)" opacity=".15" pointer-events="none"/>`;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  svg.innerHTML = g;
+
+  const tip = $("ovTip"), drag = $("ovDrag");
+  const px = (ev) => { const r = svg.getBoundingClientRect(); return (ev.clientX - r.left) * (W / r.width); };
+  let down = null;
+  svg.onmousedown = (ev) => { down = px(ev); ev.preventDefault(); };
+  svg.onmousemove = (ev) => {
+    const p = px(ev);
+    if (down != null && Math.abs(p - down) > 4) {
+      drag.setAttribute("x", Math.min(p, down)); drag.setAttribute("width", Math.abs(p - down));
+      tip.style.display = "none";
+      return;
+    }
+    const sg = segs.find((g) => p >= g.x0 - OV_GAP / 2 && p <= g.x1 + OV_GAP / 2);
+    if (!sg) { tip.style.display = "none"; return; }
+    const ln = (t.ready_lanes || []).map((l) => {
+      const inside = l.ready.reduce((s, [a, b]) => s + Math.max(0, Math.min(b, sg.p.end_s) - Math.max(a, sg.p.start_s)), 0);
+      return inside >= 30 ? `${l.name} sat ready ${Math.round(inside)}s` : "";
+    }).filter(Boolean);
+    tip.innerHTML = `<b>${esc(sg.p.label)}</b><br>${fmtClock(sg.p.start_s)}-${fmtClock(sg.p.end_s)} (${Math.round(sg.p.end_s - sg.p.start_s)}s)
+      · ${sg.p.deaths || 0} death${sg.p.deaths === 1 ? "" : "s"}${(sg.p.death_lines || []).map((d) => `<br>✕ ${esc(d)}`).join("")}
+      <br>${esc(sg.p.verdict || "")}${sg.p.avoid ? `<br>⚠ ${esc(sg.p.avoid)}` : ""}${sg.p.chain ? `<br>⛓ ${esc(sg.p.chain)}` : ""}${ln.length ? `<br>${esc(ln.join(" · "))}` : ""}`;
+    tip.style.display = "block";
+    tip.style.left = `${Math.max(0, Math.min(p / W * wrap.clientWidth + 10, wrap.clientWidth - tip.offsetWidth - 4))}px`;
+    tip.style.top = `${top + hpH}px`;
+  };
+  svg.onmouseleave = () => { tip.style.display = "none"; };
+  window.onmouseup = (ev) => {
+    if (down == null) return;
+    const p = px(ev), a = Math.min(p, down), b = Math.max(p, down);
+    down = null;
+    drag.setAttribute("width", 0);
+    if (b - a > 4) {
+      const s0 = toS(a), s1 = toS(b);
+      focusTimeline(s0, s1);
+    } else {
+      const i = segs.findIndex((g) => p >= g.x0 - OV_GAP / 2 && p <= g.x1 + OV_GAP / 2);
+      if (i >= 0) selectPull(i);
+    }
+  };
+  svg.ondblclick = () => selectPull(-1);
+}
+
+function markerKind(m) { return m.kind === "potion" ? "trinket" : m.kind; }
+
+function drawTimeline() {
+  const res = TL.res, t = res.timeline, whole = TL.pull < 0, p = whole ? null : t.pulls[TL.pull];
+  const pinned = $("tlSection").classList.contains("pinned");
+  $("tlPull").value = TL.pull;
+  $("tlZoomOut").hidden = !TL.view;
+  $("tlWhole").hidden = whole;
+  $("tlScope").textContent = whole ? "Whole run" : TL.view ? `${pullShort(p.label)} · zoomed` : pullShort(p.label);
+  const svg = $("tlSvg"), wrap = $("tlWrap");
+  const W = Math.max(320, wrap.clientWidth);
+  const L = W < 560 ? 84 : 128, R = 8, plotW = W - L - R;
+  const hpTop = 22, hpH = pinned ? 64 : 160, laneH = pinned ? 11 : 18, lanesTop = hpTop + hpH + 8;
+  const partyTop = lanesTop + LANES.length * laneH + 8;
+  const lanes = t.lanes || [];
+  const manaTop = partyTop + lanes.length * laneH + 10, manaH = pinned ? 0 : 36;
+  const axisY = manaTop + manaH + 4, H = axisY + 20;
+  // Whole run: the overview's scale (pulls side by side, gaps squeezed). One pull: linear over the pull or zoom.
+  const last = t.pulls[t.pulls.length - 1];
+  const [s0, s1] = whole ? [t.pulls[0].start_s, last.end_s] : TL.view || [p.start_s, Math.max(p.end_s, p.start_s + 1)];
+  const span = s1 - s0;
+  const sc = whole ? overviewScale(t, L, plotW) : null;
+  const x = whole ? sc.x : (s) => L + (s - s0) / span * plotW;
+  const shown = whole ? t.pulls : [p];
+  const pullAt = (s) => whole ? t.pulls.find((q) => s >= q.start_s && s <= q.end_s) : p;
+  const yHp = (v) => hpTop + (1 - v) * hpH;
+  const yMana = (v) => manaTop + (1 - v) * manaH;
+  const ranges = whole ? t.pulls.map((q) => [q.start_s, q.end_s]) : [[s0, s1]];
+  const stride = whole ? Math.max(1, Math.round(span / t.bin_s / plotW)) : 1;  // ~1 point per pixel
+  const pts = (arr, y) => {
+    let d = "";
+    for (const [a, b] of ranges) {  // a separate stroke per pull - no lines across the squeezed gaps
+      const b0 = Math.max(0, Math.floor(a / t.bin_s)), b1 = Math.min(arr.length - 1, Math.ceil(b / t.bin_s));
+      let first = true;
+      for (let k = b0; k <= b1; k += stride) if (arr[k] != null) {
+        d += `${first ? "M" : "L"}${x(k * t.bin_s).toFixed(1)},${y(arr[k]).toFixed(1)}`;
+        first = false;
+      }
+    }
+    return d;
+  };
+  TL.tips = [];
+  const tipAttr = (lines) => { TL.tips.push(lines); return `data-tip="${TL.tips.length - 1}" style="cursor:pointer"`; };
+  let g = `<rect id="tlHit" x="${L}" y="0" width="${plotW}" height="${H}" fill="transparent"/>`;
+  g += `<defs><clipPath id="tlClip"><rect x="${L}" y="0" width="${plotW}" height="${H}"/></clipPath></defs><g clip-path="url(#tlClip)">`;
+  if (whole) {  // pull boundaries and names instead of phase names
+    sc.segs.forEach((sg) => {
+      if (sg.p.boss) g += `<rect x="${sg.x0}" y="${hpTop}" width="${sg.x1 - sg.x0}" height="${axisY - hpTop}" fill="var(--phase-a)"/>`;
+      g += `<line x1="${sg.x0}" x2="${sg.x0}" y1="${hpTop - 14}" y2="${axisY}" stroke="var(--axis)" stroke-dasharray="2 3"/>`;
+      const label = pullShort(sg.p.label);
+      if (sg.x1 - sg.x0 > label.length * 6 + 6)
+        g += `<text x="${sg.x0 + 3}" y="${hpTop - 5}" ${sg.p.boss ? 'style="font-weight:700"' : ""}>${esc(label)}</text>`;
+    });
+  } else p.phases.forEach((ph, i) => {
+    const xa = x(ph.start_s), xb = x(Math.min(ph.end_s, p.end_s));
+    if (i % 2 === 1) g += `<rect x="${xa}" y="${hpTop}" width="${xb - xa}" height="${axisY - hpTop}" fill="var(--phase-a)"/>`;
+    g += `<line x1="${xa}" x2="${xa}" y1="${hpTop - 14}" y2="${axisY}" stroke="var(--axis)" stroke-dasharray="2 3"/>`;
+    g += `<text x="${xa + 4}" y="${hpTop - 5}">${esc(ph.name)}</text>`;
+  });
+  if (TL.mark) {
+    const [ma, mb] = TL.mark;
+    g += `<rect x="${x(ma) - 2}" y="${hpTop - 4}" width="${Math.max(4, x(mb) - x(ma) + 4)}" height="${axisY - hpTop + 4}"
+      fill="var(--accent)" opacity=".12"/>`;
+  }
+  t.markers.filter((m) => m.kind === "chain" && isOn("chain") && m.t_s >= s0 - 1 && m.t_s <= s1).forEach((m) => {
+    const xm = Math.max(L + 1, x(m.t_s)), col = m.risky ? "var(--warning)" : "var(--axis)";
+    g += `<line x1="${xm}" x2="${xm}" y1="${hpTop}" y2="${hpTop + hpH}" stroke="${col}" stroke-width="2" stroke-dasharray="4 3"/>`;
+    g += `<text x="${xm + 3}" y="${hpTop + 12}" style="fill:${col};font-weight:700" ${tipAttr(m.tip)}>${whole ? "⛓" : "⛓ Chain"}</text>`;
+  });
+  (isOn("uncovered") ? t.uncovered_hits || [] : []).filter((s) => s >= s0 && s <= s1).forEach((s) =>
+    g += `<rect x="${x(s) - 2}" y="${hpTop}" width="4" height="${hpH}" fill="var(--critical)" opacity=".25"/>`);
+  [0, 0.5, 1].forEach((v) => g += `<line x1="${L}" x2="${W - R}" y1="${yHp(v)}" y2="${yHp(v)}" stroke="var(--grid)"/>`);
+  shown.filter((q) => q.top_curve && isOn("top")).forEach((q) => {
+    const xs = (f) => x(q.start_s + f * (q.end_s - q.start_s));
+    const upper = q.top_curve.map(([f, , , hi]) => `${xs(f).toFixed(1)},${yHp(hi).toFixed(1)}`);
+    const lower = q.top_curve.slice().reverse().map(([f, lo]) => `${xs(f).toFixed(1)},${yHp(lo).toFixed(1)}`);
+    g += `<polygon points="${upper.concat(lower).join(" ")}" fill="var(--ink-muted)" opacity=".16"/>`;
+    g += `<path d="M${q.top_curve.map(([f, , med]) => `${xs(f).toFixed(1)},${yHp(med).toFixed(1)}`).join("L")}"
+      fill="none" stroke="var(--ink-muted)" stroke-dasharray="4 3" stroke-width="1.5"/>`;
+  });
+  if (isOn("lowest")) g += `<path d="${pts(t.lowest, yHp)}" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linejoin="round"/>`;
+  if (isOn("group")) g += `<path d="${pts(t.group, yHp)}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>`;
+  const inView = t.markers.filter((m) => m.t_s >= s0 && m.t_s <= s1 && (!whole || pullAt(m.t_s))
+    && !(m.kick && !isOn("avoid")) && !(m.kind === "death" && !isOn("deaths")));
+  const near = (m) => TL.mark && m.t_s >= TL.mark[0] - 1 && m.t_s <= TL.mark[1] + 1 ? ` class="flashmark"` : "";
+  // Whole run: markers closer than CLUSTER_PX merge into one, drawn as the most important of them,
+  // with a tooltip listing them all.
+  const CLUSTER_PX = 9;
+  const weight = (m) => (m.severity || 0) + (m.covered === false ? 50 : 0) + (m.kick || m.avoid ? 20 : 0);
+  const clusters = (ms) => {
+    if (!whole) return ms.map((m) => [m]);
+    const out = [];
+    for (const m of ms.slice().sort((a, b) => a.t_s - b.t_s)) {
+      const c = out[out.length - 1];
+      if (c && x(m.t_s) - x(c[0].t_s) < CLUSTER_PX) c.push(m); else out.push([m]);
+    }
+    return out;
+  };
+  const clusterTip = (grp, label) => grp.length === 1 ? (grp[0].tip || [grp[0].label]) : [
+    `${grp.length} × ${label} · ${fmtClock(grp[0].t_s)}-${fmtClock(grp[grp.length - 1].t_s)}`,
+    ...grp.slice(0, 6).map((m) => `${fmtClock(m.t_s)} ${m.label}${m.avoid ? ` (${m.avoid})` : ""}`),
+    ...(grp.length > 6 ? [`+${grp.length - 6} more - pick the pull to see them`] : [])];
+  LANES.forEach(([kind, label], i) => {
+    const yc = lanesTop + i * laneH + laneH / 2;
+    g += `<line x1="${L}" x2="${W - R}" y1="${yc}" y2="${yc}" stroke="var(--grid)"/>`;
+    clusters(inView.filter((m) => markerKind(m) === kind)).forEach((grp) => {
+      const m = grp.reduce((best, c) => weight(c) > weight(best) ? c : best, grp[0]);
+      const xm = x(m.t_s), tip = tipAttr(clusterTip(grp, label));
+      if (grp.length > 2 && !pinned) g += `<text x="${xm + 6}" y="${yc - 3}" style="font-size:9px" pointer-events="none">${grp.length}</text>`;
+      if (kind === "death") {
+        g += `<path${near(m)} d="M${xm - 4},${yc - 4}L${xm + 4},${yc + 4}M${xm + 4},${yc - 4}L${xm - 4},${yc + 4}" stroke="var(--critical)" stroke-width="2.5" ${tip}/>`;
+        g += `<rect x="${xm - 7}" y="${yc - 7}" width="14" height="14" fill="transparent" ${tip}/>`;
+      } else if (kind === "finding") {
+        const col = m.severity >= 70 ? "var(--critical)" : m.severity >= 45 ? "var(--warning)" : "var(--ink-muted)";
+        g += `<circle${near(m)} cx="${xm}" cy="${yc}" r="5" fill="${col}" stroke="var(--panel)" stroke-width="2" data-f="${m.index}" ${tip}/>`;
+      } else if (kind === "hit" && m.kick) {
+        g += `<path${near(m)} d="M${xm},${yc - 5}L${xm + 5},${yc}L${xm},${yc + 5}L${xm - 5},${yc}Z" fill="var(--warning)" ${tip}/>`;
+      } else if (kind === "hit") {
+        g += `<line${near(m)} x1="${xm}" x2="${xm}" y1="${yc - 5}" y2="${yc + 5}" stroke="${m.covered === false ? "var(--critical)" : "var(--muted)"}"
+          stroke-width="3" stroke-linecap="round" ${tip}/>`;
+        if (m.avoid && isOn("avoid")) g += `<circle cx="${xm}" cy="${yc - 7}" r="2.5" fill="var(--warning)" pointer-events="none"/>`;
+      } else {
+        g += `<rect${near(m)} x="${xm - 4}" y="${yc - 6}" width="8" height="12" rx="2" fill="var(--text)" opacity=".75" ${tip}/>`;
+      }
+    });
+  });
+  lanes.forEach((ln, i) => {
+    const yc = partyTop + i * laneH + laneH / 2;
+    g += `<line x1="${L}" x2="${W - R}" y1="${yc}" y2="${yc}" stroke="var(--grid)"/>`;
+    (t.defense || []).filter((d) => d.lane === ln.id && isOn(SCOPE_KEY[d.scope]) && d.end_s >= s0 && d.start_s <= s1).forEach((d) => {
+      const xa = x(Math.max(d.start_s, s0)), xb = x(Math.min(d.end_s, s1));
+      g += `<rect x="${xa}" y="${yc - 5}" width="${Math.max(3, xb - xa)}" height="10" rx="2" fill="${SCOPE_COLOR[d.scope]}"
+        opacity="${d.protective ? .85 : .4}" ${tipAttr(d.tip)}/>`;
+    });
+  });
+  if (manaH && t.mana.length) {
+    [0, 1].forEach((v) => g += `<line x1="${L}" x2="${W - R}" y1="${yMana(v)}" y2="${yMana(v)}" stroke="var(--grid)"/>`);
+    g += `<path d="${pts(t.mana, yMana)}" fill="none" stroke="var(--series-1)" stroke-width="2"/>`;
+  }
+  g += `</g>`;
+  // labels outside the clip
+  [0, 0.5, 1].forEach((v) => g += `<text x="${L - 6}" y="${yHp(v) + 4}" text-anchor="end">${v * 100}%</text>`);
+  g += `<text class="lane" x="8" y="${hpTop + 12}">HP</text>`;
+  LANES.forEach(([, label], i) => g += `<text class="lane" x="8" y="${lanesTop + i * laneH + laneH / 2 + 4}">${label}</text>`);
+  lanes.forEach((ln, i) => {
+    const yc = partyTop + i * laneH + laneH / 2;
+    g += `<rect x="8" y="${yc - 5}" width="3" height="10" fill="${CLASS_COLORS[ln.class] || "var(--line)"}"/>
+      <text class="lane" x="15" y="${yc + 4}">${esc(ln.name)}</text>`;
+  });
+  if (manaH) g += `<text class="lane" x="8" y="${manaTop + 12}">Your mana</text>`;
+  if (whole) {  // run time at pull starts that have room for a label
+    let lastX = -1e9;
+    t.pulls.forEach((q) => {
+      const xq = x(q.start_s);
+      if (xq - lastX >= 40) { g += `<text x="${xq}" y="${axisY + 14}" text-anchor="start">${fmtClock(q.start_s)}</text>`; lastX = xq; }
+    });
+  } else {
+    const step = span > 240 ? 60 : span > 100 ? 30 : span > 40 ? 10 : 5;
+    for (let s = Math.ceil(s0 / step) * step; s <= s1; s += step)
+      g += `<text x="${x(s)}" y="${axisY + 14}" text-anchor="middle">${fmtClock(s)}</text>`;
+  }
+  g += `<line id="tlCross" x1="0" x2="0" y1="${hpTop}" y2="${axisY}" stroke="var(--text)" stroke-width="1" opacity="0" pointer-events="none"/>`;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  svg.innerHTML = g;
+
+  const tip = $("tlTip"), cross = $("tlCross");
+  const place = (xm, html) => {
+    tip.innerHTML = html;
+    tip.style.display = "block";
+    const left = Math.min(xm / W * wrap.clientWidth + 12, wrap.clientWidth - tip.offsetWidth - 4);
+    tip.style.left = `${Math.max(0, left)}px`;
+    tip.style.top = `${hpTop}px`;
+  };
+  const toS = (ev) => {
+    const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) * (W / r.width);
+    return whole ? sc.toS(px) : s0 + (px - L) / plotW * span;
+  };
+  svg.onmousemove = (ev) => {
+    const s = Math.min(s1, Math.max(s0, toS(ev))), xm = x(s);
+    cross.setAttribute("x1", xm); cross.setAttribute("x2", xm); cross.setAttribute("opacity", ".35");
+    const el = ev.target.closest("[data-tip]");
+    if (el) {
+      const lines = TL.tips[+el.dataset.tip];
+      place(xm, `<b>${T(lines[0])}</b>${lines.slice(1).map((l) => `<br>${T(l)}`).join("")}`);
+      return;
+    }
+    const b = Math.round(s / t.bin_s), pct = (v) => v == null ? "-" : `${Math.round(v * 100)}%`;
+    const q = pullAt(s) || p;
+    if (!q) { tip.style.display = "none"; return; }
+    const phase = q.phases.find((ph) => s >= ph.start_s && s < ph.end_s);
+    const topAt = q.top_curve ? q.top_curve[Math.max(0, Math.min(q.top_curve.length - 1,
+      Math.round((s - q.start_s) / (q.end_s - q.start_s) * (q.top_curve.length - 1))))] : null;
+    place(xm, `<b>${fmtClock(s)}</b>${whole ? ` · ${esc(pullShort(q.label))}` : ""}${phase ? ` · ${esc(phase.name)}` : ""}<br>
+      Group <b>${pct(t.group[b])}</b> · Lowest <b>${pct(t.lowest[b])}</b> · Mana <b>${pct(t.mana[b])}</b>
+      ${topAt ? `<br>Top groups here: <b>${pct(topAt[2])}</b> (middle half ${pct(topAt[1])}-${pct(topAt[3])})` : ""}`);
+  };
+  svg.onmouseleave = () => { tip.style.display = "none"; cross.setAttribute("opacity", "0"); };
+  svg.onclick = (ev) => {
+    const f = ev.target.closest("[data-f]");
+    if (f) return flashFinding(+f.dataset.f);
+    if (whole) {  // click a pull in the whole-run view to open it
+      const q = pullAt(toS(ev));
+      if (q) selectPull(t.pulls.indexOf(q));
+    }
+  };
+  drawOverview();
+}
+
+// i = pull index, or -1 for the whole run. Also filters "What to look at" to that pull.
+function selectPull(i) {
+  TL.pull = i; TL.view = null; TL.mark = null;
+  drawTimeline();
+  filterLook(i < 0 ? null : i);
+}
+
+function focusTimeline(s, e) {
+  if (!TL) return;
+  const pulls = TL.res.timeline.pulls;
+  let i = pulls.findIndex((p) => s >= p.start_s - 1 && s <= p.end_s + 1);
+  if (i < 0) i = pulls.reduce((best, p, k) => Math.abs(p.start_s - s) < Math.abs(pulls[best].start_s - s) ? k : best, 0);
+  const p = pulls[i], end = e != null ? e : s;
+  const pad = e != null ? Math.max(3, (end - s) * 0.15) : 15;
+  TL.pull = i;
+  TL.view = [Math.max(p.start_s, s - pad), Math.min(p.end_s, end + pad)];
+  if (TL.view[1] - TL.view[0] < 6) TL.view = [p.start_s, p.end_s];
+  TL.mark = [s, end];
+  drawTimeline();
+  if (!$("tlSection").classList.contains("pinned")) $("tlSection").scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+function flashFinding(i) {
+  const el = document.querySelector(`.finding[data-i="${i}"]`);
+  if (!el) return;
+  if (el.hidden) filterLook(null);
+  el.open = true;
+  el.scrollIntoView({behavior: "smooth", block: "center"});
+  el.classList.add("flash");
+  setTimeout(() => el.classList.remove("flash"), 1600);
+}
+
+function setPinned(on) {
+  const sec = $("tlSection");
+  sec.classList.toggle("pinned", on);
+  sec.classList.remove("collapsed");
+  $("tlPin").classList.toggle("on", on);
+  $("tlPin").textContent = on ? "📌 Pinned" : "📌 Pin";
+  $("tlFold").hidden = !on;
+  $("tlFold").textContent = "Hide chart";
+  lsSet("tlPinned", on ? "1" : "0");
+  drawTimeline();
+  updatePinHeight();
+}
+
+function updatePinHeight() {
+  const sec = $("tlSection");
+  const h = sec && sec.classList.contains("pinned") ? sec.offsetHeight : 0;
+  document.documentElement.style.setProperty("--pin-h", `${h}px`);
+}
+
+function initTimeline(res) {
+  if (!res.timeline || !res.timeline.pulls.length) return;
+  TL = {res, pull: 0, view: null, mark: null, tips: []};
+  const first = res.findings.find((f) => f.pull !== "Whole run");
+  const start = first ? res.timeline.pulls.findIndex((p) => first.t_s >= p.start_s && first.t_s <= p.end_s) : 0;
+  TL.pull = Math.max(0, start);
+  $("tlPull").onchange = (e) => selectPull(+e.target.value);
+  $("tlWhole").onclick = () => selectPull(-1);
+  document.querySelectorAll("#tlSection .lg").forEach((b) => b.onclick = () => {
+    const k = b.dataset.k, off = !TL_HIDDEN.has(k);
+    if (off) TL_HIDDEN.add(k); else TL_HIDDEN.delete(k);
+    b.classList.toggle("off", off);
+    b.setAttribute("aria-pressed", String(!off));
+    lsSet("tlHidden", [...TL_HIDDEN].join(","));
+    drawTimeline();
+  });
+  $("tlZoomOut").onclick = () => { TL.view = null; drawTimeline(); };
+  $("tlPin").onclick = () => setPinned(!$("tlSection").classList.contains("pinned"));
+  $("tlFold").onclick = () => {
+    const c = $("tlSection").classList.toggle("collapsed");
+    $("tlFold").textContent = c ? "Show chart" : "Hide chart";
+    updatePinHeight();
+  };
+  setPinned(lsGet("tlPinned") === "1");
+}
+window.addEventListener("resize", () => { if (TL && $("tlSvg")) { drawTimeline(); updatePinHeight(); } });
+
+// ---------- sections ----------
+const SECTIONS = {
+  look: {title: "What to look at", icon: "!", color: "var(--high)"},
+  deaths: {title: "Death recaps", icon: "✕", color: "var(--critical)"},
+  phases: {title: "Boss phases", icon: "◐", color: "var(--series-7)"},
+  items: {title: "Trinkets & consumables", icon: "◆", color: "var(--series-3)"},
+  spells: {title: "Healing Wave vs Chain Heal", icon: "≈", color: "var(--series-1)"},
+  pulls: {title: "Pulls vs top groups", icon: "▤", color: "var(--ink-muted)"},
+  good: {title: "Good calls", icon: "✓", color: "var(--good)"},
+  compare: {title: "You vs a top player", icon: "⇄", color: "var(--accent)"},
+};
+
+// ---------- compare: you vs one top player, pull by pull ----------
+function renderCompareShell() {
+  return sec("compare", "", "", "", false).replace('<div class="secempty"></div>', `
+    <div class="paste" style="flex-wrap:wrap">
+      <select id="cmpPick" aria-label="Top player log" style="flex:1 1 280px"><option value="">Loading top logs...</option></select>
+      <input id="cmpUrl" placeholder="...or paste any log URL" style="flex:1 1 200px">
+      <button class="primary" id="cmpGo">Compare</button></div>
+    <div id="cmpOut" class="secempty">Pick a top player's run at your key level to see what they did differently, pull by pull.</div>`);
+}
+
+async function initCompare(url) {
+  try {
+    const {candidates} = await api(`/api/compare/candidates?url=${encodeURIComponent(url)}`);
+    $("cmpPick").innerHTML = candidates.length ? candidates.map((c) =>
+      `<option value="${esc(c.url)}">${esc(c.player)} · +${c.key} ${c.timed ? "timed" : "not timed"} · ${c.duration_min} min${c.region ? " · " + esc(c.region) : ""}</option>`).join("")
+      : `<option value="">No comparable top logs</option>`;
+  } catch (e) { $("cmpPick").innerHTML = `<option value="">${esc(e.message)}</option>`; }
+  $("cmpGo").onclick = () => runCompare(url, $("cmpUrl").value.trim() || $("cmpPick").value);
+}
+
+async function runCompare(url, other) {
+  if (!other) return;
+  $("cmpOut").innerHTML = `<div class="progress">Comparing...</div>`;
+  try {
+    const {job} = await api("/api/compare", {method: "POST", body: JSON.stringify({url, other_url: other})});
+    while (true) {
+      await new Promise((r) => setTimeout(r, 1200));
+      const j = await api(`/api/jobs/${job}`);
+      if (j.status === "done") { renderCompare(j.result); return; }
+      if (j.status === "error") throw new Error(j.error);
+    }
+  } catch (e) { $("cmpOut").innerHTML = `<p class="error">${esc(e.message)}</p>`; }
+}
+
+function renderCompare(r) {
+  const side = (s) => `${esc(s.player)} +${s.key} ${s.timed ? "timed" : "not timed"}, ${s.duration_min} min, ${s.deaths} death${s.deaths === 1 ? "" : "s"}`;
+  const pct = (v) => v == null ? "-" : `${Math.round(v * 100)}%`;
+  const fmt = (st) => ({
+    "Group HP": pct(st.group_hp), "Deaths": st.deaths, "Length": `${st.duration_s}s`,
+    "Damage taken / s": `${(st.intake * 100).toFixed(1)}% of group HP`,
+    "Avoidable damage": st.avoidable == null ? "-" : `${pct(st.avoidable)}${st.avoidable_names.length ? ` (${st.avoidable_names.join(", ")})` : ""}`,
+    "Cooldowns": st.cooldowns.map(([n, t]) => `${n} (${t}s in)`).join(", ") || "-",
+    "Trinkets / potions": st.items.length, "Riptides before hits": st.riptides_before_hits ?? "-",
+    "Chain Heal with 2+ injured": pct(st.ch_share_busy),
+    "Dispels": st.dispels.map(([who, what, t]) => `${who === "self" ? "self" : "other"}: ${what} (${t}s in)`).join(", ") || "-",
+    "Group defensives": st.group_defensives.join(", ") || "-",
+  });
+  const cards = r.verdicts.map((v) => {
+    const a = fmt(v.you), b = fmt(v.them);
+    return `<details class="finding med"><summary><span class="pl">${esc(v.pull)}</span>
+        <span class="title">${esc(v.headline)}</span><span class="fix">${esc(v.cause)}</span></summary>
+      <div class="body"><ul>
+        ${v.outcome.map((x) => `<li><strong>Outcome:</strong> ${esc(x)}</li>`).join("")}
+        ${v.healer.map((x) => `<li><strong>They did:</strong> ${esc(x)}</li>`).join("")}
+        ${v.why.map((x) => `<li><strong>Not your healing:</strong> ${esc(x)}</li>`).join("")}</ul>
+        <details><summary>Show data</summary><div class="tablewrap"><table><tr><th></th><th>You</th><th>${esc(r.them.player)}</th></tr>
+          ${Object.keys(a).map((k) => `<tr><td>${k}</td><td>${esc(a[k])}</td><td>${esc(b[k])}</td></tr>`).join("")}</table></div></details>
+      </div></details>`;
+  }).join("");
+  $("cmpOut").className = "";
+  $("cmpOut").innerHTML = `<div class="compnote">${side(r.you)} vs ${side(r.them)} ·
+      <a class="link" href="${esc(r.them.url)}" target="_blank" rel="noopener">their log</a></div>
+    ${cards || `<div class="secempty">No pull where they clearly did better.</div>`}
+    <div class="compnote">${r.same} pull${r.same === 1 ? "" : "s"} played out the same or better for you${r.unmatched
+      ? `; ${r.unmatched} couldn't be matched (different route)` : ""}.</div>`;
+}
+
+function sec(id, count, body, emptyText, foldable = true) {
+  const s = SECTIONS[id];
+  const tools = foldable && count ? `<button onclick="foldAll('${id}', true)">Expand all</button>
+    <button onclick="foldAll('${id}', false)">Collapse all</button>` : "";
+  return `<section class="sec" id="sec-${id}" style="--acc:${s.color}">
+    <div class="sechead"><span class="ico">${s.icon}</span><h2>${s.title}</h2>
+      <span class="badge">${count}</span><span class="sp"></span>${tools}</div>
+    ${count ? body : `<div class="secempty">${esc(emptyText)}</div>`}</section>`;
+}
+
+function foldAll(id, open) {
+  document.querySelectorAll(`#sec-${id} details`).forEach((d) => {
+    d.open = open;
+  });
+}
+
+function nav(counts) {
+  return `<nav class="secnav">${Object.entries(SECTIONS).map(([id, s]) =>
+    `<a href="#sec-${id}" style="--acc:${s.color}" onclick="event.preventDefault();
+      document.getElementById('sec-${id}').scrollIntoView({behavior:'smooth'})">${s.title}<span class="n">${counts[id] ?? ""}</span></a>`).join("")}</nav>`;
+}
+
+// A verdict section: headline as the collapsed line, lines + data on expand.
+function verdictBlock(v, dataHtml) {
+  if (!v || !v.headline) return dataHtml || "";
+  const lines = (v.lines || []).map((l) => `<li class="${l.action ? "act" : "okay"}">
+      <span class="mark">${l.action ? "→" : "✓"}</span><span>${T(l.text)}
+      ${l.examples.length ? `<span class="ex">${l.examples.map((e) => `<span>${T(e)}</span>`).join("")}</span>` : ""}</span></li>`).join("");
+  return `<details class="vsec ${v.ok ? "ok" : "todo"}"><summary>${v.ok ? "✓" : "→"} ${T(v.headline)}</summary>
+    <div class="body"><div class="verdict">${lines ? `<ul>${lines}</ul>` : ""}</div>${dataHtml || ""}</div></details>`;
+}
+
+// ---------- death recaps ----------
+const VERDICT = {lived: "Likely lived", close: "Too close to call", died: "Would still die"};
+
+function renderDeathItem(i, showOwner) {
+  const chip = i.verdict ? ` <span class="chip ${i.verdict}">${VERDICT[i.verdict]}${i.verdict !== "died" && i.lowest != null
+    ? ` ~${Math.round(i.lowest * 100)}%` : ""}</span>` : "";
+  return `<div class="item"><strong>${esc(i.name)}</strong>${showOwner ? ` <span class="sub">(${esc(i.owner)})</span>` : ""}${chip}
+    <div class="sub">${T(i.text)}</div></div>`;
+}
+
+function renderDeathCol(title, items, showOwner) {
+  const known = items.filter((i) => i.status !== "unknown" && !i.escape);
+  const unknown = items.filter((i) => i.status === "unknown" && !i.escape);
+  return `<div class="col"><h4>${esc(title)}</h4>
+    ${known.length ? known.map((i) => renderDeathItem(i, showOwner)).join("") : `<div class="none">Nothing tracked.</div>`}
+    ${unknown.length ? `<div class="none" title="Never pressed this run - may not be talented">Not pressed all run: ${unknown.map((i) =>
+      esc(i.name) + (i.verdict ? ` (${VERDICT[i.verdict].toLowerCase()})` : "")).join(", ")}</div>` : ""}</div>`;
+}
+
+function renderDeaths(res) {
+  const deaths = res.deaths || [];
+  const k = (v) => v == null ? "" : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : `${Math.round(v / 1000)}k`;
+  const cards = deaths.map((d) => {
+    const t0 = d.t_s != null ? d.t_s : null;
+    const rows = d.events.map((e, i) => `<tr class="${i < d.events.length - 8 ? "older" : ""}" ${i < d.events.length - 8 ? "hidden" : ""}>
+      <td>${e.dt.toFixed(1)}s</td><td class="${e.kind}">${e.kind === "hit" ? "Hit" : e.kind === "heal" ? "Heal" : "Defensive"}</td>
+      <td>${esc(e.ability)}${e.school ? ` <span class="sub">(${e.school})</span>` : ""}</td><td>${esc(e.source || "")}</td>
+      <td>${e.kind === "defensive" ? "" : k(e.amount)}${e.overkill ? ` <span class="sub">(${k(e.overkill)} overkill)</span>` : ""}${e.overheal ? ` <span class="sub">(${k(e.overheal)} overheal)</span>` : ""}</td>
+      <td>${e.hp == null ? "" : `<span class="hpbar"><i style="width:${Math.round(e.hp * 100)}%"></i></span>${Math.round(e.hp * 100)}%`}</td></tr>`).join("");
+    const older = Math.max(0, d.events.length - 8);
+    return `<details class="death" data-clock="${esc(d.clock)}" data-victim="${esc(d.victim)}">
+      <summary><span class="when">${T(d.clock)}</span><span class="sub">${esc(pullShort(d.pull))}</span>
+        <strong>${esc(d.victim)}</strong> ${esc(d.short || `died to ${d.killing}`)}
+        ${d.avoid ? `<span class="chip avoid" title="${esc(d.avoid.line)}">${esc(d.avoid.label)}</span>` : ""}
+        ${d.fix ? `<span class="fix">→ ${esc(d.fix)}</span>` : ""}</summary>
+      <div class="body">
+        ${d.story && d.story.advice.length ? `<div class="advice"><strong>What to do:</strong><ul style="margin:4px 0 0;padding-left:18px">
+          ${d.story.advice.map((a) => `<li>${T(a)}</li>`).join("")}</ul></div>` : ""}
+        ${d.avoid ? `<div class="story"><strong>⚠ ${esc(d.avoid.label)}:</strong> ${T(d.avoid.line.split(" - ").slice(1).join(" - "))}</div>` : ""}
+        ${d.cause ? `<div class="story"><strong>Cause:</strong> ${T(d.cause.lines.join(" · "))}
+          ${d.cause.name !== d.killing ? ` · killing blow ${esc(d.killing)}` : ""}</div>` : ""}
+        ${d.story ? `<ul class="storylines">${d.story.lines.map((l) => `<li>${T(l)}</li>`).join("")}</ul>` : ""}
+        ${(d.last_casts || []).filter((x) => x.target).length ? `<div class="story"><strong>Last casts:</strong> ${esc(d.last_casts
+          .filter((x) => x.target).map((x) => `${x.ability} → ${x.target}${x.hp != null ? ` @${Math.round(x.hp * 100)}%` : ""} (${x.dt.toFixed(1)}s)`)
+          .join(" · "))}</div>` : ""}
+        <div class="cols">
+          ${renderDeathCol("Group", d.ready.group, true)}
+          ${renderDeathCol(d.victim === res.run.player ? `${d.victim} (you, died)` : `${d.victim} (died)`, d.ready.victim, false)}
+          ${renderDeathCol(`${res.run.player} (healer)`, d.ready.healer, false)}
+        </div>
+        <div class="compnote">Last 10s: took ${k(d.taken)}, healed ${k(d.healed)} (max HP ${k(d.max_hp)}).</div>
+        <div class="tablewrap"><table class="recap"><tr><th>Before death</th><th></th><th>Ability</th><th>From</th><th>Amount</th><th>HP after</th></tr>
+          ${rows}</table></div>
+        ${older ? `<button class="jump" onclick="this.closest('.death').querySelectorAll('tr.older').forEach(r=>r.hidden=false); this.remove()">Show all ${d.events.length} events</button>` : ""}
+      </div></details>`;
+  }).join("");
+  return sec("deaths", deaths.length, cards, "Deaths: none.");
+}
+
+function openDeath(clock) {
+  const el = document.querySelector(`.death[data-clock="${clock}"]`);
+  if (!el) return;
+  el.open = true;
+  el.scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+function renderPhases(res) {
+  if (!res.phases || !res.phases.length) return "";
+  const pct = (v) => v == null ? "-" : `${Math.round(v * 100)}%`;
+  const rows = res.phases.map((p) => `<tr><td>${esc(p.pull)}</td><td>${esc(p.phase)}</td><td>${T(p.clock)}</td>
+    <td>${p.duration_s}s</td><td class="${p.top_group_hp != null && p.group_hp < p.top_group_hp - 0.05 ? "worse" : ""}">${pct(p.group_hp)}</td>
+    <td>${pct(p.top_group_hp)}</td><td>${(p.intake * 100).toFixed(1)}%</td>
+    <td>${p.top_intake == null ? "-" : (p.top_intake * 100).toFixed(1) + "%"}</td><td>${p.top_n}</td></tr>`).join("");
+  return `<details><summary>Show data</summary><div class="tablewrap"><table>
+    <tr><th>Boss</th><th>Phase</th><th>Start</th><th>Length</th><th>Group HP</th><th>Top HP</th>
+    <th>Dmg taken / s</th><th>Top dmg / s</th><th>Top runs</th></tr>${rows}</table></div>
+    <div class="compnote">Phases come from one-off boss casts that start a new part of the fight in most runs.
+    Damage taken = % of group max HP per second.</div></details>`;
+}
+
+function renderSpells(res) {
+  const sc = res.spell_choice;
+  if (!sc || !sc.you) return "";
+  const pct = (v) => v == null ? "-" : `${Math.round(v * 100)}%`;
+  const k = (v) => v == null ? "-" : `${Math.round(v / 1000)}k`;
+  const label = {none: "Nobody injured", one: "1 player injured", two: "2 players injured", group: "3+ players injured"};
+  const rows = ["none", "one", "two", "group"].map((s) => {
+    const y = sc.you[s], t = (sc.top || {})[s] || {};
+    return `<tr><td>${label[s]}</td><td>${y.casts}</td><td>${pct(y.ch_share)}</td><td>${pct(t.ch_share)}</td>
+      <td>${pct(y.ch_overheal)} / ${pct(t.ch_overheal)}</td><td>${pct(y.hw_overheal)} / ${pct(t.hw_overheal)}</td>
+      <td>${k(y.ch_effective)} / ${k(y.hw_effective)}</td><td>${pct(y.mana)}</td></tr>`;
+  }).join("");
+  const bt = sc.buffs || {};
+  const buffRows = Object.entries(bt.you || {}).filter(([, y]) => y.casts).map(([name, y]) => {
+    const t = (bt.top || {})[name] || {};
+    return `<tr><td>${esc(name)}</td><td>${y.casts}</td><td>${pct(y.ch_share)}</td><td>${pct(t.ch_share)}</td>
+      <td>${k(y.ch_effective)} / ${k(y.hw_effective)}</td><td>${k(t.ch_effective)} / ${k(t.hw_effective)}</td></tr>`;
+  }).join("");
+  return `<details><summary>Show data</summary><div class="tablewrap"><table>
+    <tr><th>Situation at cast</th><th>Your heals</th><th>Your Chain Heal share</th><th>Top Chain Heal share</th>
+    <th>CH overheal (you / top)</th><th>HW overheal (you / top)</th><th>Your healing per cast (CH / HW)</th><th>Your mana</th></tr>
+    ${rows}</table></div>
+    ${buffRows ? `<div class="tablewrap" style="margin-top:12px"><table>
+    <tr><th>Buff up at cast</th><th>Your heals</th><th>Your Chain Heal share</th><th>Top Chain Heal share</th>
+    <th>Your per cast (CH / HW)</th><th>Top per cast (CH / HW)</th></tr>${buffRows}</table></div>` : ""}
+    <div class="compnote">"Injured" = below 80% HP just before the heal landed. Healing per cast counts every target hit.</div></details>`;
+}
+
+function renderFinding(f, i, res) {
+  return `<details class="finding ${sevClass(f.severity)}" data-i="${i}" data-t="${f.pull !== "Whole run" ? f.t_s : ""}">
+    <summary><span class="when">${f.pull !== "Whole run" ? T(f.clock) : "run"}</span>
+      <span class="pl">${esc(pullShort(f.pull))}</span>
+      <span class="title">${esc(f.short || f.title)}</span>
+      ${f.fix ? `<span class="fix">→ ${esc(f.fix)}</span>` : ""}
+      <span class="sev ${sevClass(f.severity)}" title="Impact score ${f.severity}">${sevLabel(f.severity)}</span></summary>
+    <div class="body">
+      <div class="pull">${esc(f.title)} · ${esc(f.pull)}${f.rule === "death" && (res.deaths || []).some((d) => d.clock === f.clock)
+        ? ` · <button class="jump" onclick="openDeath('${esc(f.clock)}')">Death recap</button>` : ""}</div>
+      ${f.context && f.context.length ? `<dl class="ctx">${f.context.map(([k, v]) =>
+        `<dt>${esc(k)}</dt><dd>${T(v)}</dd>`).join("")}</dl>` : ""}
+      ${f.detail.length ? `<ul>${f.detail.map((d) => `<li>${T(d)}</li>`).join("")}</ul>` : ""}
+    </div></details>`;
+}
+
+function render(res, url) {
+  const r = res.run, c = res.compared, v = res.verdicts || {};
+  const levels = c.levels.map((l) => `+${l}`).join(", ") || "none";
+  const good = res.good_calls.map((g) => `
+      <div class="good"><span class="check">✓</span><span>${T(g.title)} · ${esc(pullShort(g.pull))}
+      <span style="color:var(--muted)"> - ${T(g.detail.join(" "))}</span></span></div>`).join("");
+  const kk = (x) => x == null ? "-" : `${Math.round(x / 1000)}k`;
+  const pp = (x) => x == null ? "-" : `${Math.round(x * 100)}%`;
+  const rows = res.requirements.map((q) => `<tr><td>${esc(q.pull)}</td><td>${Math.round(q.duration_s)}s</td>
+      <td class="${q.top_group_hp != null && q.group_hp < q.top_group_hp - 0.03 ? "worse" : ""}">${pp(q.group_hp)}</td><td>${pp(q.top_group_hp)}</td>
+      <td>${kk(q.intake)}</td><td>${kk(q.top_intake)}</td><td>${kk(q.healing)}</td><td>${kk(q.top_healing)}</td></tr>`).join("");
+  const todo = (x) => x && x.lines ? x.lines.filter((l) => l.action).length : 0;
+  const counts = {look: res.findings.length, deaths: (res.deaths || []).length, phases: todo(v.phases),
+                  items: todo(v.items), spells: todo(v.spells), pulls: todo(v.pulls), good: res.good_calls.length};
+
+  $("main").innerHTML = `
+    <div class="runhead"><h3>${esc(r.dungeon)} +${r.level}</h3>
+      <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span>
+      <div class="actions"><a class="link" href="${esc(url)}" target="_blank" rel="noopener">Open log</a>
+      <button class="link" id="fresh">Re-analyze</button></div></div>
+    <div class="meta">${esc(r.player)} · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"} ·
+      compared with ${c.count} top Resto Shaman logs (${levels})${(c.skipped || []).length
+        ? ` <span title="${esc(c.skipped.map((s) => `${s.player} +${s.key}: ${s.reasons.join(", ")}`).join("\n"))}">(${c.skipped.length} skipped: incomplete data)</span>`
+        : ""}${c.model ? ` · context from top runs ${esc(c.model)}` : ""}</div>
+    ${renderGroup(res)}
+    ${renderTimelineShell(res)}
+    ${nav(counts)}
+    ${sec("look", res.findings.length, `<div class="lookbar" id="lookBar" hidden></div>`
+          + res.findings.map((f, i) => renderFinding(f, i, res)).join(""),
+          "Nothing worth flagging - this run holds up against top players.")}
+    ${renderDeaths(res)}
+    ${sec("phases", res.phases && res.phases.length ? counts.phases || "ok" : 0, verdictBlock(v.phases, renderPhases(res)),
+          "Boss phases: none detected on this run.", false)}
+    ${sec("items", (res.items || []).length ? counts.items || "ok" : 0, verdictBlock(v.items, renderItems(res)),
+          "Trinkets & consumables: none used.", false)}
+    ${sec("spells", res.spell_choice && res.spell_choice.you ? counts.spells || "ok" : 0, verdictBlock(v.spells, renderSpells(res)),
+          "Not enough heals to judge.", false)}
+    ${sec("pulls", rows ? counts.pulls || "ok" : 0, verdictBlock(v.pulls, `<details><summary>Show data</summary><div class="tablewrap"><table>
+      <tr><th>Pull</th><th>Time</th><th>Group HP</th><th>Top HP</th><th>Dmg in/s</th><th>Top in/s</th><th>Heal/s</th><th>Top heal/s</th></tr>
+      ${rows}</table></div></details>`), "No pulls to compare.", false)}
+    ${sec("good", res.good_calls.length, `<details class="vsec ok"><summary>✓ ${res.good_calls.length} cooldowns pressed at the right moment</summary>
+      <div class="body">${good}</div></details>`, "Good calls: none recorded.", false)}
+    ${renderCompareShell()}
+    <div class="caveat">Everything here is read from combat logs, not the encounter journal - if a mechanic has a side
+      effect the log can't show (e.g. dispelling something is punished), the advice changes. Defensive values in
+      data/defensives.json are approximate.</div>`;
+  $("fresh").onclick = () => analyze(url, true);
+  initTimeline(res);
+  initCompare(url);
+}
+
+// ---------- "What to look at" for the selected pull ----------
+// null = whole dungeon. Set when a pull is picked (dropdown / overview click), not by time links.
+function filterLook(i) {
+  const pulls = TL ? TL.res.timeline.pulls : [], p = i == null ? null : pulls[i];
+  const all = document.querySelectorAll("#sec-look .finding");
+  let n = 0;
+  all.forEach((el) => {
+    const t = el.dataset.t === "" ? NaN : +el.dataset.t;
+    const on = !p || (t >= p.start_s - 1 && t <= p.end_s + 1);
+    el.hidden = !on;
+    if (on) n++;
+  });
+  const bar = $("lookBar"), badge = document.querySelector("#sec-look .badge");
+  if (badge) badge.textContent = p ? `${n} / ${all.length}` : all.length;
+  if (!bar) return;
+  bar.hidden = !p;
+  if (p) bar.innerHTML = `<span>${n ? `Showing ${n} of ${all.length} for` : "Nothing flagged in"} <b>${esc(p.label)}</b>
+    (${fmtClock(p.start_s)}-${fmtClock(p.end_s)})</span><button class="tlbtn" onclick="filterLook(null)">Show full dungeon</button>`;
+}
+
+function openChar() { $("charError").textContent = ""; $("charDialog").showModal(); }
+$("charBtn").onclick = openChar;
+$("charForm").addEventListener("submit", async (e) => {
+  if (e.submitter && e.submitter.value === "cancel") return;
+  e.preventDefault();
+  $("charSave").disabled = true;
+  try {
+    await api("/api/settings", {method: "POST", body: JSON.stringify(
+      {name: $("cName").value.trim(), server: $("cServer").value.trim(), region: $("cRegion").value})});
+    $("charDialog").close();
+    $("runs").innerHTML = `<div class="empty">Loading...</div>`;
+    loadRuns();
+  } catch (err) { $("charError").textContent = err.message; }
+  $("charSave").disabled = false;
+});
+$("pasteForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const url = $("pasteUrl").value.trim();
+  if (url) analyze(url);
+});
+
+// ---------- top-player study ----------
+let studyTimer = null;
+async function loadStudy() {
+  try {
+    const s = await api("/api/study");
+    const job = s.job || {};
+    if (job.status === "running") {
+      $("studyBtn").textContent = `Study running: ${(job.progress || []).slice(-1)[0] || "starting..."}`;
+      clearTimeout(studyTimer); studyTimer = setTimeout(loadStudy, 5000);
+      return;
+    }
+    if (job.status === "error") { $("studyBtn").textContent = "Study failed - click to retry"; $("studyBtn").title = job.error; return; }
+    if (!s.exists) { $("studyBtn").textContent = "No top-player study - click to run"; return; }
+    const days = s.generated ? Math.floor((Date.now() - new Date(s.generated)) / 86400000) : null;
+    const counts = Object.values(s.runs || {});
+    $("studyBtn").textContent = `Study: ${days == null ? "age unknown" : days === 0 ? "today" : days + "d old"}`
+      + (counts.length ? ` · ${Math.min(...counts)}-${Math.max(...counts)} runs/dungeon` : "");
+    $("studyBtn").classList.toggle("stale", days == null || days >= 7);
+  } catch { $("studyBtn").textContent = "Top-player study"; }
+}
+$("studyBtn").onclick = async () => {
+  const s = await api("/api/study").catch(() => ({}));
+  if (s.job && s.job.status === "running") { alert((s.job.progress || []).join("\n") || "Running..."); return; }
+  if (!confirm("Refresh the top-player study (10 top runs per dungeon)?\n\nIt pauses whenever the hourly WCL budget gets low, "
+    + "so it can take a few hours. You can keep analyzing keys meanwhile; closing the app stops it (cached runs are kept).")) return;
+  try { await api("/api/study", {method: "POST", body: JSON.stringify({runs: 10})}); } catch (e) { alert(e.message); }
+  loadStudy();
+};
+
+loadRuns();
+loadBudget();
+loadStudy();
+</script>
+</body>
+</html>

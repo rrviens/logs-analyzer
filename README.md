@@ -1,0 +1,166 @@
+# wow-log-analyzer
+
+Context-aware Resto Shaman M+ analysis on top of the Warcraft Logs API.
+
+## Setup
+
+```
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+```
+
+Put your WCL API client in `.env` (see `.env.example`).
+
+## Use
+
+Double-click **`start.bat`**. It sets up the venv on first run, starts the app and opens
+http://127.0.0.1:8000. Set your character once (top right); your recent keys are listed
+(duplicates from other uploaders and short bricked keys hidden). Click a key to analyze it, or paste any log URL.
+Results are saved, so reopening a key is instant; "Re-analyze" forces a fresh run.
+
+A fresh analysis costs ~60–200 WCL API points (1000/hour), depending on how many top logs are already cached.
+
+Command line, if you prefer:
+
+```
+.\.venv\Scripts\python cli.py analyze "<report url>" [--player NAME] [--top 8] [--all] [--fresh]
+```
+
+## On the page
+
+- **Timeline** per pull: group HP, lowest player, top groups' typical HP, boss phases, lanes for healing
+  cooldowns / personals / trinkets & potions / big group hits / deaths / findings, and your mana. Hover for the
+  moment; "Show on timeline" on a finding jumps there; clicking a finding dot jumps to the finding.
+- **Boss phases** are learned from one-off boss casts that start a new part of the fight in most runs
+  (e.g. Lightwarden Ruia's Shapeshift: Bear / Haranir). Findings carry the phase, and "Group lower than top
+  groups in P3" compares each phase against the same phase in the top logs.
+- **Buffs & mana**: Tidal Waves, Unleash Life, Ascendance, Coalescing Water and Nature's Swiftness are tracked
+  at each heal (`TRACKED_BUFFS` in `app/healer_state.py`), plus your mana. Low mana during danger is flagged.
+- **What to look at per pull**: picking a pull (dropdown or a click on the overview) shows only the findings from
+  that pull; "Show full dungeon" brings back the whole list. Time links zoom without filtering.
+- **Top-player study** button (header): shows the study's age; click to refresh it with 10 runs per dungeon.
+  It pauses for the hourly API reset when the budget gets low (keeps 150 points free for your own keys).
+
+## Death recaps
+
+Every death (up to 10 per run) gets a card: what was ready from the **group**, the **player who died** and **you
+(healer)**, each ready defensive with an estimate - "Likely lived ~X%", "Too close to call" or "Would still die" -
+and the last 10 seconds of hits and heals with HP after each. The estimate replays those seconds from the real HP,
+adding only what the defensive would have changed (damage reduction, extra max HP, shield, heal), pressed just in
+time; magic-only / physical-only defensives only count against that school. Defensive values and cooldowns are in
+`data/defensives.json` - approximate, edit them for the current patch. Abilities never pressed in the run are listed
+separately ("may not be talented").
+
+Death findings name the real cause by damage share over the last 10s (constant pulses are background), and when a
+debuff was behind it: how long it sat, who else it hit and how they cleared it, where your dispels went, which of
+the victim's tools clear it (learned from your run and the top logs - escapes, immunities, dispels only), and how
+top Resto Shamans handle the same debuff. "Nothing was ready" always says why (when each cooldown was used and on
+what, procs already spent).
+
+## Avoidable damage
+
+All damage is unavoidable unless tagged (`app/avoidable.py`), learned from the same-level top logs per matched pull:
+
+- **Avoidable**: the enemy ability exists in the top logs, but top groups were hit by it in at most a quarter of their
+  runs (≤0.3 hits/player) - while your group was hit. Evidence: "top groups: hit in 0 of 8 runs · your group: 0.8 hits/player".
+- **Avoidable (extra ticks)**: top groups take it too, but your group took 3x+ their ticks for a pull that long.
+- **Went through**: an enemy cast top groups stop 70%+ of the time completed. Evidence: stop rate, which interrupts
+  (Wind Shear, Pummel, Kick... - `INTERRUPTS`) were off cooldown, and CC top groups also use on it.
+
+Abilities that only ever hit one player on several pulls are skipped (a player's own effect, e.g. Refraction).
+Tags show on timeline hit markers (orange dot; ◆ for a cast that went through), overview pull hover, death recaps,
+and the vs-top-player comparison. Healing findings (not topped, slow recovery, phase gaps) where 20%+ of the damage
+around them was avoidable say "not a healing problem" and score lower.
+
+## Chain pulls
+
+A pull counts as chained when it starts ≤5s after the last one ended and the group was still taking damage (or the old
+pack's abilities keep hitting after the new pull starts) - `app/chains.py`. The timeline marks it ⛓ (orange when it
+went in risky: damage-over-time debuffs from the old pack still ticking, group 10%+ under top groups at that pull's
+start, or your mana under 35%; cooldowns on cooldown are listed as context). The hover says whether top groups chain
+at the same spot and what happened in the next 20s. A finding only fires when a risky chain then hurt (a death,
+someone under 25% or the group under 50%).
+
+## Data quality
+
+Top logs are checked before they become a baseline (`app/quality.py`): HP data on most hits, real (changing) HP for
+all 5 players, a group HP line that moves, and not a partial upload. Failing logs are skipped and replaced from
+further down the rankings; the page says how many were skipped. The study applies the same gate. The timeline's
+top-group line is a curve - what top groups' HP did through the same pull (median, middle half shaded).
+
+## Reading the page
+
+- Every finding, death recap and section verdict is one line with a "→ fix" chip; click to expand the full analysis.
+  "Expand all / Collapse all" per section; a sticky section nav jumps between categories.
+- Every time (13:44, 13:42-13:52) is a link: it zooms the timeline to that moment (or range) and marks it.
+- 📌 Pin keeps a compact timeline on screen while you read (remembered per browser); "Hide chart" folds it.
+- Whole-run overview strip above the timeline: every pull side by side (bosses tinted, gaps between pulls squeezed),
+  group HP, deaths, your cooldowns, trinkets/potions, ⚡ Bloodlust, and green lanes for when Healing Tide / Spirit Link
+  / Astral Shift sat ready in combat. Hover a pull for its one-line verdict; click it or drag a range to zoom the detail.
+- "Whole run" (first entry in the pull selector, the "Show whole run" button, or double-click the overview) shows the
+  entire key in the detail timeline with every lane, gaps squeezed like the overview. Markers closer than a few pixels
+  merge into one (drawn as the most important, with a count and a tooltip listing them); click a pull to open it.
+  The badge next to "Timeline" always says what is shown.
+- Timeline: hover any marker or bar for details (who, when, numbers). One lane per party member shows active
+  personals / externals / group defensives from real buff uptimes; big hits with nothing up are shaded red.
+- "You vs a top player": pick a quality-checked top log at your key level (or paste one) for pull-by-pull verdicts -
+  what they did differently, whether it mattered, and whether it came from healing or from damage taken / route.
+
+## Group composition
+
+The page shows the group with each spec and the group / external cooldowns each player brings (from
+`data/defensives.json`): how often pressed and how many big group hits one was up for; "never pressed" and "never on
+a big hit" are flagged. Area effects: Anti-Magic Zone counts only players who got its buff (stood in it); Darkness and
+Aura Mastery leave no buff on the party, so the whole party counts for their duration after the cast (`from_cast`).
+Checked against 51 logs; Power Word: Barrier was never seen (kept), Mass Barrier, Ancestral Protection Totem,
+Roar of Sacrifice and Fortitude of the Bear were never seen (not added).
+
+What a spec brings to damage taken lives in `data/comp_effects.json`
+(edit freely). Entries with `"reduces_intake": true` (e.g. Augmentation Evoker) make damage-taken
+comparisons use only top groups with the same setup when there are at least 2, and say so when none had it.
+
+## Healing Wave vs Chain Heal
+
+Each Healing Wave / Chain Heal is tagged with the situation just before it landed (0, 1, 2 or 3+ players
+under 80%) and what it actually did (every target hit - Healing Wave hits two this patch - effective vs overheal,
+players only). The page compares your Chain Heal share and overheal per situation with the comparable top logs.
+Findings only fire for stretches that clearly mattered (3+ Chain Heals while one player was dying, or 3+ Healing
+Waves through sustained group damage) and only when the top players' pattern supports it. Positions and mana are
+not modeled. This pattern comes from the same-level top logs of each analysis, not from `study.py` (which skips
+healing events to stay inside the API budget).
+
+## Context model (what top players do)
+
+```
+.\.venv\Scripts\python study.py --runs 5
+```
+
+Studies the top-ranked Resto Shaman runs in every dungeon of the current season and writes
+`data/context_model.json` (used by the analyzer) and a readable `docs/context_model.md`:
+cooldowns per pull and their planned boss timings, recurring group hits, Riptides out before them,
+what top players answer them with, and how many deaths even top groups take per pull.
+Re-run after a patch. ~13 API points per studied run.
+
+## How it judges a run
+
+1. **HP timeline** - per-second group and per-player HP (incl. absorbs), rebuilt from damage snapshots and healing.
+2. **Profiles** - each pull is matched to the same pull in top Resto Shaman logs at the same key level
+   (boss by encounter, trash by enemy set). "Topped" is what those groups actually hold there - not a fixed number.
+3. **Context** - every second is labelled calm / pressure / spike / lethal against that profile. Team defensives
+   are detected from a jump in damage mitigation.
+4. **Findings** - only fire when the moment mattered:
+   - deaths: one-shot vs. healable, cooldowns ready vs. pressed too late; a wipe is reported once, from its first death,
+     with what each group cooldown was doing during it
+   - group cooldowns held only through *sustained* group danger (2+ players under 50% for 3s+, and someone under 30%
+     or 5s+) - a dip healed back within a couple of GCDs is not flagged
+   - missed planned boss cooldowns (from the context model), only when damage followed
+   - you low with Astral Shift ready (skipped right after Reincarnation)
+   - not topped / Riptide prep before recurring group hits, slow recovery under normal intake, extra avoidable damage
+
+Thresholds live at the top of `app/context.py` and `app/findings.py`. Spell IDs in `app/specs/resto_shaman.py`.
+
+## Known limits
+
+- Cooldowns never cast in a run are treated as not talented.
+- Boss phases are not split yet; recurring group hits stand in for them.
+- WCL API budget is 1000 points/hour; a run costs ~23 points and is cached in `cache.sqlite3`.

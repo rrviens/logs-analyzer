@@ -1,0 +1,5 @@
+{
+  "_help": "What each spec brings to the group. Edit freely. 'reduces_intake': true makes the analyzer compare your damage taken only against top groups with the same presence/absence of that spec. 'note' is shown next to the player in the group list. Group/external cooldowns (Rallying Cry, Anti-Magic Zone, ...) are listed per player from data/defensives.json.",
+  "Augmentation Evoker": {"reduces_intake": true, "note": "Big group damage reduction"},
+  "Paladin": {"reduces_intake": false, "note": "Devotion Aura"}
+}
