@@ -334,6 +334,29 @@
   dialog::backdrop { background: rgba(0,0,0,.4); }
   dialog label { display: block; font-size: 0.8667rem; color: var(--muted); margin: 10px 0 4px; }
   dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  /* errors: a banner of their own under the header, and a per-session list (header "Errors" button) */
+  .errbanner { display: flex; gap: 12px; align-items: flex-start; margin: 16px 24px 0; padding: 12px 16px;
+               border: 1px solid color-mix(in srgb, var(--critical) 55%, transparent); border-left: 4px solid var(--critical);
+               background: color-mix(in srgb, var(--critical) 12%, var(--panel)); border-radius: var(--radius-sm); }
+  .errbanner[hidden] { display: none; }
+  .errbanner .ei { color: var(--critical); flex: none; margin-top: 2px; }
+  .errbanner .ei svg { width: 20px; height: 20px; }
+  .errbanner .eb { flex: 1; min-width: 0; }
+  .errbanner .et { font-weight: 700; }
+  .errbanner .em { color: var(--text); opacity: .9; margin-top: 2px; }
+  .errbanner .ea { display: flex; gap: 8px; flex: none; }
+  @media (max-width: 600px) { .errbanner { margin: 12px 12px 0; flex-wrap: wrap; } .errbanner .ea { width: 100%; } }
+  #errBtn b { background: var(--critical); color: #fff; border-radius: 999px; padding: 0 6px; font-size: 0.8rem; }
+  #errDialog { width: min(640px, calc(100vw - 32px)); }
+  .errlisthead { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .errlisthead strong { margin-right: auto; }
+  .errlist { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow-y: auto; }
+  .errlist li { border-top: 1px solid var(--line); padding: 10px 0; }
+  .errlist .when { color: var(--muted); font-size: 0.8667rem; }
+  .errlist .what { font-weight: 600; }
+  .errlist .msg { margin: 2px 0 6px; }  [hidden] { display: none !important; }  /* flex/inline-flex components must still hide */
+  a.primary { background: var(--accent); color: var(--accent-text); border-radius: var(--radius-sm); padding: 8px 14px;
+              font-weight: 600; text-decoration: none; }
   /* ---------- design pass: type, surfaces, controls, focus ---------- */
   body { font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; font-feature-settings: "cv11", "ss01";
          -webkit-font-smoothing: antialiased; letter-spacing: -0.005em; }
@@ -404,10 +427,16 @@
   <h1><span class="logo"><i data-lucide="heart-pulse"></i></span>Healer Review</h1>
   <span class="budget" id="budget"></span>
   <button class="pill" id="studyBtn" title="Top-player study the analysis compares against">Top-player study</button>
+  <button class="pill" id="errBtn" title="Errors in this session" hidden><i data-lucide="circle-alert"></i><span>Errors</span><b id="errCount">0</b></button>
   <button class="pill" id="themeBtn" title="Dark / light theme"><i data-lucide="sun-moon"></i><span>Dark</span></button>
   <button class="pill" id="textSize" title="Text size">Text: Normal</button>
   <button class="pill" id="charBtn">Set character</button>
 </header>
+<div class="errbanner" id="errBanner" role="alert" hidden></div>
+<dialog id="errDialog"><div class="errlisthead"><strong>Errors in this session</strong>
+  <button type="button" class="pill" id="errClear">Clear</button>
+  <button type="button" class="pill" onclick="$('errDialog').close()">Close</button></div>
+  <ul class="errlist" id="errList"></ul></dialog>
 
 <div class="layout">
   <aside class="panel">
@@ -449,7 +478,9 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt
 let current = null;
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {headers: {"Content-Type": "application/json"}, ...opts});
+  let res;
+  try { res = await fetch(path, {headers: {"Content-Type": "application/json"}, ...opts}); }
+  catch { throw new Error("Can't reach the Healer Review server - check your connection, or the site may be restarting (network error)."); }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.detail || `Request failed (${res.status})`);
   return body;
@@ -490,7 +521,8 @@ async function loadRuns(limit = RUNS_LIMIT) {
   try {
     const data = await api(`/api/recent?limit=${limit}`);
     // A WCL rate limit part-way: show what was found plus the reason, with "Try again".
-    const note = data.partial ? `<div class="empty error">${esc(data.partial)}<br><br>${retry}</div>` : "";
+    if (data.partial) reportError("Loading all your recent keys", data.partial, () => loadRuns());
+    const note = data.partial ? `<div class="empty">Some keys couldn't be loaded yet.<br><br>${retry}</div>` : "";
     const more = data.more && !data.partial ? `<button class="pill" onclick="loadRuns(12)">Load more</button>` : "";
     if (!data.runs.length) { $("runs").innerHTML = note || `<div class="empty">No recent M+ runs found.${more ? `<br><br>${more}` : ""}</div>`; return; }
     $("runs").innerHTML = data.runs.map((r) => `
@@ -504,7 +536,8 @@ async function loadRuns(limit = RUNS_LIMIT) {
       </button>`).join("") + note + (more ? `<div class="empty">${more}</div>` : "");
     document.querySelectorAll(".run:not([disabled])").forEach((el) => el.onclick = () => analyze(el.dataset.url));
   } catch (e) {
-    $("runs").innerHTML = `<div class="empty error">${esc(e.message)}<br><br>${retry}</div>`;
+    reportError("Loading your recent keys", e.message, () => loadRuns());
+    $("runs").innerHTML = `<div class="empty">Couldn't load your recent keys.<br><br>${retry}</div>`;
   }
 }
 
@@ -526,8 +559,9 @@ async function analyze(url, fresh = false) {
       if (j.status === "error") throw new Error(j.error);
     }
   } catch (e) {
-    $("main").innerHTML = `<div class="card"><h2>Couldn't analyze this run</h2><p class="error">${esc(e.message)}</p>
-      <button class="pill" id="retryAnalyze">Try again</button></div>`;
+    reportError("Analyzing the run", e.message, () => analyze(url, fresh));
+    $("main").innerHTML = `<div class="card"><h2>Couldn't analyze this run</h2><p class="secempty">The reason is in the
+      error banner above.</p><button class="pill" id="retryAnalyze">Try again</button></div>`;
     $("retryAnalyze").onclick = () => analyze(url, fresh);
     loadBudget();
   }
@@ -1639,6 +1673,63 @@ function render(res, url) {
 // Lucide UI icons (pinned CDN build): <i data-lucide="name">fallback glyph</i> becomes an SVG; offline, the glyph stays.
 function paintIcons() { try { if (window.lucide) lucide.createIcons({attrs: {"stroke-width": 2}}); } catch {} }
 
+// ---------- errors: a banner under the header + the session's list (kept in this browser only) ----------
+let ERRORS = (() => { try { return JSON.parse(sessionStorage.getItem("errors") || "[]"); } catch { return []; } })();
+const ERR_RETRY = new Map();  // error id -> retry function (this page load only)
+function reportError(what, message, retry) {
+  const e = {id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, t: new Date().toISOString(), what, message};
+  ERRORS = [e, ...ERRORS].slice(0, 20);
+  try { sessionStorage.setItem("errors", JSON.stringify(ERRORS)); } catch {}
+  if (retry) ERR_RETRY.set(e.id, retry);
+  showErrorBanner(e);
+  renderErrors();
+}
+function showErrorBanner(e) {
+  const b = $("errBanner"), retry = ERR_RETRY.get(e.id);
+  b.innerHTML = `<span class="ei"><i data-lucide="circle-alert">⚠</i></span>
+    <div class="eb"><div class="et">${esc(e.what)} failed</div><div class="em">${esc(e.message)}</div></div>
+    <div class="ea">${retry ? `<button class="pill" data-a="retry">Try again</button>` : ""}
+      <button class="pill" data-a="list">All errors</button><button class="pill" data-a="close" aria-label="Dismiss">✕</button></div>`;
+  b.hidden = false;
+  b.querySelectorAll("[data-a]").forEach((btn) => btn.onclick = () => {
+    if (btn.dataset.a === "retry") { b.hidden = true; retry(); }
+    else if (btn.dataset.a === "list") $("errDialog").showModal();
+    else b.hidden = true;
+  });
+  paintIcons();
+}
+function renderErrors() {
+  $("errBtn").hidden = !ERRORS.length;
+  $("errCount").textContent = ERRORS.length;
+  $("errList").innerHTML = ERRORS.length ? ERRORS.map((e) => `<li><div class="when">${new Date(e.t).toLocaleTimeString()}</div>
+      <div class="what">${esc(e.what)}</div><div class="msg">${esc(e.message)}</div>
+      ${ERR_RETRY.has(e.id) ? `<button class="pill" data-retry="${e.id}">Try again</button>` : ""}</li>`).join("")
+    : `<li class="empty">No errors.</li>`;
+  $("errList").querySelectorAll("[data-retry]").forEach((btn) => btn.onclick = () => {
+    $("errDialog").close(); $("errBanner").hidden = true; ERR_RETRY.get(btn.dataset.retry)();
+  });
+}
+$("errBtn").onclick = () => $("errDialog").showModal();
+$("errClear").onclick = () => {
+  ERRORS = []; ERR_RETRY.clear(); $("errBanner").hidden = true;
+  try { sessionStorage.removeItem("errors"); } catch {}
+  renderErrors(); $("errDialog").close();
+};
+renderErrors();
+// Why sign-in failed, from /callback's reason code (never a token or code).
+const SIGNIN_REASONS = {
+  rate_limited: "Warcraft Logs is limiting requests right now (rate limit). Try again in a minute.",
+  timeout: "Warcraft Logs took too long to answer (timeout). Try again in a minute.",
+  state: "The sign-in expired or was started in another tab (state mismatch). Start it again from this page.",
+  invalid_grant: "Warcraft Logs rejected the login code (invalid_grant) - it may have expired. Try again; if it keeps failing, the site's redirect URL may not match your Warcraft Logs API client settings.",
+  redirect_mismatch: "The site's redirect URL doesn't match the Warcraft Logs API client settings (redirect mismatch). The site owner needs to fix REDIRECT_URI or the client's redirect URL.",
+  invalid_client: "Warcraft Logs didn't accept this site's API client (invalid_client). The site owner needs to check the client id and secret.",
+};
+function signinError(reason) {
+  const why = SIGNIN_REASONS[reason] || `Warcraft Logs didn't complete the login (${reason || "unknown error"}). Try again in a minute; if it keeps failing, the site's redirect URL may not match your Warcraft Logs API client settings.`;
+  reportError("Sign-in", why, () => { location.href = "/login"; });
+}
+
 // ---------- "What to look at" for the selected pull ----------
 // null = whole dungeon. Set when a pull is picked (dropdown / overview click), not by time links.
 function filterLook(i) {
@@ -1731,7 +1822,7 @@ $("studyBtn").onclick = async () => {
   if (s.can_run === false) { alert("The top-player study is maintained by the site owner."); return; }
   if (!confirm("Refresh the top-player study (10 top runs per dungeon)?\n\nIt pauses whenever the hourly WCL budget gets low, "
     + "so it can take a few hours. You can keep analyzing keys meanwhile; closing the app stops it (cached runs are kept).")) return;
-  try { await api("/api/study", {method: "POST", body: JSON.stringify({runs: 10})}); } catch (e) { alert(e.message); }
+  try { await api("/api/study", {method: "POST", body: JSON.stringify({runs: 10})}); } catch (e) { reportError("Starting the top-player study", e.message); }
   loadStudy();
 };
 
@@ -1755,9 +1846,12 @@ async function startApp() {
       <p>Context-aware Mythic+ healing review, compared with top players of your spec at your key level.</p>
       <p>Sign in with your Warcraft Logs account: your analyses run on your own account and API limit, and your
         private logs stay visible only to you.</p>
-      ${new URLSearchParams(location.search).get("signin") === "failed" ? `<p class="error">Warcraft Logs didn't
-        answer the sign-in (it may be busy or limiting requests) - try again in a minute.</p>` : ""}
       <a class="primary" href="/login">Sign in with Warcraft Logs</a></main>`;
+    const q = new URLSearchParams(location.search);
+    if (q.get("signin") === "failed") {
+      signinError(q.get("reason"));
+      history.replaceState(null, "", "/");  // a reload shouldn't report it again
+    }
     ["studyBtn", "charBtn", "budget"].forEach((id) => { $(id).hidden = true; });
     return false;
   }

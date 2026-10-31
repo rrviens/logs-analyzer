@@ -7,6 +7,7 @@ rate limit, their private logs stay in their own cache namespace, and settings a
 Run: python -m uvicorn app.web:app --port 8000
 """
 import json
+import logging
 import re
 import threading
 import unicodedata
@@ -51,6 +52,7 @@ MY_CHARACTERS_QUERY = "{ userData { currentUser { characters { name level server
 MY_CHARACTERS_TTL_S = 3600
 
 app = FastAPI()
+log = logging.getLogger("uvicorn.error")  # shows in the Render logs
 app_client = WCLClient(*wcl_credentials(), CACHE_PATH)
 jobs: dict[str, dict] = {}
 study_job: dict = {}
@@ -190,15 +192,40 @@ def callback(request: Request, code: str = "", state: str = "", error: str = "")
         return RedirectResponse("/?signin=cancelled", status_code=302)
     try:
         s = auth.finish_login(app_client, code, state, request.cookies.get(auth.STATE_COOKIE))
-    except PermissionError as e:
-        raise HTTPException(400, str(e))
-    except (httpx.HTTPError, KeyError, TypeError, ValueError):  # WCL busy / rate limited during the token swap
-        return RedirectResponse("/?signin=failed", status_code=302)
+    except PermissionError as e:  # state mismatch / expired
+        log.warning("sign-in failed: %s", e)
+        return RedirectResponse("/?signin=failed&reason=state", status_code=302)
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as e:  # WCL busy / rate limited / rejected the code
+        reason, detail = _signin_reason(e)
+        log.warning("sign-in failed: %s (%s)", reason, detail)  # status + WCL's error field only, never the code/token
+        return RedirectResponse(f"/?signin=failed&reason={reason}", status_code=302)
     r = RedirectResponse("/", status_code=302)
     r.delete_cookie(auth.STATE_COOKIE)
     r.set_cookie(auth.SESSION_COOKIE, s.id, max_age=int(s.expires - datetime.now().timestamp()), httponly=True,
                  secure=SECURE_COOKIES, samesite="lax")
     return r
+
+
+def _signin_reason(e: Exception) -> tuple[str, str]:
+    """(short reason code for the page, detail for the server log) - no secrets in either."""
+    if isinstance(e, httpx.TimeoutException):
+        return "timeout", type(e).__name__
+    resp = getattr(e, "response", None)
+    if resp is None:
+        return "wcl_error", type(e).__name__
+    try:
+        body = resp.json()
+        err, desc = str(body.get("error", "")), str(body.get("error_description", "") or body.get("message", ""))
+    except ValueError:
+        err, desc = "", ""
+    detail = f"HTTP {resp.status_code} {err} {desc[:120]}".strip()
+    if resp.status_code == 429:
+        return "rate_limited", detail
+    if "redirect" in (err + desc).lower():
+        return "redirect_mismatch", detail
+    if err in ("invalid_grant", "invalid_client", "invalid_request", "unauthorized_client"):
+        return err, detail
+    return f"http_{resp.status_code}", detail
 
 
 @app.post("/logout")
