@@ -36,8 +36,9 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient
 
-RULES_VERSION = 42
+RULES_VERSION = 43
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
+COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
 # memory at once; set TOP_WORKERS=1 on a small (512 MB) host.
 TOP_WORKERS = max(1, int(os.getenv("TOP_WORKERS", "3")))
@@ -63,6 +64,24 @@ def pick_healer(players, player_name: str | None):
         return (named or healers)[0]
     supported = ", ".join(s.label for s in SPECS)
     raise AnalysisError(f"No supported healer in that run (supported: {supported}).")
+
+
+def _by_comp(cands: list, pub, fight, my_players, effects) -> list:
+    """Top-log candidates, closest group composition first: same tank spec, the same damage-reduction specs
+    (they change how much damage the group takes), shared specs, then the nearest key level; ranking order breaks ties."""
+    label = lambda p: f"{p.spec} {p.class_name}"
+    my_tank = {label(p) for p in my_players if p.role == "tank"}
+    my_mods, my_specs = intake_modifiers(my_players, effects), {label(p) for p in my_players}
+
+    def score(fp):
+        players = get_players(pub, fp[0])
+        return (3 * bool(my_tank & {label(p) for p in players if p.role == "tank"})
+                - 3 * len(my_mods ^ intake_modifiers(players, effects))
+                + len(my_specs & {label(p) for p in players})
+                - 2 * abs((fp[0].keystone_level or 0) - (fight.keystone_level or 0)))
+
+    scores = {id(fp): score(fp) for fp in cands}
+    return sorted(cands, key=lambda fp: -scores[id(fp)])  # stable: ranking order within equal scores
 
 
 def cache_key(code: str, fight_id: int, player: str, top: int) -> str:
@@ -118,7 +137,8 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
 
     # Extra candidates so logs failing the data-quality gate can be replaced from further down. Fetched
     # TOP_WORKERS at a time, in batches of exactly what is still missing, so no log is fetched for nothing.
-    pending = comparable_fights(pub, fight, spec.class_name, spec.spec_name, top + QUALITY_BACKFILL)
+    pending = _by_comp(comparable_fights(pub, fight, spec.class_name, spec.spec_name, top + QUALITY_BACKFILL + COMP_POOL),
+                       pub, fight, my_players, effects)
     progress(f"Fetching {min(top, len(pending))} top logs, {TOP_WORKERS} at a time...")
     with ThreadPoolExecutor(TOP_WORKERS) as pool:
         while pending and len(tops) < top:
