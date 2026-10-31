@@ -336,7 +336,8 @@
   dialog::backdrop { background: rgba(0,0,0,.4); }
   dialog label { display: block; font-size: 0.8667rem; color: var(--muted); margin: 10px 0 4px; }
   dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-  /* errors: a banner of their own under the header, and a per-session list (header "Errors" button) */
+  /* errors: one banner of its own under the header (the latest failure); it clears when that action succeeds */
+  .errbanner .eref { color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
   .errbanner { display: flex; gap: 12px; align-items: flex-start; margin: 16px 24px 0; padding: 12px 16px;
                border: 1px solid color-mix(in srgb, var(--critical) 55%, transparent); border-left: 4px solid var(--critical);
                background: color-mix(in srgb, var(--critical) 12%, var(--panel)); border-radius: var(--radius-sm); }
@@ -348,15 +349,7 @@
   .errbanner .em { color: var(--text); opacity: .9; margin-top: 2px; }
   .errbanner .ea { display: flex; gap: 8px; flex: none; }
   @media (max-width: 600px) { .errbanner { margin: 12px 12px 0; flex-wrap: wrap; } .errbanner .ea { width: 100%; } }
-  #errBtn b { background: var(--critical); color: #fff; border-radius: 999px; padding: 0 6px; font-size: 0.8rem; }
-  #errDialog { width: min(640px, calc(100vw - 32px)); }
-  .errlisthead { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
-  .errlisthead strong { margin-right: auto; }
-  .errlist { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow-y: auto; }
-  .errlist li { border-top: 1px solid var(--line); padding: 10px 0; }
-  .errlist .when { color: var(--muted); font-size: 0.8667rem; }
-  .errlist .what { font-weight: 600; }
-  .errlist .msg { margin: 2px 0 6px; }  [hidden] { display: none !important; }  /* flex/inline-flex components must still hide */
+  [hidden] { display: none !important; }  /* flex/inline-flex components must still hide */
   a.primary { background: var(--accent); color: var(--accent-text); border-radius: var(--radius-sm); padding: 8px 14px;
               font-weight: 600; text-decoration: none; }
   /* header: feature actions, then a quiet display-preferences icon at the edge */
@@ -370,7 +363,31 @@
   .dm-label { font-size: 0.8rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 2px 0 6px; }
   .dm-label + .seg { margin-bottom: 10px; }
   .dispmenu .seg:last-child { margin-bottom: 0; }
-  @media (max-width: 600px) { .display { margin-left: auto; } }  /* wrapped header: keep it at the right edge */  /* ---------- design pass: type, surfaces, controls, focus ---------- */
+  @media (max-width: 600px) { .display { margin-left: auto; } }  /* wrapped header: keep it at the right edge */  /* character picker: dropdown under the header button; a full-width sheet on phones */
+  .charpick { position: relative; }
+  .charmenu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 9; width: 320px; max-height: min(70vh, 560px);
+              overflow-y: auto; background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+              box-shadow: var(--shadow-pop); padding: 6px; }
+  .cm-list:empty { display: none; }
+  .cm-group { font-size: 0.8rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
+              padding: 8px 8px 4px; }
+  .cm-opt { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; background: none;
+            color: var(--text); font: inherit; padding: 7px 8px; border-radius: var(--radius-xs); cursor: pointer; }
+  .cm-opt:hover, .cm-opt:focus-visible { background: var(--panel-2); box-shadow: none; outline: none; }
+  .cm-opt .cls { width: 4px; height: 26px; border-radius: 2px; flex: none; background: var(--line-strong); }
+  .cm-opt .nm { font-weight: 600; }
+  .cm-opt .rl { color: var(--muted); font-size: 0.8667rem; display: block; }
+  .cm-opt .ck { margin-left: auto; color: var(--accent); font-weight: 700; }
+  .cm-opt[aria-selected="true"] { background: var(--accent-soft); }
+  .cm-hint { color: var(--muted); font-size: 0.8667rem; padding: 6px 8px; }
+  .cm-sep { border-top: 1px solid var(--line); margin: 6px 0; }
+  .cm-manual { color: var(--accent); }
+  .cm-form { display: grid; gap: 4px; padding: 4px 8px 8px; }
+  .cm-form label { font-size: 0.8667rem; color: var(--muted); margin-top: 6px; }
+  .cm-form .primary { margin-top: 10px; }
+  @media (max-width: 600px) {
+    .charmenu { position: fixed; left: 12px; right: 12px; top: 12px; width: auto; max-height: calc(100vh - 24px); }
+  }  /* ---------- design pass: type, surfaces, controls, focus ---------- */
   body { font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; font-feature-settings: "cv11", "ss01";
          -webkit-font-smoothing: antialiased; letter-spacing: -0.005em; }
   .when, .tip, table, .budget, .tl-head .scope, a.tl, .dpslist, .run .sub { font-variant-numeric: tabular-nums; }
@@ -440,8 +457,24 @@
   <h1><span class="logo"><i data-lucide="heart-pulse"></i></span>Healer Review</h1>
   <span class="budget" id="budget"></span>
   <button class="pill" id="studyBtn" title="Top-player study the analysis compares against">Top-player study</button>
-  <button class="pill" id="charBtn">Set character</button>
-  <button class="pill" id="errBtn" title="Errors in this session" hidden><i data-lucide="circle-alert"></i><span>Errors</span><b id="errCount">0</b></button>
+  <div class="charpick">
+    <button class="pill" id="charBtn" aria-haspopup="true" aria-expanded="false">Set character</button>
+    <!-- character picker: a dropdown under the button (your characters, recent ones, or enter one manually) -->
+    <div class="charmenu" id="charMenu" hidden>
+      <div class="cm-list" id="charList" role="listbox" aria-label="Characters"></div>
+      <div class="cm-hint" id="cMineHint" hidden></div>
+      <div class="cm-sep"></div>
+      <button type="button" class="cm-opt cm-manual" id="cManualBtn" aria-expanded="false">Enter manually…</button>
+      <form id="charForm" class="cm-form" hidden>
+        <label for="cName">Name</label><input id="cName" required autocomplete="off">
+        <label for="cServer">Realm</label><input id="cServer" required placeholder="e.g. Kazzak" list="realmList" autocomplete="off"><datalist id="realmList"></datalist>
+        <label for="cRegion">Region</label>
+        <select id="cRegion"><option value="eu">EU</option><option value="us">US</option><option value="kr">KR</option><option value="tw">TW</option></select>
+        <div class="error" id="charError"></div>
+        <button class="primary" id="charSave">Search</button>
+      </form>
+    </div>
+  </div>
   <!-- display preferences: one quiet icon at the edge, apart from the feature buttons -->
   <div class="display">
     <button class="iconbtn" id="dispBtn" title="Display: theme and text size" aria-label="Display settings"
@@ -459,10 +492,6 @@
   </div>
 </header>
 <div class="errbanner" id="errBanner" role="alert" hidden></div>
-<dialog id="errDialog"><div class="errlisthead"><strong>Errors in this session</strong>
-  <button type="button" class="pill" id="errClear">Clear</button>
-  <button type="button" class="pill" onclick="$('errDialog').close()">Close</button></div>
-  <ul class="errlist" id="errList"></ul></dialog>
 
 <div class="layout">
   <aside class="panel">
@@ -480,23 +509,6 @@
   </main>
 </div>
 
-<dialog id="charDialog">
-  <form method="dialog" id="charForm">
-    <strong>Your character</strong>
-    <div id="cMineRow" hidden><label for="cMine">Your characters</label>
-      <select id="cMine"><option value="">Pick one of your characters...</option></select></div>
-    <div class="hint" id="cMineHint" hidden></div>
-    <label for="cName">Name</label><input id="cName" required>
-    <label for="cServer">Server</label><input id="cServer" required placeholder="e.g. Kazzak" list="realmList" autocomplete="off"><datalist id="realmList"></datalist>
-    <label for="cRegion">Region</label>
-    <select id="cRegion"><option value="eu">EU</option><option value="us">US</option><option value="kr">KR</option><option value="tw">TW</option></select>
-    <div class="error" id="charError"></div>
-    <div class="row">
-      <button type="button" class="pill" onclick="$('charDialog').close()">Cancel</button>
-      <button class="primary" id="charSave" value="save">Save</button>
-    </div>
-  </form>
-</dialog>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -508,7 +520,7 @@ async function api(path, opts = {}) {
   try { res = await fetch(path, {headers: {"Content-Type": "application/json"}, ...opts}); }
   catch { throw new Error("Can't reach the Healer Review server - check your connection, or the site may be restarting (network error)."); }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.detail || `Request failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(body.detail || `Request failed (${res.status})`), {ref: body.ref || res.headers.get("X-Request-Id")});
   return body;
 }
 
@@ -524,6 +536,8 @@ async function loadSettings() {
   if (s.name) {
     $("charBtn").textContent = `${s.name} · ${s.server} ${s.region.toUpperCase()}`;
     $("cName").value = s.name; $("cServer").value = s.server; $("cRegion").value = s.region;
+    const known = [...((MINE || {}).characters || []), ...recentChars()].find((c) => charKey(c) === charKey(s));
+    CURRENT_CHAR = {...s, class: known && known.class};
   }
   return s;
 }
@@ -547,7 +561,7 @@ async function loadRuns(limit = RUNS_LIMIT) {
   try {
     const data = await api(`/api/recent?limit=${limit}`);
     // A WCL rate limit part-way: show what was found plus the reason, with "Try again".
-    if (data.partial) reportError("Loading all your recent keys", data.partial, () => loadRuns());
+    if (data.partial) reportError("keys", "Loading all your recent keys", data.partial, () => loadRuns()); else clearError("keys");
     const note = data.partial ? `<div class="empty">Some keys couldn't be loaded yet.<br><br>${retry}</div>` : "";
     const more = data.more && !data.partial ? `<button class="pill" onclick="loadRuns(12)">Load more</button>` : "";
     if (!data.runs.length) { $("runs").innerHTML = note || `<div class="empty">No recent M+ runs found.${more ? `<br><br>${more}` : ""}</div>`; return; }
@@ -562,7 +576,7 @@ async function loadRuns(limit = RUNS_LIMIT) {
       </button>`).join("") + note + (more ? `<div class="empty">${more}</div>` : "");
     document.querySelectorAll(".run:not([disabled])").forEach((el) => el.onclick = () => analyze(el.dataset.url));
   } catch (e) {
-    reportError("Loading your recent keys", e.message, () => loadRuns());
+    reportError("keys", "Loading your recent keys", e.message, () => loadRuns(), e.ref);
     $("runs").innerHTML = `<div class="empty">Couldn't load your recent keys.<br><br>${retry}</div>`;
   }
 }
@@ -581,11 +595,11 @@ async function analyze(url, fresh = false) {
       if (current !== url) return;
       const j = await api(`/api/jobs/${job}`);
       if (j.progress.length) $("progress").innerHTML = j.progress.map((p) => `<div>${esc(p)}</div>`).join("");
-      if (j.status === "done") { render(j.result, url); loadRuns(); loadBudget(); return; }
-      if (j.status === "error") throw new Error(j.error);
+      if (j.status === "done") { clearError("analysis"); render(j.result, url); loadRuns(); loadBudget(); return; }
+      if (j.status === "error") throw Object.assign(new Error(j.error), {ref: j.ref});
     }
   } catch (e) {
-    reportError("Analyzing the run", e.message, () => analyze(url, fresh));
+    reportError("analysis", "Analyzing the run", e.message, () => analyze(url, fresh), e.ref);
     $("main").innerHTML = `<div class="card"><h2>Couldn't analyze this run</h2><p class="secempty">The reason is in the
       error banner above.</p><button class="pill" id="retryAnalyze">Try again</button></div>`;
     $("retryAnalyze").onclick = () => analyze(url, fresh);
@@ -1699,50 +1713,29 @@ function render(res, url) {
 // Lucide UI icons (pinned CDN build): <i data-lucide="name">fallback glyph</i> becomes an SVG; offline, the glyph stays.
 function paintIcons() { try { if (window.lucide) lucide.createIcons({attrs: {"stroke-width": 2}}); } catch {} }
 
-// ---------- errors: a banner under the header + the session's list (kept in this browser only) ----------
-let ERRORS = (() => { try { return JSON.parse(sessionStorage.getItem("errors") || "[]"); } catch { return []; } })();
-const ERR_RETRY = new Map();  // error id -> retry function (this page load only)
-function reportError(what, message, retry) {
-  const e = {id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, t: new Date().toISOString(), what, message};
-  ERRORS = [e, ...ERRORS].slice(0, 20);
-  try { sessionStorage.setItem("errors", JSON.stringify(ERRORS)); } catch {}
-  if (retry) ERR_RETRY.set(e.id, retry);
-  showErrorBanner(e);
-  renderErrors();
-}
-function showErrorBanner(e) {
-  const b = $("errBanner"), retry = ERR_RETRY.get(e.id);
+// ---------- errors: one banner under the header for the latest failure ----------
+// The server logs every failure with context; the banner just tells you something failed, why, and what to do.
+let ERR_KEY = null;  // which action the banner is about: it clears when that action next succeeds
+function reportError(key, what, message, retry, ref) {
+  const b = $("errBanner");
+  ERR_KEY = key;
   b.innerHTML = `<span class="ei"><i data-lucide="circle-alert">⚠</i></span>
-    <div class="eb"><div class="et">${esc(e.what)} failed</div><div class="em">${esc(e.message)}</div></div>
+    <div class="eb"><div class="et">${esc(what)} failed</div><div class="em">${esc(message)}</div>
+      ${ref ? `<div class="eref">ref ${esc(ref)}</div>` : ""}</div>
     <div class="ea">${retry ? `<button class="pill" data-a="retry">Try again</button>` : ""}
-      <button class="pill" data-a="list">All errors</button><button class="pill" data-a="close" aria-label="Dismiss">✕</button></div>`;
+      <button class="pill" data-a="close" aria-label="Dismiss">✕</button></div>`;
   b.hidden = false;
   b.querySelectorAll("[data-a]").forEach((btn) => btn.onclick = () => {
-    if (btn.dataset.a === "retry") { b.hidden = true; retry(); }
-    else if (btn.dataset.a === "list") $("errDialog").showModal();
-    else b.hidden = true;
+    clearError(key);
+    if (btn.dataset.a === "retry") retry();
   });
   paintIcons();
 }
-function renderErrors() {
-  $("errBtn").hidden = !ERRORS.length;
-  $("errCount").textContent = ERRORS.length;
-  $("errList").innerHTML = ERRORS.length ? ERRORS.map((e) => `<li><div class="when">${new Date(e.t).toLocaleTimeString()}</div>
-      <div class="what">${esc(e.what)}</div><div class="msg">${esc(e.message)}</div>
-      ${ERR_RETRY.has(e.id) ? `<button class="pill" data-retry="${e.id}">Try again</button>` : ""}</li>`).join("")
-    : `<li class="empty">No errors.</li>`;
-  $("errList").querySelectorAll("[data-retry]").forEach((btn) => btn.onclick = () => {
-    $("errDialog").close(); $("errBanner").hidden = true; ERR_RETRY.get(btn.dataset.retry)();
-  });
-}
-$("errBtn").onclick = () => $("errDialog").showModal();
-$("errClear").onclick = () => {
-  ERRORS = []; ERR_RETRY.clear(); $("errBanner").hidden = true;
-  try { sessionStorage.removeItem("errors"); } catch {}
-  renderErrors(); $("errDialog").close();
-};
-renderErrors();
-// Why sign-in failed, from /callback's reason code (never a token or code).
+function clearError(key) {
+  if (key && ERR_KEY !== key) return;
+  $("errBanner").hidden = true;
+  ERR_KEY = null;
+}// Why sign-in failed, from /callback's reason code (never a token or code).
 const SIGNIN_REASONS = {
   rate_limited: "Warcraft Logs is limiting requests right now (rate limit). Try again in a minute.",
   timeout: "Warcraft Logs took too long to answer (timeout). Try again in a minute.",
@@ -1753,7 +1746,7 @@ const SIGNIN_REASONS = {
 };
 function signinError(reason) {
   const why = SIGNIN_REASONS[reason] || `Warcraft Logs didn't complete the login (${reason || "unknown error"}). Try again in a minute; if it keeps failing, the site's redirect URL may not match your Warcraft Logs API client settings.`;
-  reportError("Sign-in", why, () => { location.href = "/login"; });
+  reportError("signin", "Sign-in", why, () => { location.href = "/login"; });
 }
 
 // ---------- "What to look at" for the selected pull ----------
@@ -1782,41 +1775,89 @@ async function fillRealms() {
   if (!REALMS) REALMS = await api("/api/realms").catch(() => ({}));
   $("realmList").innerHTML = (REALMS[$("cRegion").value] || []).map((r) => `<option value="${esc(r)}">`).join("");
 }
-// Signed in with Warcraft Logs: pick from your own claimed characters instead of typing (fills the fields below).
-let MINE = null;
-async function fillMine() {
-  if (!MINE) MINE = await api("/api/my-characters").catch(() => ({characters: []}));
-  const chars = MINE.characters || [];
-  $("cMineRow").hidden = !chars.length;
-  $("cMine").innerHTML = `<option value="">Pick one of your characters...</option>` + chars.map((c, i) =>
-    `<option value="${i}">${esc(c.name)} · ${esc(c.server)} ${esc(c.region.toUpperCase())}${c.level ? ` · ${c.level}` : ""}</option>`).join("");
-  $("cMineHint").hidden = !!MINE.local || chars.length > 0;
-  $("cMineHint").textContent = MINE.relogin ? "Sign out and in again to pick from your own characters."
-    : "No characters claimed on your Warcraft Logs account - claim them there, or type one in.";
+// ---------- character picker: a dropdown under the header button ----------
+// Your claimed Warcraft Logs characters (signed in), the ones you used recently, or "Enter manually…".
+let MINE = null, CURRENT_CHAR = null;
+const CLASS_BY_ID = {1: "Warrior", 2: "Paladin", 3: "Hunter", 4: "Rogue", 5: "Priest", 6: "Death Knight", 7: "Shaman",
+                     8: "Mage", 9: "Warlock", 10: "Monk", 11: "Druid", 12: "Demon Hunter", 13: "Evoker"};
+const charKey = (c) => `${c.name}|${c.server}|${c.region}`.toLowerCase();
+const recentChars = () => { try { return JSON.parse(localStorage.getItem("recentChars") || "[]"); } catch { return []; } };
+function rememberChar(c) {
+  const list = [c, ...recentChars().filter((r) => charKey(r) !== charKey(c))].slice(0, 5);
+  try { localStorage.setItem("recentChars", JSON.stringify(list)); } catch {}
 }
-$("cMine").onchange = () => {
-  const c = (MINE.characters || [])[+$("cMine").value];
-  if (!c || $("cMine").value === "") return;
-  $("cName").value = c.name; $("cServer").value = c.server; $("cRegion").value = c.region;
-  fillRealms();
-};
-function openChar() { $("charError").textContent = ""; $("charDialog").showModal(); fillRealms(); fillMine(); }
-$("charBtn").onclick = openChar;
-$("cRegion").onchange = fillRealms;
-// Enter in Name or Server submits Save (Cancel is type="button", so it is never the form's default button).
-$("charForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
+let CHAR_OPTS = [];
+async function fillCharList() {
+  if (!MINE) MINE = await api("/api/my-characters").catch(() => ({characters: []}));
+  const current = CURRENT_CHAR, mine = MINE.characters || [];
+  const seen = new Set(current ? [charKey(current)] : []);
+  const pick = (list) => list.filter((c) => !seen.has(charKey(c)) && seen.add(charKey(c)));
+  const groups = [["Current", current ? [current] : []], ["Your characters", pick(mine)], ["Recent", pick(recentChars())]];
+  CHAR_OPTS = [];
+  $("charList").innerHTML = groups.filter(([, l]) => l.length).map(([label, list]) => `<div class="cm-group">${label}</div>` +
+    list.map((c) => {
+      const i = CHAR_OPTS.push(c) - 1, cur = current && charKey(c) === charKey(current);
+      const col = CLASS_COLORS[c.class] || "var(--line-strong)";
+      return `<button type="button" class="cm-opt" role="option" data-i="${i}" aria-selected="${cur}">
+        <span class="cls" style="background:${col}"></span><span><span class="nm" style="color:${c.class ? col : "inherit"}">${esc(c.name)}</span>
+        <span class="rl">${esc(c.server)} · ${esc((c.region || "").toUpperCase())}${c.level ? ` · ${c.level}` : ""}</span></span>
+        ${cur ? `<span class="ck">✓</span>` : ""}</button>`;
+    }).join("")).join("");
+  $("charList").querySelectorAll("[data-i]").forEach((b) => b.onclick = () => chooseChar(CHAR_OPTS[+b.dataset.i]));
+  $("cMineHint").hidden = !!MINE.local || mine.length > 0;
+  $("cMineHint").textContent = MINE.relogin ? "Sign out and in again to list your own characters here."
+    : "No characters claimed on your Warcraft Logs account - claim them there, or enter one manually.";
+}
+async function chooseChar(c, fromForm = false) {
+  $("charError").textContent = "";
   $("charSave").disabled = true;
   try {
-    await api("/api/settings", {method: "POST", body: JSON.stringify(
-      {name: $("cName").value.trim(), server: $("cServer").value.trim(), region: $("cRegion").value})});
-    $("charDialog").close();
+    const saved = await api("/api/settings", {method: "POST", body: JSON.stringify({name: c.name, server: c.server, region: c.region})});
+    rememberChar({...c, ...saved});
+    closeChar();
     $("runs").innerHTML = `<div class="empty">Loading...</div>`;
     loadRuns();
-  } catch (err) { $("charError").textContent = err.message; }
+  } catch (err) {
+    if (!fromForm) { setManual(true); $("cName").value = c.name; $("cServer").value = c.server; $("cRegion").value = c.region; }
+    $("charError").textContent = err.message;
+  }
   $("charSave").disabled = false;
+}
+function setManual(on) {
+  $("charForm").hidden = !on;
+  $("cManualBtn").setAttribute("aria-expanded", String(on));
+  if (on) { fillRealms(); $("cName").focus(); }
+}
+function openChar() {
+  $("charError").textContent = "";
+  $("charMenu").hidden = false;
+  $("charBtn").setAttribute("aria-expanded", "true");
+  setManual(!CURRENT_CHAR && !(MINE && (MINE.characters || []).length) && !recentChars().length);
+  fillCharList().then(() => { const first = $("charList").querySelector(".cm-opt"); if (first && $("charForm").hidden) first.focus(); });
+}
+function closeChar(focusBack = true) {
+  if ($("charMenu").hidden) return;
+  $("charMenu").hidden = true;
+  $("charBtn").setAttribute("aria-expanded", "false");
+  if (focusBack) $("charBtn").focus();
+}
+$("charBtn").onclick = (e) => { e.stopPropagation(); $("charMenu").hidden ? openChar() : closeChar(); };
+$("cManualBtn").onclick = () => setManual($("charForm").hidden);
+$("cRegion").onchange = fillRealms;
+document.addEventListener("click", (e) => { if (!e.target.closest(".charpick")) closeChar(false); });
+$("charMenu").addEventListener("keydown", (e) => {  // arrows move between options, Esc closes
+  if (e.key === "Escape") { e.preventDefault(); closeChar(); return; }
+  if (!["ArrowDown", "ArrowUp"].includes(e.key) || e.target.matches("input, select")) return;
+  const opts = [...$("charMenu").querySelectorAll(".cm-opt")];
+  const i = opts.indexOf(document.activeElement);
+  e.preventDefault();
+  opts[(i + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length].focus();
 });
-$("pasteForm").addEventListener("submit", (e) => {
+// Enter in Name or Realm submits the search.
+$("charForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  chooseChar({name: $("cName").value.trim(), server: $("cServer").value.trim(), region: $("cRegion").value}, true);
+});$("pasteForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const url = $("pasteUrl").value.trim();
   if (url) analyze(url);
@@ -1848,7 +1889,7 @@ $("studyBtn").onclick = async () => {
   if (s.can_run === false) { alert("The top-player study is maintained by the site owner."); return; }
   if (!confirm("Refresh the top-player study (10 top runs per dungeon)?\n\nIt pauses whenever the hourly WCL budget gets low, "
     + "so it can take a few hours. You can keep analyzing keys meanwhile; closing the app stops it (cached runs are kept).")) return;
-  try { await api("/api/study", {method: "POST", body: JSON.stringify({runs: 10})}); } catch (e) { reportError("Starting the top-player study", e.message); }
+  try { await api("/api/study", {method: "POST", body: JSON.stringify({runs: 10})}); } catch (e) { reportError("study", "Starting the top-player study", e.message, null, e.ref); }
   loadStudy();
 };
 
@@ -1893,7 +1934,7 @@ async function startApp() {
     const out = document.createElement("button");
     out.className = "pill"; out.textContent = `${me.user} · Sign out`;
     out.onclick = async () => { await fetch("/logout", {method: "POST"}); location.href = "/"; };
-    $("charBtn").after(out);
+    $("charBtn").closest(".charpick").after(out);
   }
   return true;
 }

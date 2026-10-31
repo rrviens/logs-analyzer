@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from app import auth
 from app.config import AUTH_MODE, CACHE_PATH, DATA_DIR, PROJECT_ROOT, SECURE_COOKIES, wcl_credentials
 from app.pipeline import AnalysisError, cache_key, run_analysis
-from app.reports import get_fights, get_players
+from app.reports import get_fights, get_players, parse_report_url
 from app.specs import SPECS, spec_for
 from app.study_runner import DEFAULT_RUNS, run_study, study_info
 from app.wcl import WCLClient, WCLError
@@ -48,7 +48,9 @@ query($name: String!, $server: String!, $region: String!, $limit: Int) {
 }
 """
 
-MY_CHARACTERS_QUERY = "{ userData { currentUser { characters { name level server { name region { slug } } } } } }"
+MY_CHARACTERS_QUERY = "{ userData { currentUser { characters { name level classID server { name region { slug } } } } } }"
+CLASS_NAMES = {1: "Warrior", 2: "Paladin", 3: "Hunter", 4: "Rogue", 5: "Priest", 6: "Death Knight", 7: "Shaman",
+               8: "Mage", 9: "Warlock", 10: "Monk", 11: "Druid", 12: "Demon Hunter", 13: "Evoker"}
 MY_CHARACTERS_TTL_S = 3600
 
 app = FastAPI()
@@ -137,7 +139,8 @@ def my_characters(w: Who = Depends(who)):
     except (WCLError, httpx.HTTPError, KeyError, TypeError):  # e.g. a session from before the scope
         return {"characters": [], "relogin": True}
     chars = [{"name": c["name"], "server": c["server"]["name"], "region": c["server"]["region"]["slug"].lower(),
-              "level": c.get("level") or 0} for c in (user or {}).get("characters") or [] if c.get("server")]
+              "level": c.get("level") or 0, "class": CLASS_NAMES.get(c.get("classID"))}
+             for c in (user or {}).get("characters") or [] if c.get("server")]
     return {"characters": sorted(chars, key=lambda c: (-c["level"], c["name"]))}
 
 
@@ -148,21 +151,54 @@ def realms():
     return {r: sorted(set(names)) for r, names in data.items() if not r.startswith("_")}
 
 
+# ---------- failures: every one is logged with context (Render logs) and answered with a friendly message ----------
+
+@app.middleware("http")
+async def request_id(request: Request, call_next):
+    """A short id per request, sent back as X-Request-Id and shown small in the page's error banner, so a user's
+    report can be matched to the log line."""
+    request.state.rid = uuid.uuid4().hex[:8]
+    response = await call_next(request)
+    response.headers["X-Request-Id"] = request.state.rid
+    return response
+
+
+def _rid(request: Request) -> str:
+    return getattr(request.state, "rid", "-")
+
+
+def _fail(request: Request, status: int, detail: str, headers: dict | None = None, **extra) -> JSONResponse:
+    return JSONResponse({"detail": detail, "ref": _rid(request), **extra}, status_code=status,
+                        headers={**(headers or {}), "X-Request-Id": _rid(request)})
+
+
 @app.exception_handler(WCLError)
 def wcl_error(request: Request, e: WCLError):
     """A Warcraft Logs refusal is never a 500: the page shows the message with a "Try again"."""
+    log.warning("WCL error on %s %s (ref %s, rate_limited=%s): %s", request.method, request.url.path, _rid(request),
+                e.rate_limited, e)
     headers = {"Retry-After": str(round(e.retry_after))} if e.retry_after else {}
-    return JSONResponse({"detail": str(e), "rate_limited": e.rate_limited}, status_code=429 if e.rate_limited else 503,
-                        headers=headers)
+    return _fail(request, 429 if e.rate_limited else 503, str(e), headers, rate_limited=e.rate_limited)
 
 
 @app.exception_handler(httpx.HTTPError)
 def http_error(request: Request, e: httpx.HTTPError):
     """Network trouble or an error status from Warcraft Logs (token or API): a message, not a 500."""
     status = getattr(getattr(e, "response", None), "status_code", None)
-    return JSONResponse({"detail": "Warcraft Logs didn't answer properly" + (f" ({status})" if status else "")
-                         + " - it may be busy. Try again in a minute.", "rate_limited": status == 429},
-                        status_code=429 if status == 429 else 503)
+    log.warning("WCL HTTP error on %s %s (ref %s): %s %s", request.method, request.url.path, _rid(request),
+                type(e).__name__, status or "")
+    return _fail(request, 429 if status == 429 else 503, "Warcraft Logs didn't answer properly"
+                 + (f" ({status})" if status else "") + " - it may be busy. Try again in a minute.",
+                 rate_limited=status == 429)
+
+
+@app.exception_handler(Exception)
+def unexpected_error(request: Request, e: Exception):
+    """Anything else: the traceback goes to the log, the page gets a plain message with the ref to report."""
+    log.error("unhandled error on %s %s (ref %s)", request.method, request.url.path, _rid(request),
+              exc_info=(type(e), e, e.__traceback__))
+    return _fail(request, 500, "Something went wrong on our side. Try again - if it keeps happening, mention "
+                               f"ref {_rid(request)} when you report it.")
 
 
 @app.get("/healthz")
@@ -272,6 +308,7 @@ def recent(limit: int = RECENT_FIRST, w: Who = Depends(who)):
         try:
             runs += _report_runs(client, rep, s, seen, None if now_ms - rep["startTime"] > FINISHED_REPORT_MS else RECENT_TTL_S)
         except WCLError as e:
+            log.warning("recent keys partial (user %s, report %s): %s", w.user_id, rep["code"], e)
             partial = str(e)
             break
     runs.sort(key=lambda r: r["started"], reverse=True)
@@ -327,12 +364,25 @@ def start_analysis(req: AnalyzeRequest, w: Who = Depends(who)):
                                          progress=job["progress"].append, use_cache=not req.fresh)
             job["status"] = "done"
         except (AnalysisError, WCLError, ValueError, StopIteration) as e:
+            log.warning("analysis failed (job %s, user %s, %s): %s: %s", job_id, w.user_id, _log_target(req.url),
+                        type(e).__name__, e)
             job["status"], job["error"] = "error", str(e) or "Could not read that log."
         except Exception as e:  # surface API/network failures to the page instead of hanging
-            job["status"], job["error"] = "error", f"{type(e).__name__}: {e}"
+            log.exception("analysis crashed (job %s, user %s, %s)", job_id, w.user_id, _log_target(req.url))
+            job["status"], job["error"] = "error", f"Something went wrong while analyzing ({type(e).__name__}). Try again."
+        job["ref"] = job_id[:8]
 
     threading.Thread(target=work, daemon=True).start()
     return {"job": job_id}
+
+
+def _log_target(url: str) -> str:
+    """report:fight from a log URL, for log lines (reports are referenced by code, never with tokens)."""
+    try:
+        code, fid = parse_report_url(url)
+        return f"report {code} fight {fid}"
+    except Exception:  # an unparseable URL is itself the failure being logged
+        return "unparsed url"
 
 
 @app.get("/api/jobs/{job_id}")
@@ -377,6 +427,7 @@ def start_study(req: StudyRequest, w: Who = Depends(who)):
             run_study(app_client, spec, max(3, min(req.runs, 20)), progress=study_job["progress"].append)
             study_job["status"] = "done"
         except Exception as e:  # report to the page; cached runs make a retry cheap
+            log.exception("study failed (%s)", spec.key)
             study_job["status"], study_job["error"] = "error", f"{type(e).__name__}: {e}"
 
     threading.Thread(target=work, daemon=True).start()
