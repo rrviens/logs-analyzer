@@ -4,6 +4,8 @@ Results are cached per run + rules version, so reopening a key is instant. Bump
 RULES_VERSION when findings logic changes.
 """
 import statistics
+import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 from app.baseline import comparable_fights
@@ -33,6 +35,7 @@ from app.wcl import WCLClient
 
 RULES_VERSION = 36
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
+TOP_WORKERS = 3  # top logs fetched in parallel (cold cache: each is several pages of events); 429s back off
 CURVE_POINTS = 60
 LUST_SPELLS = {"Heroism", "Bloodlust", "Time Warp", "Fury of the Aspects", "Primal Rage", "Ancient Hysteria",
                "Netherwinds", "Drums of the Maelstrom"}
@@ -63,6 +66,8 @@ def cache_key(code: str, fight_id: int, player: str, top: int) -> str:
 
 def run_analysis(client: WCLClient, url: str, player_name: str | None = None, top: int = 8,
                  progress: Callable[[str], None] = lambda msg: None, use_cache: bool = True) -> dict:
+    t0, report = time.time(), progress
+    progress = lambda msg: report(f"[{time.time() - t0:4.0f}s] {msg}")  # elapsed time shows which step is slow
     code, fight_id = parse_report_url(url)
     fight = pick_fight(get_fights(client, code), fight_id)
     me, spec = pick_healer(get_players(client, fight), player_name)
@@ -87,24 +92,39 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     progress("Finding comparable top logs...")
     pub = client.public()  # ranked top logs are public: fetched once into the shared cache, for every user
     tops, top_boss, candidates, skipped = [], [], [], []
-    # Extra candidates so logs failing the data-quality gate can be replaced from further down.
-    for f, p in comparable_fights(pub, fight, spec.class_name, spec.spec_name, top + QUALITY_BACKFILL):
-        if len(tops) >= top:
-            break
-        progress(f"Fetching top log {len(tops) + 1} of {top} ({p.name} +{f.keystone_level})...")
+    fetched = [0]
+
+    def load_top(fp):
+        """One top log, fully loaded - or (None, reasons) when it fails the data-quality gate."""
+        f, p = fp
         other = fetch_run(pub, f, p.id, spec)
         otl = build_timeline(other)
         ok, reasons = quality_check(other.damage, other.player_ids, f.duration_s, fight.duration_s, otl.group_ehp)
-        if not ok:
-            skipped.append({"player": p.name, "key": f.keystone_level, "reasons": reasons})
-            continue
-        candidates.append((f, p))
-        state = fetch_healer_state(pub, f, other, spec)
-        top_run = TopRun(other, get_trinkets(pub, f).get(p.id, []),
-                         frozenset(intake_modifiers(get_players(pub, f), effects)),
-                         heal_casts(other, otl, fetch_spell_heals(pub, f, other, spec), state, spec))
-        tops.append((top_run, otl))
-        top_boss.append((other, otl, fetch_boss_casts(pub, f, other)))
+        loaded = None
+        if ok:
+            state = fetch_healer_state(pub, f, other, spec)
+            loaded = (TopRun(other, get_trinkets(pub, f).get(p.id, []),
+                             frozenset(intake_modifiers(get_players(pub, f), effects)),
+                             heal_casts(other, otl, fetch_spell_heals(pub, f, other, spec), state, spec)),
+                      otl, fetch_boss_casts(pub, f, other))
+        fetched[0] += 1
+        progress(f"Fetched top log {fetched[0]} ({p.name} +{f.keystone_level}{'' if ok else ', incomplete data - skipped'})")
+        return loaded, reasons
+
+    # Extra candidates so logs failing the data-quality gate can be replaced from further down. Fetched
+    # TOP_WORKERS at a time, in batches of exactly what is still missing, so no log is fetched for nothing.
+    pending = comparable_fights(pub, fight, spec.class_name, spec.spec_name, top + QUALITY_BACKFILL)
+    progress(f"Fetching {min(top, len(pending))} top logs, {TOP_WORKERS} at a time...")
+    with ThreadPoolExecutor(TOP_WORKERS) as pool:
+        while pending and len(tops) < top:
+            batch, pending = pending[:top - len(tops)], pending[top - len(tops):]
+            for (f, p), (loaded, reasons) in zip(batch, pool.map(load_top, batch)):  # keeps ranking order
+                if not loaded:
+                    skipped.append({"player": p.name, "key": f.keystone_level, "reasons": reasons})
+                    continue
+                candidates.append((f, p))
+                tops.append(loaded[:2])
+                top_boss.append((loaded[0].run, loaded[1], loaded[2]))
 
     progress("Analyzing...")
     top_rip = [(hots_active(tr.run, otl) if spec.maintenance else None, hot_refreshes(tr.run, spec))

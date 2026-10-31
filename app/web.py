@@ -27,7 +27,7 @@ from app.reports import get_fights, get_players, parse_report_url, pick_fight
 from app.runs import fetch_run
 from app.specs import SPECS, spec_for
 from app.study_runner import DEFAULT_RUNS, run_study, study_info
-from app.wcl import WCLClient
+from app.wcl import WCLClient, WCLError
 
 STATIC = PROJECT_ROOT / "app" / "static"
 TOP_LOGS = 8
@@ -236,7 +236,7 @@ def start_analysis(req: AnalyzeRequest, w: Who = Depends(who)):
             job["result"] = run_analysis(w.client, req.url, s.get("name"), TOP_LOGS,
                                          progress=job["progress"].append, use_cache=not req.fresh)
             job["status"] = "done"
-        except (AnalysisError, ValueError, StopIteration) as e:
+        except (AnalysisError, WCLError, ValueError, StopIteration) as e:
             job["status"], job["error"] = "error", str(e) or "Could not read that log."
         except Exception as e:  # surface API/network failures to the page instead of hanging
             job["status"], job["error"] = "error", f"{type(e).__name__}: {e}"

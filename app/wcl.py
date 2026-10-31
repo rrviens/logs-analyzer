@@ -23,6 +23,8 @@ import httpx
 TOKEN_URL = "https://www.warcraftlogs.com/oauth/token"
 CLIENT_API = "https://www.warcraftlogs.com/api/v2/client"
 USER_API = "https://www.warcraftlogs.com/api/v2/user"
+RATE_QUERY = "{ rateLimitData { limitPerHour pointsSpentThisHour pointsResetIn } }"
+RETRIES = 5  # on 429 (burst limit) / 5xx: back off 2, 4, 8, 16, 30s (or Retry-After)
 
 
 class WCLError(RuntimeError):
@@ -95,6 +97,44 @@ class WCLClient:
     def set_cached(self, key: str, value) -> None:
         self._write(key, json.dumps(value))
 
+    def _post(self, query: str, variables: dict | None) -> httpx.Response:
+        """POST with backoff on 429 / 5xx. A 429 with the hourly points used up is not worth waiting out:
+        it raises a clear message with the reset time (everything fetched so far is already cached)."""
+        for attempt in range(RETRIES + 1):
+            try:
+                r = self._http.post(self._api, json={"query": query, "variables": variables or {}},
+                                    headers={"Authorization": f"Bearer {self._get_token()}"})
+            except httpx.TransportError:
+                if attempt == RETRIES:
+                    raise
+                time.sleep(2 ** attempt)
+                continue
+            if r.status_code != 429 and r.status_code < 500:
+                return r
+            if r.status_code == 429:
+                limit = self._rate_limit()
+                if limit and limit["pointsSpentThisHour"] >= limit["limitPerHour"] - 1:
+                    raise WCLError(f"Your Warcraft Logs API limit for this hour is used up "
+                                   f"({limit['pointsSpentThisHour']:.0f}/{limit['limitPerHour']}); it resets in "
+                                   f"{max(1, round(limit['pointsResetIn'] / 60))} min. Everything fetched so far is "
+                                   f"saved - analyze again then and it continues where it stopped.")
+            if attempt == RETRIES:
+                if r.status_code == 429:
+                    raise WCLError("Warcraft Logs is limiting requests right now (too many in a short time). "
+                                   "Everything fetched so far is saved - try again in a few minutes.")
+                return r
+            wait = float(r.headers.get("Retry-After") or 0) or min(30.0, 2.0 * 2 ** attempt)
+            time.sleep(min(wait, 60.0))
+        return r
+
+    def _rate_limit(self) -> dict | None:
+        try:
+            r = self._http.post(self._api, json={"query": RATE_QUERY},
+                                headers={"Authorization": f"Bearer {self._get_token()}"}, timeout=15)
+            return r.json()["data"]["rateLimitData"] if r.status_code == 200 else None
+        except (httpx.HTTPError, KeyError, TypeError, ValueError):
+            return None
+
     def query(self, query: str, variables: dict | None = None, ttl: float | None = None) -> dict:
         """Run a GraphQL query. ttl=None caches forever (report data never changes);
         ttl=0 skips the cache."""
@@ -107,11 +147,7 @@ class WCLClient:
             if row and (ttl is None or time.time() - row[0] < ttl):
                 return json.loads(row[1])
 
-        r = self._http.post(
-            self._api,
-            json={"query": query, "variables": variables or {}},
-            headers={"Authorization": f"Bearer {self._get_token()}"},
-        )
+        r = self._post(query, variables)
         if r.status_code == 401 and self._user_token:
             raise WCLError("Your Warcraft Logs sign-in has expired - sign in again.")
         r.raise_for_status()
