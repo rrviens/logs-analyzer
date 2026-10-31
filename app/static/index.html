@@ -312,6 +312,15 @@
   #tlSection.pinned { border-radius: 0 0 12px 12px; padding: 10px 20px 8px; }
   #tlSection.pinned details.legend { display: none; }
   #textSize.on { border-color: var(--accent); color: var(--accent); }
+  .dpshead { font-weight: 600; margin-bottom: 8px; }
+  .dpslegend { margin: 6px 0 4px; }
+  .dpslegend i.box { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  .dpssub { margin: 14px 0 6px; font-size: 0.8667rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .dpslist { list-style: none; margin: 0; padding: 0; }
+  .dpslist li { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .dpslist li:last-child { border-bottom: 0; }
+  .dpslist .pl { color: var(--muted); font-size: 0.8667rem; }
+  .dpslist b { margin-left: auto; color: var(--high); }
   .signin { max-width: 560px; margin: 40px auto; grid-column: 1 / -1; }
   .signin p { color: var(--muted); }
   .signin a.primary { display: inline-block; text-decoration: none; margin-top: 8px; }
@@ -538,7 +547,6 @@ const TOGGLES = [
   ["l:trinket", "Other", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Trinkets & potions"],
   ["l:finding", "Other", `<i class="dot" style="background:var(--warning)"></i>`, "Finding dots"],
   ["mana", "Healing", `<i style="background:var(--series-1)"></i>`, "Your mana"],
-  ["dps", "Healing", `<i class="box" style="background:var(--good)"></i>`, "DPS windows (used / missed)"],
   ["party", "Party", `<span class="sym">▤</span>`, "Party member lanes"],
   ["personal", "Party", `<i class="box" style="background:var(--series-1)"></i>`, "Personal defensives"],
   ["external", "Party", `<i class="box" style="background:var(--series-3)"></i>`, "Externals"],
@@ -552,8 +560,8 @@ const TOGGLES = [
 const SCOPE_KEY = {personal: "personal", external: "external", group: "groupdef"};
 // Presets switch whole sets of toggles; any change in the Lanes menu makes it "custom".
 const PRESETS = {
-  healing: {label: "Healing", on: ["group", "lowest", "top", "l:cooldown", "l:hit", "deaths", "chain", "dps"]},
-  party: {label: "Party", on: ["group", "lowest", "top", "uncovered", "l:cooldown", "l:hit", "deaths", "chain", "dps", "l:personal",
+  healing: {label: "Healing", on: ["group", "lowest", "top", "l:cooldown", "l:hit", "deaths", "chain"]},
+  party: {label: "Party", on: ["group", "lowest", "top", "uncovered", "l:cooldown", "l:hit", "deaths", "chain", "l:personal",
                                "party", "personal", "external", "groupdef", "avoid"]},
   everything: {label: "Everything", on: TOGGLES.map((t) => t[0])},
 };
@@ -785,9 +793,7 @@ function drawTimeline() {
                                  ...(t.lanes || [])] : [];
   const hpTop = Math.round(fs + 10), hpH = pinned ? Math.round(fs * 5) : Math.max(180, Math.round(fs * 13));
   const lanesTop = hpTop + hpH + 10;
-  const dpsRows = isOn("dps") && (t.dps_windows || []).length ? 1 : 0;  // one "DPS windows" row under the marker lanes
-  const dpsY = lanesTop + shownLanes.length * laneH;
-  const partyTop = dpsY + dpsRows * laneH + (lanes.length ? 10 : 0);
+  const partyTop = lanesTop + shownLanes.length * laneH + (lanes.length ? 10 : 0);
   const manaH = pinned || !isOn("mana") ? 0 : Math.round(fs * 3);
   const manaTop = partyTop + lanes.length * laneH + (manaH ? 12 : 0);
   const axisY = manaTop + manaH + 4, H = Math.round(axisY + fs + 10);
@@ -904,16 +910,6 @@ function drawTimeline() {
     });
   });
   const barH = Math.max(8, laneH - 6);
-  if (dpsRows) {  // calm stretches: green = used about as well as top healers, amber = partly, red = mostly missed
-    const yc = dpsY + laneH / 2;
-    g += `<line x1="${L}" x2="${W - R}" y1="${yc}" y2="${yc}" stroke="var(--grid)"/>`;
-    t.dps_windows.filter((w) => w.end_s >= s0 && w.start_s <= s1 && (!whole || pullAt(w.start_s))).forEach((w) => {
-      const xa = x(Math.max(w.start_s, s0)), xb = x(Math.min(w.end_s, s1));
-      const col = w.use == null ? "var(--ink-muted)" : w.use >= 0.75 ? "var(--good)" : w.use >= 0.4 ? "var(--warning)" : "var(--critical)";
-      g += `<rect x="${xa}" y="${yc - barH / 2}" width="${Math.max(3, xb - xa)}" height="${barH}" rx="2" fill="${col}"
-        opacity=".55" ${tipAttr(w.tip.filter(Boolean))}/>`;
-    });
-  }
   lanes.forEach((ln, i) => {
     const yc = partyTop + i * laneH + laneH / 2;
     g += `<line x1="${L}" x2="${W - R}" y1="${yc}" y2="${yc}" stroke="var(--grid)"/>`;
@@ -939,7 +935,6 @@ function drawTimeline() {
   g += `<text class="lane" x="8" y="${hpTop + fs}">HP</text>`;
   shownLanes.forEach(([, label, , short], i) =>
     g += `<text class="lane" x="8" y="${lanesTop + i * laneH + laneH / 2 + mid}">${W < 560 ? short : label}</text>`);
-  if (dpsRows) g += `<text class="lane" x="8" y="${dpsY + laneH / 2 + mid}">${W < 560 ? "DPS" : "DPS windows"}</text>`;
   lanes.forEach((ln, i) => {
     const yc = partyTop + i * laneH + laneH / 2;
     g += `<rect x="8" y="${yc - fs / 2}" width="3" height="${fs}" fill="${ln.id === "group" ? "var(--series-7)" : CLASS_COLORS[ln.class] || "var(--line)"}"/>
@@ -1100,7 +1095,7 @@ function initTimeline(res) {
   };
   setPinned(lsGet("tlPinned") === "1");
 }
-window.addEventListener("resize", () => { if (TL && $("tlSvg")) { drawTimeline(); updatePinHeight(); } });
+window.addEventListener("resize", () => { if (TL && $("tlSvg")) { drawTimeline(); updatePinHeight(); drawDps(); } });
 
 // ---------- sections ----------
 const SECTIONS = {
@@ -1109,6 +1104,7 @@ const SECTIONS = {
   phases: {title: "Boss phases", icon: "◐", color: "var(--series-7)"},
   items: {title: "Trinkets & consumables", icon: "◆", color: "var(--series-3)"},
   spells: {title: "Single-target vs group heal", icon: "≈", color: "var(--series-1)"},
+  dps: {title: "DPS windows", icon: "⚔", color: "var(--series-3)"},
   pulls: {title: "Pulls vs top groups", icon: "▤", color: "var(--ink-muted)"},
   good: {title: "Good calls", icon: "✓", color: "var(--good)"},
   compare: {title: "You vs a top player", icon: "⇄", color: "var(--accent)"},
@@ -1294,6 +1290,72 @@ function renderPhases(res) {
     Damage taken = % of group max HP per second.</div></details>`;
 }
 
+// ---------- DPS windows: calm stretches a healer can spend on damage ----------
+const dpsColor = (w) => w.use == null ? "var(--ink-muted)" : w.use >= 0.75 ? "var(--good)" : w.use >= 0.4 ? "var(--warning)" : "var(--critical)";
+
+function renderDps(res) {
+  const d = res.dps, ws = (res.timeline || {}).dps_windows || [];
+  if (!d || !ws.length) return "";
+  const k = (v) => v == null ? "-" : `${Math.round(v / 1000)}k`, m = (v) => `${(v / 1e6).toFixed(1)}M`;
+  const head = `${d.windows} calm window${d.windows === 1 ? "" : "s"} (${d.seconds}s in total)` + (d.top_dps
+    ? `: you dealt ${k(d.your_dps)}/s in them, top ${SP.plural} ${k(d.top_dps)}/s in their own calm moments`
+      + (d.missed ? ` · ~${m(d.missed)} damage left on the table` : "") : "");
+  const worst = ws.filter((w) => w.missed >= 5e4).sort((a, b) => b.missed - a.missed).slice(0, 6).map((w) =>
+    `<li><span class="when">${T(w.clock)}</span><span class="pl">${esc(pullShort(w.pull))}</span>
+      <span>${w.seconds}s calm · ${w.dps_casts} damage cast${w.dps_casts === 1 ? "" : "s"}, ${w.other_casts} other,
+      ~${w.idle_s}s idle</span><b>~${m(w.missed)} missed</b></li>`).join("");
+  return `<div class="dpshead">${esc(head)}</div>
+    <div class="tlwrap" id="dpsWrap"><svg id="dpsSvg" role="img" aria-label="DPS windows across the run"></svg>
+      <div class="tip" id="dpsTip"></div></div>
+    <div class="legend-items dpslegend"><span><i class="box" style="background:var(--good)"></i>used like top players</span>
+      <span><i class="box" style="background:var(--warning)"></i>partly used</span>
+      <span><i class="box" style="background:var(--critical)"></i>mostly missed</span>
+      <span class="hint">A window = 3s+ with the group healthy, nobody low and no big hit coming. Click one to open it on the timeline.</span></div>
+    ${worst ? `<h4 class="dpssub">Biggest missed windows</h4><ul class="dpslist">${worst}</ul>` : ""}`;
+}
+
+// Whole-run strip of the windows, on the overview's scale (pulls side by side, gaps squeezed).
+function drawDps() {
+  const svg = $("dpsSvg"), wrap = $("dpsWrap");
+  if (!svg || !TL) return;
+  const t = TL.res.timeline, ws = t.dps_windows || [];
+  const W = Math.max(320, wrap.clientWidth), R = 8, {fs, L} = tlMetrics(W, false), plotW = W - L - R;
+  const top = Math.round(fs + 6), h = Math.round(fs * 2), H = top + h + 4;
+  const {segs, x} = overviewScale(t, L, plotW);
+  let g = "";
+  segs.forEach((sg) => {
+    g += `<rect x="${sg.x0}" y="${top}" width="${Math.max(1, sg.x1 - sg.x0)}" height="${h}" fill="${sg.p.boss ? "var(--series-7)" : "var(--ink-muted)"}"
+      opacity="${sg.p.boss ? .12 : .06}"/>`;
+    const label = pullShort(sg.p.label);
+    if (sg.x1 - sg.x0 > label.length * fs * 0.58) g += `<text x="${sg.x0 + 3}" y="${top - 4}" ${sg.p.boss ? 'style="font-weight:700"' : ""}>${esc(label)}</text>`;
+  });
+  ws.forEach((w, i) => {
+    const xa = x(w.start_s), xb = x(w.end_s);
+    g += `<rect x="${xa}" y="${top + 3}" width="${Math.max(4, xb - xa)}" height="${h - 6}" rx="2" fill="${dpsColor(w)}" opacity=".8"
+      data-w="${i}" style="cursor:pointer"/>`;
+  });
+  g += `<text class="lane" x="8" y="${top + h / 2 + fs * 0.35}">Whole run</text>`;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  svg.innerHTML = g;
+  const tip = $("dpsTip");
+  svg.onmousemove = (ev) => {
+    const el = ev.target.closest("[data-w]");
+    if (!el) { tip.style.display = "none"; return; }
+    const w = ws[+el.dataset.w], lines = w.tip.filter(Boolean);
+    tip.innerHTML = `<b>${esc(w.clock)} · ${esc(pullShort(w.pull))}</b>${lines.map((l) => `<br>${esc(l)}`).join("")}`;
+    tip.style.display = "block";
+    const r = svg.getBoundingClientRect(), px = ev.clientX - r.left;
+    tip.style.left = `${Math.max(0, Math.min(px + 12, wrap.clientWidth - tip.offsetWidth - 4))}px`;
+    tip.style.top = `${top + h}px`;
+  };
+  svg.onmouseleave = () => { tip.style.display = "none"; };
+  svg.onclick = (ev) => {
+    const el = ev.target.closest("[data-w]");
+    if (el) { const w = ws[+el.dataset.w]; focusTimeline(w.start_s, w.end_s); }
+  };
+}
+
 function renderSpells(res) {
   const sc = res.spell_choice;
   if (!sc || !sc.you) return "";
@@ -1357,7 +1419,8 @@ function render(res, url) {
       <td>${kk(q.intake)}</td><td>${kk(q.top_intake)}</td><td>${kk(q.healing)}</td><td>${kk(q.top_healing)}</td></tr>`).join("");
   const todo = (x) => x && x.lines ? x.lines.filter((l) => l.action).length : 0;
   const counts = {look: res.findings.length, deaths: (res.deaths || []).length, phases: todo(v.phases),
-                  items: todo(v.items), spells: todo(v.spells), pulls: todo(v.pulls), good: res.good_calls.length};
+                  items: todo(v.items), spells: todo(v.spells), pulls: todo(v.pulls), good: res.good_calls.length,
+                  dps: ((res.timeline || {}).dps_windows || []).filter((w) => w.use != null && w.use < 0.4).length};
 
   $("main").innerHTML = `
     <div class="card">
@@ -1383,6 +1446,8 @@ function render(res, url) {
           "Trinkets & consumables: none used.", false)}
     ${sec("spells", res.spell_choice && res.spell_choice.you ? counts.spells || "ok" : 0, verdictBlock(v.spells, renderSpells(res)),
           "Not enough heals to judge.", false)}
+    ${sec("dps", ((res.timeline || {}).dps_windows || []).length ? counts.dps || "ok" : 0, renderDps(res),
+          "No calm stretches long enough to deal damage in this run.", false)}
     ${sec("pulls", rows ? counts.pulls || "ok" : 0, verdictBlock(v.pulls, `<details><summary>Show data</summary><div class="tablewrap"><table>
       <tr><th>Pull</th><th>Time</th><th>Group HP</th><th>Top HP</th><th>Dmg in/s</th><th>Top in/s</th><th>Heal/s</th><th>Top heal/s</th></tr>
       ${rows}</table></div></details>`), "No pulls to compare.", false)}
@@ -1396,6 +1461,7 @@ function render(res, url) {
       Defensive values in data/defensives.json are approximate.</div>`;
   $("fresh").onclick = () => analyze(url, true);
   initTimeline(res);
+  drawDps();
   initCompare(url);
 }
 

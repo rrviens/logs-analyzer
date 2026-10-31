@@ -36,7 +36,7 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient
 
-RULES_VERSION = 38
+RULES_VERSION = 40
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
 # memory at once; set TOP_WORKERS=1 on a small (512 MB) host.
@@ -303,7 +303,12 @@ def _dps_windows(client, fight, run, tl, segs, profiles, tops, candidates, spec)
         mine = w.damage / w.seconds if w.seconds else 0
         use = min(1.0, mine / top_rate) if top_rate else None
         missed = max(0.0, top_rate * w.seconds - w.damage) if top_rate else None
+        s = max(0, (w.start - run.start) // 1000)
         rows.append({"start_s": rel(w.start), "end_s": rel(w.end), "use": round(use, 2) if use is not None else None,
+                     "missed": round(missed or 0), "clock": f"{s // 60}:{s % 60:02d}", "seconds": round(w.seconds),
+                     "pull": next((_pull_label(run, i) for i, p in enumerate(run.pulls)  # 1s bins can start just before
+                                   if p.start - tl.bin_ms <= w.start <= p.end), ""),
+                     "dps_casts": w.dps_casts, "other_casts": w.other_casts, "idle_s": round(w.idle_s),
                      "tip": [f"Safe DPS window: {w.seconds:.0f}s (group healthy, no big hit coming)",
                              f"You: {w.dps_casts} damage cast{'s' if w.dps_casts != 1 else ''}, {w.other_casts} other "
                              f"(heals into a healthy group, buffs), ~{w.idle_s:.0f}s idle",
