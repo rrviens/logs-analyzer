@@ -22,7 +22,8 @@ from pydantic import BaseModel
 
 from app import auth
 from app.config import AUTH_MODE, CACHE_PATH, DATA_DIR, PROJECT_ROOT, SECURE_COOKIES, wcl_credentials
-from app.pipeline import AnalysisError, cache_key, run_analysis
+from app.jobs import Jobs
+from app.pipeline import RULES_VERSION, AnalysisError, cache_key, run_analysis, stored_analysis
 from app.reports import get_fights, get_players, parse_report_url
 from app.specs import SPECS, spec_for
 from app.study_runner import DEFAULT_RUNS, run_study, study_info
@@ -37,7 +38,6 @@ FINISHED_REPORT_MS = 24 * 3600 * 1000  # reports older than this are finished: f
 MIN_RUN_MIN = 5  # shorter "runs" are resets
 MIN_UNTIMED_MIN = 10  # short untimed attempts are bricked keys, not worth reviewing
 SAME_RUN_MS = 120_000
-MAX_JOBS = 500  # finished jobs kept in memory
 
 CHARACTER_QUERY = """
 query($name: String!, $server: String!, $region: String!, $limit: Int) {
@@ -56,7 +56,6 @@ MY_CHARACTERS_TTL_S = 3600
 app = FastAPI()
 log = logging.getLogger("uvicorn.error")  # shows in the Render logs
 app_client = WCLClient(*wcl_credentials(), CACHE_PATH)
-jobs: dict[str, dict] = {}
 study_job: dict = {}
 
 
@@ -108,16 +107,6 @@ def lookup_character(client: WCLClient, s: dict, ttl: float) -> dict | None:
     data = client.query(CHARACTER_QUERY, {"name": s["name"], "server": server_slug(s["server"]),
                                           "region": s["region"].lower(), "limit": RECENT_REPORTS}, ttl=ttl)
     return data["characterData"]["character"]
-
-
-def new_job(w: Who, progress: list[str] | None = None) -> tuple[str, dict]:
-    if len(jobs) > MAX_JOBS:  # drop the oldest finished jobs
-        for k in [k for k, j in jobs.items() if j["status"] != "running"][:len(jobs) - MAX_JOBS]:
-            jobs.pop(k, None)
-    job_id = uuid.uuid4().hex
-    job = {"status": "running", "progress": progress or [], "result": None, "error": None, "owner": w.user_id}
-    jobs[job_id] = job
-    return job_id, job
 
 
 # ---------- pages, health, sign-in ----------
@@ -298,7 +287,16 @@ def recent(limit: int = RECENT_FIRST, w: Who = Depends(who)):
     s, client = load_settings(w), w.client.quick()
     if not s:
         return {"runs": []}
-    char = lookup_character(client, s, ttl=RECENT_TTL_S)
+    saved_key = f"recent_saved:{s['name'].lower()}:{server_slug(s['server'])}:{s['region']}"
+    try:
+        char = lookup_character(client, s, ttl=RECENT_TTL_S)
+    except WCLError as e:  # Warcraft Logs busy: the last list we built, with a quiet note, instead of an error
+        saved = client.get_cached(saved_key)
+        if not saved:
+            raise
+        log.warning("recent keys from saved list (user %s): %s", w.user_id, e)
+        return {**saved, "note": "Showing your saved list - Warcraft Logs is busy right now; it refreshes "
+                                 "automatically.", "partial": None}
     if not char:
         raise HTTPException(404, "Character not found on Warcraft Logs.")
     reports = sorted(char["recentReports"]["data"], key=lambda r: -r["startTime"])
@@ -312,8 +310,11 @@ def recent(limit: int = RECENT_FIRST, w: Who = Depends(who)):
             partial = str(e)
             break
     runs.sort(key=lambda r: r["started"], reverse=True)
-    return {"character": f"{char['name']} - {char['server']['name']}", "runs": runs, "partial": partial,
-            "more": limit < len(reports)}
+    out = {"character": f"{char['name']} - {char['server']['name']}", "runs": runs, "partial": partial,
+           "more": limit < len(reports)}
+    if not partial:
+        client.set_cached(saved_key, out)  # shown when Warcraft Logs is busy next time
+    return out
 
 
 def _report_runs(client: WCLClient, rep: dict, s: dict, seen: list, ttl: float | None) -> list[dict]:
@@ -353,45 +354,86 @@ def budget(w: Who = Depends(who)):
 
 # ---------- analysis and comparison (background jobs, visible only to their owner) ----------
 
+# Analyses run as queued jobs (app/jobs.py): they survive restarts and wait out Warcraft Logs rate limits.
+queue = Jobs(app_client)
+PUBLIC_REPORT_QUERY = "query($code: String!) { reportData { report(code: $code) { visibility } } }"
+
+
+def client_for(owner: int) -> WCLClient:
+    """The API client a queued job runs with: the owner's own sign-in when hosted."""
+    if not owner:
+        return app_client
+    token = auth.token_for_user(app_client, owner)
+    if not token:
+        raise WCLError("Your Warcraft Logs sign-in has expired - sign in again to analyze new runs.")
+    return app_client.for_user(token, owner)
+
+
+def public_latest_key(code: str, fight_id: int) -> str:
+    return f"public_latest:{code}:{fight_id}"
+
+
+@queue.handler("analyze")
+def _analyze_job(owner: int, p: dict, progress) -> str:
+    client = client_for(owner)
+    out = run_analysis(client, p["url"], p.get("name"), TOP_LOGS, progress=progress, use_cache=not p.get("fresh"))
+    if owner:  # hosted: a public report's analysis can also be opened by anyone with the link, signed out
+        try:
+            if client.query(PUBLIC_REPORT_QUERY, {"code": out["key"].split(":")[2]})["reportData"]["report"]["visibility"] == "public":
+                pub = app_client.public()
+                pub.set_cached(out["key"], out)
+                pub.set_cached(public_latest_key(*out["key"].split(":")[2:4]), out["key"])
+        except (WCLError, httpx.HTTPError, KeyError, TypeError):
+            log.warning("could not check report visibility for %s; kept private", out["key"].split(":")[2])
+    return out["key"]
+
+
+@app.on_event("startup")
+def _start_queue():
+    queue.start()
+
+
 @app.post("/api/analyze")
 def start_analysis(req: AnalyzeRequest, w: Who = Depends(who)):
-    job_id, job = new_job(w)
-    s = load_settings(w) or {}
-
-    def work():
-        try:
-            job["result"] = run_analysis(w.client, req.url, s.get("name"), TOP_LOGS,
-                                         progress=job["progress"].append, use_cache=not req.fresh)
-            job["status"] = "done"
-        except (AnalysisError, WCLError, ValueError, StopIteration) as e:
-            log.warning("analysis failed (job %s, user %s, %s): %s: %s", job_id, w.user_id, _log_target(req.url),
-                        type(e).__name__, e)
-            job["status"], job["error"] = "error", str(e) or "Could not read that log."
-        except Exception as e:  # surface API/network failures to the page instead of hanging
-            log.exception("analysis crashed (job %s, user %s, %s)", job_id, w.user_id, _log_target(req.url))
-            job["status"], job["error"] = "error", f"Something went wrong while analyzing ({type(e).__name__}). Try again."
-        job["ref"] = job_id[:8]
-
-    threading.Thread(target=work, daemon=True).start()
-    return {"job": job_id}
+    """A stored analysis on the current rules opens at once (no Warcraft Logs calls). Otherwise a job is queued -
+    and the newest stored version, if any, is returned with it to show while it updates."""
+    try:
+        code, fid = parse_report_url(req.url)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    name = (load_settings(w) or {}).get("name")
+    stored = stored_analysis(w.client, code, fid, name, TOP_LOGS) if fid is not None and name and not req.fresh else None
+    if stored and stored.get("rules_version") == RULES_VERSION:
+        return {"result": stored}
+    job_id = queue.submit(w.user_id, "analyze", {"url": req.url, "name": name, "fresh": req.fresh})
+    return {"job": job_id, "result": stored, "stale": bool(stored)}
 
 
-def _log_target(url: str) -> str:
-    """report:fight from a log URL, for log lines (reports are referenced by code, never with tokens)."""
+@app.get("/api/public-analysis")
+def public_analysis(url: str):
+    """Signed out: a saved analysis of a public run, from a link. Analyzing new runs needs a sign-in."""
     try:
         code, fid = parse_report_url(url)
-        return f"report {code} fight {fid}"
-    except Exception:  # an unparseable URL is itself the failure being logged
-        return "unparsed url"
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    pub = app_client.public()
+    key = pub.get_cached(public_latest_key(code, fid)) if fid is not None else None
+    result = pub.get_cached(key) if key else None
+    if not result:
+        raise HTTPException(404, "No saved analysis of this run yet - sign in to analyze it.")
+    return {"result": result}
 
 
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str, w: Who = Depends(who)):
-    job = jobs.get(job_id)
+    job = queue.get(job_id)
     if not job or job["owner"] != w.user_id:
         raise HTTPException(404, "Unknown job")
-    return {k: v for k, v in job.items() if k != "owner"}
-
+    out = {k: job[k] for k in ("status", "progress", "note", "error", "position", "attempts")}
+    out["ref"] = job_id[:8]
+    if job["status"] == "done":
+        out["result"] = w.client.get_cached(job["result_key"])
+    return out
 
 # ---------- top-player study (shared data: run by the site owner when hosted) ----------
 

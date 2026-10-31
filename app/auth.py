@@ -7,6 +7,7 @@ gets a random session id (HttpOnly, SameSite=Lax, Secure over https) - the token
 """
 import base64
 import hashlib
+import logging
 import secrets
 import time
 import urllib.parse
@@ -17,6 +18,7 @@ import httpx
 from app.config import REDIRECT_URI, wcl_credentials
 from app.wcl import TOKEN_URL, USER_API, WCLClient
 
+log = logging.getLogger("uvicorn.error")
 AUTHORIZE_URL = "https://www.warcraftlogs.com/oauth/authorize"
 STATE_TTL_S = 600
 SESSION_COOKIE, STATE_COOKIE = "hr_session", "hr_oauth_state"
@@ -74,6 +76,9 @@ def finish_login(client: WCLClient, code: str, state: str, cookie_state: str | N
                     headers={"Authorization": f"Bearer {tok['access_token']}"}).json()["data"]["userData"]["currentUser"]
     s = Session(secrets.token_urlsafe(32), int(me["id"]), me["name"], tok["access_token"],
                 time.time() + tok.get("expires_in", 3600 * 24 * 30))
+    # How long Warcraft Logs lets this sign-in last (the session lasts as long; no token in the log).
+    log.info("sign-in ok: user %s, token valid %.0f days, refresh token %s", s.user_id,
+             tok.get("expires_in", 0) / 86400, "given" if tok.get("refresh_token") else "not given")
     with client.lock:
         client.db.execute("INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?)",
                           (s.id, s.user_id, s.user_name, s.token, s.expires, time.time()))
@@ -91,6 +96,15 @@ def get_session(client: WCLClient, session_id: str | None) -> Session | None:
     if not row or row[4] < time.time():
         return None
     return Session(*row)
+
+
+def token_for_user(client: WCLClient, user_id: int) -> str | None:
+    """The newest valid access token of a user - for queued jobs, which run after the request that made them."""
+    _tables(client)
+    with client.lock:
+        row = client.db.execute("SELECT token FROM sessions WHERE user_id = ? AND expires > ? ORDER BY expires DESC LIMIT 1",
+                                (user_id, time.time())).fetchone()
+    return row[0] if row else None
 
 
 def end_session(client: WCLClient, session_id: str | None) -> None:

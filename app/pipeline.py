@@ -88,6 +88,16 @@ def cache_key(code: str, fight_id: int, player: str, top: int) -> str:
     return f"analysis:v{RULES_VERSION}:{code}:{fight_id}:{player.lower()}:{top}"
 
 
+def latest_key(code: str, fight_id: int, player: str, top: int) -> str:
+    return f"analysis_latest:{code}:{fight_id}:{player.lower()}:{top}"
+
+
+def stored_analysis(client: WCLClient, code: str, fight_id: int, player: str, top: int) -> dict | None:
+    """The newest stored analysis of a run (any rules version) - no Warcraft Logs calls."""
+    key = client.get_cached(latest_key(code, fight_id, player, top))
+    return client.get_cached(key) if key else None
+
+
 def run_analysis(client: WCLClient, url: str, player_name: str | None = None, top: int = 8,
                  progress: Callable[[str], None] = lambda msg: None, use_cache: bool = True) -> dict:
     t0, report = time.time(), progress
@@ -100,6 +110,12 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     if use_cache:
         cached = client.get_cached(key)
         if cached:
+            if not cached.get("key"):  # stored before the "latest" pointers existed
+                cached["key"], cached["rules_version"] = key, RULES_VERSION
+                client.set_cached(key, cached)
+                client.set_cached(latest_key(code, fight.id, me.name, top), key)
+                if player_name and player_name.lower() != me.name.lower():
+                    client.set_cached(latest_key(code, fight.id, player_name, top), key)
             return cached
 
     progress(f"Fetching your run ({fight.name} +{fight.keystone_level or 0}) and finding comparable top logs...")
@@ -277,7 +293,13 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     progress("Finding DPS windows...")
     out["dps"], out["timeline"]["dps_windows"] = _dps_windows(client, fight, run, tl, segs, profiles, tops,
                                                                candidates, spec)
+    out["key"], out["rules_version"] = key, RULES_VERSION
     client.set_cached(key, out)
+    # The newest stored analysis of this run, whatever the rules version: shown at once (marked as updating)
+    # when the rules change, instead of making you wait for - or depend on - Warcraft Logs.
+    client.set_cached(latest_key(code, fight.id, me.name, top), key)
+    if fight_id is not None and player_name and player_name.lower() != me.name.lower():
+        client.set_cached(latest_key(code, fight.id, player_name, top), key)  # looked up by the name you asked for
     return out
 
 

@@ -108,6 +108,17 @@ start, or your mana under 35%; cooldowns on cooldown are listed as context). The
 at the same spot and what happened in the next 20s. A finding only fires when a risky chain then hurt (a death,
 someone under 25% or the group under 50%).
 
+## When Warcraft Logs is slow or rate limiting
+
+- Finished analyses are stored (SQLite on the data disk). Opening an analyzed run makes no Warcraft Logs calls. When
+  the rules change, the stored version shows at once ("Updating to the latest rules...") while a new one is made.
+- New analyses are queued jobs in the database (`app/jobs.py`): one worker, survives restarts. A rate limit puts the
+  job in "waiting" with a retry time (WCL's Retry-After, else 1, 2, 5, 10, 15, 30 min) instead of failing.
+- Signing in and page loads need no Warcraft Logs calls; a session lasts as long as the WCL token (logged at sign-in).
+- Signed out, a link to a public run opens its saved analysis; analyzing new runs or private logs needs a sign-in.
+- The recent-keys list falls back to the last saved list with a quiet note, and refreshes itself.
+- Every failure is logged with context (route or job, report/fight, reason, a short ref) - never tokens or codes.
+
 ## Healing overlaps
 
 Two or more big tools (your healing cooldowns plus other players' group defensives) within 5s of one big hit, while

@@ -342,6 +342,8 @@
                border: 1px solid color-mix(in srgb, var(--critical) 55%, transparent); border-left: 4px solid var(--critical);
                background: color-mix(in srgb, var(--critical) 12%, var(--panel)); border-radius: var(--radius-sm); }
   .errbanner[hidden] { display: none; }
+  .updnote { color: var(--muted); font-size: 0.8667rem; background: var(--panel-2); border: 1px solid var(--line);
+             border-radius: var(--radius-sm); padding: 6px 10px; margin: 0 0 10px; }
   .errbanner .ei { color: var(--critical); flex: none; margin-top: 2px; }
   .errbanner .ei svg { width: 20px; height: 20px; }
   .errbanner .eb { flex: 1; min-width: 0; }
@@ -563,9 +565,11 @@ async function loadRuns(limit = RUNS_LIMIT) {
     // A WCL rate limit part-way: show what was found plus the reason, with "Try again".
     if (data.partial) reportError("keys", "Loading all your recent keys", data.partial, () => loadRuns()); else clearError("keys");
     const note = data.partial ? `<div class="empty">Some keys couldn't be loaded yet.<br><br>${retry}</div>` : "";
+    const quiet = data.note ? `<div class="updnote">${esc(data.note)}</div>` : "";
+    if (data.note) { clearError("keys"); clearTimeout(window.runsRetry); window.runsRetry = setTimeout(() => loadRuns(), 120000); }
     const more = data.more && !data.partial ? `<button class="pill" onclick="loadRuns(12)">Load more</button>` : "";
     if (!data.runs.length) { $("runs").innerHTML = note || `<div class="empty">No recent M+ runs found.${more ? `<br><br>${more}` : ""}</div>`; return; }
-    $("runs").innerHTML = data.runs.map((r) => `
+    $("runs").innerHTML = quiet + data.runs.map((r) => `
       <button class="run${current === r.url ? " active" : ""}" data-url="${esc(r.url)}" ${r.analyzable ? "" :
         `disabled title="You played ${esc(r.spec || "another character")} - only supported healer specs can be analyzed"`}>
         <div class="top"><span>${esc(r.dungeon)} +${r.level}</span>
@@ -589,14 +593,23 @@ async function analyze(url, fresh = false) {
   document.querySelectorAll(".run").forEach((el) => el.classList.toggle("active", el.dataset.url === url));
   $("main").innerHTML = `<div class="card"><h2>Analyzing</h2><div class="progress" id="progress"><div>Starting...</div></div></div>`;
   try {
-    const {job} = await api("/api/analyze", {method: "POST", body: JSON.stringify({url, fresh})});
+    const r = await api("/api/analyze", {method: "POST", body: JSON.stringify({url, fresh})});
+    if (r.result && !r.job) { clearError("analysis"); render(r.result, url); return; }  // stored, current rules: instant
+    // A stored analysis from older rules shows at once while the new one is made in the background.
+    if (r.result) { render(r.result, url); setUpdateNote("Updating to the latest rules..."); }
     while (true) {
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((res) => setTimeout(res, 1500));
       if (current !== url) return;
-      const j = await api(`/api/jobs/${job}`);
-      if (j.progress.length) $("progress").innerHTML = j.progress.map((p) => `<div>${esc(p)}</div>`).join("");
+      const j = await api(`/api/jobs/${r.job}`);
+      const status = j.status === "queued" ? `Queued${j.position ? ` (${j.position} ahead)` : ""}...`
+        : j.status === "waiting" ? j.note : null;
+      if (r.result) setUpdateNote(status || "Updating to the latest rules...");
+      else if ($("progress")) $("progress").innerHTML = (status ? [status] : j.progress).map((p) => `<div>${esc(p)}</div>`).join("");
       if (j.status === "done") { clearError("analysis"); render(j.result, url); loadRuns(); loadBudget(); return; }
-      if (j.status === "error") throw Object.assign(new Error(j.error), {ref: j.ref});
+      if (j.status === "error") {
+        if (r.result) { setUpdateNote(`Couldn't update to the latest rules (${j.error}) - showing the saved analysis.`); return; }
+        throw Object.assign(new Error(j.error), {ref: j.ref});
+      }
     }
   } catch (e) {
     reportError("analysis", "Analyzing the run", e.message, () => analyze(url, fresh), e.ref);
@@ -605,6 +618,17 @@ async function analyze(url, fresh = false) {
     $("retryAnalyze").onclick = () => analyze(url, fresh);
     loadBudget();
   }
+}
+
+// A quiet line above a shown analysis while a newer one is on its way (not an error).
+function setUpdateNote(text) {
+  let n = $("updateNote");
+  if (!n) {
+    n = document.createElement("div");
+    n.id = "updateNote"; n.className = "updnote";
+    $("main").prepend(n);
+  }
+  n.textContent = text;
 }
 
 const CLASS_COLORS = {
@@ -1916,6 +1940,21 @@ document.addEventListener("click", (e) => {
 async function startApp() {
   const me = await api("/api/me").catch(() => ({mode: "local"}));
   if (me.mode === "wcl" && !me.user) {
+    ["studyBtn", "charBtn", "budget"].forEach((id) => { $(id).hidden = true; });
+    // Signed out with a link to a run: a saved analysis of a public run opens without signing in.
+    const run = new URLSearchParams(location.search).get("run");
+    const saved = run ? await api(`/api/public-analysis?url=${encodeURIComponent(run)}`).catch(() => null) : null;
+    if (saved) {
+      document.querySelector(".layout > aside").hidden = true;
+      document.querySelector(".layout").style.gridTemplateColumns = "minmax(0, 1fr)";
+      const signin = document.createElement("a");
+      signin.className = "primary"; signin.href = "/login"; signin.textContent = "Sign in to analyze your runs";
+      $("charBtn").closest(".charpick").after(signin);
+      render(saved.result, run);
+      if ($("fresh")) $("fresh").hidden = true;  // re-analyzing needs a sign-in
+      setUpdateNote("Viewing a saved analysis of a public run. Sign in to analyze new runs or your private logs.");
+      return false;
+    }
     document.querySelector(".layout").innerHTML = `<main class="card signin">
       <h2>Healer Review</h2>
       <p>Context-aware Mythic+ healing review, compared with top players of your spec at your key level.</p>
@@ -1927,7 +1966,6 @@ async function startApp() {
       signinError(q.get("reason"));
       history.replaceState(null, "", "/");  // a reload shouldn't report it again
     }
-    ["studyBtn", "charBtn", "budget"].forEach((id) => { $(id).hidden = true; });
     return false;
   }
   if (me.user) {
