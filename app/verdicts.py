@@ -6,9 +6,10 @@ Each section: {"headline": str, "ok": bool, "lines": [{"text": str, "action": bo
 from typing import Callable
 
 from app.spells import HealCast
+from app.specs.base import Spec
 
 MIN_CASTS = 15  # fewer heals in a situation than this is too little to judge
-SHARE_GAP = 0.10  # Chain Heal share this far from top players counts as a different habit
+SHARE_GAP = 0.10  # group-heal share this far from top players counts as a different habit
 CLEAR_GAIN, SMALL_GAIN = 0.20, 0.05  # per-cast advantage that is worth changing for / that exists at all
 EMPTY_HEALS_RATIO = 1.5  # heals into a full group, vs top players' share
 ITEM_RATE_OK = 0.85
@@ -34,9 +35,10 @@ def _section(lines: list[dict], ok_headline: str, noun: str) -> dict:
     return {"headline": head, "ok": False, "lines": lines}
 
 
-def spell_verdict(choice: dict, casts: list[HealCast], clock: Callable[[int], str]) -> dict:
-    if not choice or not choice.get("you"):
+def spell_verdict(choice: dict, casts: list[HealCast], clock: Callable[[int], str], spec: Spec) -> dict:
+    if not choice or not choice.get("you") or not spec.spell_pair:
         return {}
+    one, grp = spec.spell_pair.single, spec.spell_pair.group
     you, top = choice["you"], choice.get("top") or {}
     lines = []
     for sit, label in SITUATION_LABEL.items():
@@ -45,14 +47,14 @@ def spell_verdict(choice: dict, casts: list[HealCast], clock: Callable[[int], st
             continue
         ch, hw = y.get("ch_effective"), y.get("hw_effective")
         gap = y["ch_share"] - t["ch_share"]
-        mix = (f"you Chain Heal {y['ch_share']:.0%} of the time, top players {t['ch_share']:.0%}")
+        mix = f"you cast {grp} {y['ch_share']:.0%} of the time, top players {t['ch_share']:.0%}"
         if abs(gap) < SHARE_GAP:
             lines.append(_line(f"{label}: same mix as top players ({mix})."))
             continue
         if not (ch and hw):
             lines.append(_line(f"{label}: {mix}; not enough of one spell to compare which heals more for you."))
             continue
-        you_lean, other = ("Healing Wave", "Chain Heal") if gap < 0 else ("Chain Heal", "Healing Wave")
+        you_lean, other = (one, grp) if gap < 0 else (grp, one)
         lean_eff, other_eff = (hw, ch) if gap < 0 else (ch, hw)
         gain = other_eff / lean_eff - 1
         if gain < SMALL_GAIN:
@@ -65,10 +67,10 @@ def spell_verdict(choice: dict, casts: list[HealCast], clock: Callable[[int], st
             examples = _examples([c for c in casts if c.situation == sit and c.spell == you_lean], clock, you_lean)
             lines.append(_line(f"Use {other} more with {label.lower()} - your {other}s heal {gain:.0%} more per "
                                f"cast there, and top players pick it more ({mix}).", True, examples))
-    empty = _empty_heals(you, top)
+    empty = _empty_heals(you, top, spec)
     if empty:
         lines.append(empty)
-    lines += _buff_lines(choice.get("buffs") or {})
+    lines += _buff_lines(choice.get("buffs") or {}, grp)
     return _section(lines, "Spell choice: matches or beats top players - no change needed.", "spell choice")
 
 
@@ -78,7 +80,7 @@ def _examples(casts: list[HealCast], clock, spell: str) -> list[str]:
     return [f"{clock(c.t)}: {c.injured} injured, lowest at {c.lowest:.0%} - you cast {spell}" for c in sorted(picks, key=lambda c: c.t)]
 
 
-def _empty_heals(you: dict, top: dict) -> dict | None:
+def _empty_heals(you: dict, top: dict, spec: Spec) -> dict | None:
     total = sum(v.get("casts", 0) for v in you.values())
     top_total = sum(v.get("casts", 0) for v in top.values())
     if not total or not top_total:
@@ -86,13 +88,13 @@ def _empty_heals(you: dict, top: dict) -> dict | None:
     mine, theirs = you["none"]["casts"] / total, top.get("none", {}).get("casts", 0) / top_total
     if theirs and mine >= theirs * EMPTY_HEALS_RATIO and you["none"]["casts"] >= MIN_CASTS:
         return _line(f"Heals into a full group: {mine:.0%} of your heals landed when nobody was injured, vs "
-                     f"{theirs:.0%} for top players - those casts mostly overheal; use the time for damage or Riptide.", True)
+                     f"{theirs:.0%} for top players - those casts mostly overheal; use the time for damage" + (f" or {spec.maintenance.name}" if spec.maintenance else "") + ".", True)
     if theirs and mine <= theirs * 0.75:
         return _line(f"Heals into a full group: only {mine:.0%} of your heals, fewer than top players ({theirs:.0%}) - good.")
     return _line(f"Heals into a full group: {mine:.0%} of your heals, about the same as top players ({theirs:.0%}).")
 
 
-def _buff_lines(buffs: dict) -> list[dict]:
+def _buff_lines(buffs: dict, grp: str) -> list[dict]:
     lines = []
     you, top = buffs.get("you") or {}, buffs.get("top") or {}
     for name, y in you.items():
@@ -107,15 +109,15 @@ def _buff_lines(buffs: dict) -> list[dict]:
         favours_ch = [s["ch_effective"] > s["hw_effective"] for s in (y, t)
                       if s.get("ch_effective") and s.get("hw_effective")]
         if favours_ch and all(f == (gap > 0) for f in favours_ch):
-            lines.append(_line(f"During {name}, Chain Heal {more} - top players do ({t['ch_share']:.0%} vs your "
+            lines.append(_line(f"During {name}, {grp} {more} - top players do ({t['ch_share']:.0%} vs your "
                                f"{y['ch_share']:.0%}) and it heals more per cast then.", True))
         else:
-            lines.append(_line(f"During {name}, top players Chain Heal {more} than you ({t['ch_share']:.0%} vs "
+            lines.append(_line(f"During {name}, top players cast {grp} {more} than you ({t['ch_share']:.0%} vs "
                                f"{y['ch_share']:.0%}), but the healing numbers don't show it pays off - no clear change."))
     return lines
 
 
-def items_verdict(items: list[dict]) -> dict:
+def items_verdict(items: list[dict], spec: Spec) -> dict:
     if not items:
         return {}
     lines = []
@@ -133,7 +135,7 @@ def items_verdict(items: list[dict]) -> dict:
             lines.append(_line(f"{name}: {i['uses']} uses, about as often as top players (~{i['top_uses']:.0f}; {users})."))
         if (kind == "trinket" and i["top_paired"] is not None and i["paired"] is not None and i["uses"] >= 3
                 and i["top_paired"] >= 0.5 and i["paired"] <= i["top_paired"] - 0.3):
-            lines.append(_line(f"Line {name} up with Healing Tide or Spirit Link - top players do {i['top_paired']:.0%} "
+            lines.append(_line(f"Line {name} up with {spec.major_pair_text} - top players do {i['top_paired']:.0%} "
                                f"of the time, you {i['paired']:.0%}.", True))
     return _section(lines, "Trinkets & consumables: used about as often as top players - no change needed.",
                     "trinket use")

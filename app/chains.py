@@ -57,10 +57,11 @@ def _is_chain(run: RunData, a, b, player_cast_ids: set[int]) -> tuple[bool, list
     return (fighting or len(spill) >= SPILL_MIN_HITS), sorted({run.ability_name(d[2]) for d in spill})
 
 
-def find_chains(run: RunData, tl, auras: Auras, state, tops: list[tuple], group_casts: list[list]) -> list[Chain]:
+def find_chains(run: RunData, tl, auras: Auras, state, tops: list[tuple], group_casts: list[list],
+                spec) -> list[Chain]:
     """tops = [(TopRun, Timeline), ...]."""
     cast_ids = {r[2] for r in group_casts}
-    cds = CooldownTracker(run)
+    cds = CooldownTracker(run, spec.healing_cooldowns)
     out = []
     for i in range(1, len(run.pulls)):
         a, b = run.pulls[i - 1], run.pulls[i]

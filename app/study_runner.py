@@ -1,4 +1,4 @@
-"""Runs the top-player study for the current season and writes the context model.
+"""Runs the top-player study for one healer spec for the current season and writes its context model.
 
 Budget-aware: before each run it checks the WCL hourly budget and, when it gets low,
 waits for the reset instead of failing - so a 10-runs-per-dungeon study can run for
@@ -9,19 +9,18 @@ import time
 from datetime import datetime, timezone
 from typing import Callable
 
-from app.config import PROJECT_ROOT
+from app.context_model import doc_path, model_path
+from app.specs.base import Spec
 from app.study import build_model, discover_cooldowns, top_runs
 from app.wcl import WCLClient
 
 ZONES_QUERY = "{ worldData { zones { id name encounters { id name } } } }"
 RATE_QUERY = "{ rateLimitData { limitPerHour pointsSpentThisHour pointsResetIn } }"
-MODEL_PATH = PROJECT_ROOT / "data" / "context_model.json"
-DOC_PATH = PROJECT_ROOT / "docs" / "context_model.md"
 BUDGET_RESERVE = 150  # keep this many points free for analyzing your own keys
 DEFAULT_RUNS = 10
 
 
-def run_study(client: WCLClient, runs: int = DEFAULT_RUNS, dungeon: str | None = None,
+def run_study(client: WCLClient, spec: Spec, runs: int = DEFAULT_RUNS, dungeon: str | None = None,
               progress: Callable[[str], None] = print) -> dict:
     zones = [z for z in client.query(ZONES_QUERY, ttl=86400)["worldData"]["zones"] if "Mythic+" in z["name"]]
     zone = max(zones, key=lambda z: z["id"])
@@ -36,13 +35,15 @@ def run_study(client: WCLClient, runs: int = DEFAULT_RUNS, dungeon: str | None =
                  f"{wait // 60} min until the hourly reset.")
         time.sleep(wait)
 
-    model = json.loads(MODEL_PATH.read_text()) if MODEL_PATH.exists() and dungeon else {"dungeons": {}}
+    path, doc = model_path(spec), doc_path(spec)
+    model = json.loads(path.read_text()) if path.exists() and dungeon else {"dungeons": {}}
     model["zone"] = zone["name"]
     all_runs, skipped = {}, {}
     for n, d in enumerate(dungeons, 1):
         progress(f"Studying {d['name']} ({n} of {len(dungeons)})...")
         skipped[d["name"]] = []
-        all_runs[d["name"]] = top_runs(client, d["id"], runs, before_fetch=wait_for_budget, skipped=skipped[d["name"]])
+        all_runs[d["name"]] = top_runs(client, d["id"], runs, spec, before_fetch=wait_for_budget,
+                                       skipped=skipped[d["name"]])
 
     cooldowns = discover_cooldowns([r for rs_ in all_runs.values() for r in rs_])
     model["cooldowns"] = {str(k): v for k, v in cooldowns.items()}
@@ -52,27 +53,29 @@ def run_study(client: WCLClient, runs: int = DEFAULT_RUNS, dungeon: str | None =
     model["generated"] = datetime.now(timezone.utc).isoformat()
     model["runs_per_dungeon"] = runs
 
-    MODEL_PATH.parent.mkdir(exist_ok=True)
-    MODEL_PATH.write_text(json.dumps(model, indent=1))
-    DOC_PATH.parent.mkdir(exist_ok=True)
-    DOC_PATH.write_text(render_doc(model), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(model, indent=1))
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text(render_doc(model, spec), encoding="utf-8")
     progress(f"Done: {sum(len(v) for v in all_runs.values())} top runs studied, "
              f"{sum(len(v) for v in skipped.values())} skipped for incomplete data.")
     return model
 
 
-def study_info() -> dict:
-    if not MODEL_PATH.exists():
-        return {"exists": False}
-    m = json.loads(MODEL_PATH.read_text())
-    return {"exists": True, "zone": m.get("zone"), "generated": m.get("generated"),
+def study_info(spec: Spec) -> dict:
+    path = model_path(spec)
+    if not path.exists():
+        return {"exists": False, "spec": spec.label}
+    m = json.loads(path.read_text())
+    return {"exists": True, "spec": spec.label, "zone": m.get("zone"), "generated": m.get("generated"),
             "runs_per_dungeon": m.get("runs_per_dungeon"),
             "runs": {name: len(d["runs"]) for name, d in m.get("dungeons", {}).items()}}
 
 
-def render_doc(model: dict) -> str:
-    lines = [f"# Context model - {model['zone']}", "",
-             f"Generated {model.get('generated', '?')[:10]} from top-ranked Resto Shaman runs "
+def render_doc(model: dict, spec: Spec) -> str:
+    hot = spec.maintenance.plural if spec.maintenance else "HoTs"
+    lines = [f"# Context model - {spec.label} - {model['zone']}", "",
+             f"Generated {model.get('generated', '?')[:10]} from top-ranked {spec.label} runs "
              f"(up to {model.get('runs_per_dungeon', '?')} per dungeon). Regenerate after patches.", "",
              "## Cooldowns top players treat as cooldowns", ""]
     for c in sorted(model["cooldowns"].values(), key=lambda c: c["name"]):
@@ -95,6 +98,6 @@ def render_doc(model: dict) -> str:
                 prep = ", ".join(f"{p['name']} (x{p['lift']})" for p in h["prep_casts"]) or "-"
                 lines.append(f"- Hit **{h['name']}** ~{h['avg_hit_pct']}% HP x{h['per_run']}/run: group "
                              f"{h['pre_hp_median']:.0%} before (p25 {h['pre_hp_p25']:.0%}), "
-                             f"{h['riptides_median']:g} Riptides out; answered by {ans}; prep casts: {prep}")
+                             f"{h['riptides_median']:g} {hot} out; answered by {ans}; prep casts: {prep}")
             lines.append("")
     return "\n".join(lines)

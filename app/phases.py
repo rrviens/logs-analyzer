@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 
 from app.reports import Fight
 from app.runs import Pull, RunData, _events
-from app.specs import resto_shaman as rs
+from app.specs.base import Spec
 from app.wcl import WCLClient
 
 CACHE_VERSION = 1
@@ -71,7 +71,8 @@ def learn_markers(samples: list[tuple[Pull, list[list]]]) -> list[str]:
 
 
 def phase_breakdown(run: RunData, tl, casts: dict[int, list[list]],
-                    tops: list[tuple[RunData, object, dict[int, list[list]]]]) -> tuple[dict[int, list[Phase]], list[dict]]:
+                    tops: list[tuple[RunData, object, dict[int, list[list]]]],
+                    spec: Spec) -> tuple[dict[int, list[Phase]], list[dict]]:
     """Phases of each boss pull in your run, and per-phase group HP / damage vs the same
     phase in the top logs. Returns ({pull index: phases}, rows)."""
     my_phases, rows = {}, []
@@ -94,7 +95,7 @@ def phase_breakdown(run: RunData, tl, casts: dict[int, list[list]],
             top_hp = [_median_hp(ttl, p) for _, ttl, p in same]
             top_in = [_mean_intake(ttl, p) for _, ttl, p in same]
             cds = {}
-            for aid, (name, _) in rs.HEALING_COOLDOWNS.items():
+            for aid, (name, _) in spec.healing_cooldowns.items():
                 pressed = sum(1 for trun, _, p in same if any(a == aid and p.start <= t < p.end for t, a, _ in trun.casts))
                 if pressed:
                     cds[name] = {"top": pressed, "you": any(a == aid and ph.start <= t < ph.end for t, a, _ in run.casts)}

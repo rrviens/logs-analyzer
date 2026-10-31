@@ -6,7 +6,7 @@ cached instead.
 from dataclasses import asdict, dataclass
 
 from app.reports import Fight, get_players
-from app.specs import resto_shaman as rs
+from app.specs.base import Spec
 from app.wcl import WCLClient
 
 CACHE_VERSION = 2
@@ -65,7 +65,7 @@ class RunData:
     heals: list[list]  # [t, source, target, amount, is_absorb]
     deaths: list[list]  # [t, target, killing_ability]
     casts: list[list]  # healer's casts [t, ability, target]
-    riptide: list[list]  # healer's Riptide auras [t, type, target]
+    hots: list[list]  # healer's maintenance HoT auras (Riptide for Resto Shaman) [t, type, target]
     abilities: list[list]  # [id, name]
 
     @property
@@ -83,11 +83,13 @@ class RunData:
         return next((a[1] for a in self.abilities if a[0] == aid), f"spell {aid}")
 
 
-def fetch_run(client: WCLClient, fight: Fight, healer_id: int) -> RunData:
+def fetch_run(client: WCLClient, fight: Fight, healer_id: int, spec: Spec) -> RunData:
     key = f"run:v{CACHE_VERSION}:{fight.report_code}:{fight.id}:{healer_id}"
     cached = client.get_cached(key)
     if cached:
         cached["pulls"] = [Pull(**p) for p in cached["pulls"]]
+        if "riptide" in cached:  # cached before specs: the field held Resto Shaman's Riptide
+            cached["hots"] = cached.pop("riptide")
         if cached["players"] and len(cached["players"][0]) < 3:  # cached before roles were stored
             cached["players"] = [[p.id, p.name, p.role] for p in get_players(client, fight)]
         return RunData(**cached)
@@ -132,10 +134,10 @@ def fetch_run(client: WCLClient, fight: Fight, healer_id: int) -> RunData:
         for e in _events(client, fight, "Casts", source_id=healer_id)
         if e.get("type") == "cast"
     ]
-    riptide = [
+    hots = [
         [e["timestamp"], e["type"], e.get("targetID")]
-        for e in _events(client, fight, "Buffs", source_id=healer_id, ability_id=rs.RIPTIDE_ID)
-    ]
+        for e in _events(client, fight, "Buffs", source_id=healer_id, ability_id=spec.maintenance.buff_id)
+    ] if spec.maintenance else []
 
     run = RunData(
         code=fight.report_code,
@@ -152,7 +154,7 @@ def fetch_run(client: WCLClient, fight: Fight, healer_id: int) -> RunData:
         heals=heals,
         deaths=deaths,
         casts=casts,
-        riptide=riptide,
+        hots=hots,
         abilities=[[a["gameID"], a["name"]] for a in report["masterData"]["abilities"]],
     )
     client.set_cached(key, asdict(run))

@@ -47,8 +47,8 @@ def fetch_auras(client: WCLClient, fight: Fight, player_ids: set[int]) -> Auras:
     return Auras(cached["debuffs"], cached["dispels"])
 
 
-def top_debuff_handling(tops: list[tuple], names: set[str], tools: set[str]) -> dict[str, str]:
-    """For each debuff name: how the top Resto Shamans got rid of it when it was on them,
+def top_debuff_handling(tops: list[tuple], names: set[str], tools: set[str], plural: str) -> dict[str, str]:
+    """For each debuff name: how the top healers of the spec (plural: "Resto Shamans") got rid of it when it was on them,
     and whether they dispelled themselves before others. tops = [(RunData, Auras), ...]."""
     import statistics
     out = {}
@@ -76,7 +76,7 @@ def top_debuff_handling(tops: list[tuple], names: set[str], tools: set[str]) -> 
         if n < 3:
             continue
         mix = ", ".join(f"{k} {v}" for k, v in sorted(methods.items(), key=lambda x: -x[1]))
-        line = (f"Top Resto Shamans with {name} on themselves ({n} times in {runs} runs) got rid of it after "
+        line = (f"Top {plural} with {name} on themselves ({n} times in {runs} runs) got rid of it after "
                 f"{statistics.median(clear_s):.1f}s median - {mix}.")
         if waves:
             line += f" When others had it too, they dispelled themselves first {self_first} of {waves} times."

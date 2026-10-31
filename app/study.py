@@ -1,4 +1,4 @@
-"""Studies top Resto Shaman runs per dungeon and builds an explicit context model:
+"""Studies top runs of one healer spec per dungeon and builds an explicit context model:
 which cooldowns they use on which pull and when, which group hits matter, how they
 prepare for them, and what they answer them with.
 
@@ -14,7 +14,7 @@ from app.baseline import top_rankings
 from app.quality import check as quality_check
 from app.reports import Fight, get_fights, get_players
 from app.runs import RUN_QUERY, Pull, _events
-from app.specs import resto_shaman as rs
+from app.specs.base import Spec
 from app.wcl import WCLClient
 
 LIGHT_CACHE_VERSION = 1
@@ -42,16 +42,18 @@ class LightRun:
     tank_ids: list[int]
     damage: list[list]  # [t, target, ability, amount, absorbed, hp, max_hp]
     casts: list[list]  # [t, ability]
-    riptide: list[list]  # [t, type, target]
+    hots: list[list]  # maintenance HoT (Riptide) auras [t, type, target]
     deaths: list[list]  # [t, target, ability]
     abilities: dict  # str(id) -> name
 
 
-def fetch_light(client: WCLClient, fight: Fight, healer_id: int, healer_name: str) -> LightRun:
+def fetch_light(client: WCLClient, fight: Fight, healer_id: int, healer_name: str, spec: Spec) -> LightRun:
     key = f"light:v{LIGHT_CACHE_VERSION}:{fight.report_code}:{fight.id}:{healer_id}"
     cached = client.get_cached(key)
     if cached:
         cached["pulls"] = [Pull(**p) for p in cached["pulls"]]
+        if "riptide" in cached:  # cached before specs
+            cached["hots"] = cached.pop("riptide")
         return LightRun(**cached)
 
     report = client.query(RUN_QUERY, {"code": fight.report_code})["reportData"]["report"]
@@ -76,8 +78,9 @@ def fetch_light(client: WCLClient, fight: Fight, healer_id: int, healer_name: st
                 if e.get("type") == "damage" and e.get("targetID") in ids],
         casts=[[e["timestamp"], e.get("abilityGameID", 0)]
                for e in _events(client, fight, "Casts", source_id=healer_id) if e.get("type") == "cast"],
-        riptide=[[e["timestamp"], e["type"], e.get("targetID")]
-                 for e in _events(client, fight, "Buffs", source_id=healer_id, ability_id=rs.RIPTIDE_ID)],
+        hots=[[e["timestamp"], e["type"], e.get("targetID")]
+              for e in _events(client, fight, "Buffs", source_id=healer_id, ability_id=spec.maintenance.buff_id)]
+        if spec.maintenance else [],
         deaths=[[e["timestamp"], e["targetID"], e.get("killingAbilityGameID", 0)]
                 for e in _events(client, fight, "Deaths", hostility="Friendlies") if e.get("targetID") in ids],
         abilities={str(a["gameID"]): a["name"] for a in report["masterData"]["abilities"]},
@@ -86,13 +89,13 @@ def fetch_light(client: WCLClient, fight: Fight, healer_id: int, healer_name: st
     return run
 
 
-def top_runs(client: WCLClient, encounter_id: int, count: int,
+def top_runs(client: WCLClient, encounter_id: int, count: int, spec: Spec,
              before_fetch: Callable[[], None] = lambda: None, skipped: list | None = None) -> list[LightRun]:
-    """Highest-ranked Resto Shaman runs for a dungeon, one per player, skipping logs that fail
+    """Highest-ranked runs of the spec for a dungeon, one per player, skipping logs that fail
     the data-quality gate (they're appended to `skipped`). before_fetch runs before each run is
     fetched (the study uses it to wait for API budget)."""
     runs, seen = [], set()
-    for r in top_rankings(client, encounter_id, rs.CLASS_NAME, rs.SPEC_NAME):
+    for r in top_rankings(client, encounter_id, spec.class_name, spec.spec_name):
         rep = r.get("report") or {}
         if r["name"] in seen or not rep.get("code"):
             continue
@@ -103,7 +106,7 @@ def top_runs(client: WCLClient, encounter_id: int, count: int,
         except StopIteration:
             continue
         seen.add(r["name"])
-        light = fetch_light(client, fight, me.id, r["name"])
+        light = fetch_light(client, fight, me.id, r["name"], spec)
         ok, reasons = quality_check(light.damage, {p.id for p in get_players(client, fight)}, fight.duration_s)
         if not ok:
             if skipped is not None:
@@ -204,8 +207,9 @@ def group_hits(run: LightRun, pull: Pull) -> list[dict]:
 
 
 def riptides_at(run: LightRun, t: int) -> int:
+    """Maintenance HoTs out at t ("riptides_*" keys in the model hold the spec's maintenance HoT)."""
     active: set = set()
-    for ts, kind, target in sorted(run.riptide, key=lambda r: r[0]):
+    for ts, kind, target in sorted(run.hots, key=lambda r: r[0]):
         if ts > t:
             break
         if kind in ("applybuff", "refreshbuff"):

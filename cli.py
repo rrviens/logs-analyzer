@@ -27,7 +27,7 @@ def cmd_analyze(client: WCLClient, url: str, player_name: str | None, top: int, 
 
     r, comp = res["run"], res["compared"]
     print(f"\n{r['dungeon']} +{r['level']} - {r['player']} - {r['duration_min']} min")
-    print(f"Compared against {comp['count']} top Resto Shaman logs (keys {', '.join(f'+{l}' for l in comp['levels'])})")
+    print(f"Compared against {comp['count']} top {res['spec']['label']} logs (keys {', '.join(f'+{l}' for l in comp['levels'])})")
     print(f"Context model: {'top runs ' + comp['model'] if comp['model'] else 'none - run study.py'}")
 
     findings = res["findings"]

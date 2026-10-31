@@ -324,7 +324,7 @@ async function loadRuns() {
     if (!data.runs.length) { $("runs").innerHTML = `<div class="empty">No recent M+ runs found.</div>`; return; }
     $("runs").innerHTML = data.runs.map((r) => `
       <button class="run${current === r.url ? " active" : ""}" data-url="${esc(r.url)}" ${r.analyzable ? "" :
-        `disabled title="You played ${esc(r.spec || "another character")} - only Restoration Shaman runs can be analyzed"`}>
+        `disabled title="You played ${esc(r.spec || "another character")} - only supported healer specs can be analyzed"`}>
         <div class="top"><span>${esc(r.dungeon)} +${r.level}</span>
           <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span></div>
         <div class="sub"><span>${ago(r.started)}</span><span>${r.duration_min} min</span>
@@ -401,9 +401,9 @@ function renderItems(res) {
     <td>${pct(i.paired)}</td><td>${pct(i.top_paired)}</td></tr>`).join("");
   return `<details><summary>Show data</summary><div class="tablewrap"><table>
     <tr><th>Item</th><th>Type</th><th>Your uses</th><th>Top uses*</th><th>Top players using it</th>
-    <th>Ready during pressure</th><th>With HTT/SLT</th><th>Top with HTT/SLT</th></tr>${rows}</table></div>
+    <th>Ready during pressure</th><th>With big cooldowns</th><th>Top with big cooldowns</th></tr>${rows}</table></div>
     <div class="compnote">* median among the comparable top players who used it, scaled to your run length.
-    "With HTT/SLT" = share of uses within 10s of Healing Tide or Spirit Link.</div></details>`;
+    "With big cooldowns" = share of uses within 10s of ${esc(SP.majors)}.</div></details>`;
 }
 
 // ---------- time links: every m:ss on the page jumps the timeline there ----------
@@ -901,7 +901,7 @@ const SECTIONS = {
   deaths: {title: "Death recaps", icon: "✕", color: "var(--critical)"},
   phases: {title: "Boss phases", icon: "◐", color: "var(--series-7)"},
   items: {title: "Trinkets & consumables", icon: "◆", color: "var(--series-3)"},
-  spells: {title: "Healing Wave vs Chain Heal", icon: "≈", color: "var(--series-1)"},
+  spells: {title: "Single-target vs group heal", icon: "≈", color: "var(--series-1)"},
   pulls: {title: "Pulls vs top groups", icon: "▤", color: "var(--ink-muted)"},
   good: {title: "Good calls", icon: "✓", color: "var(--good)"},
   compare: {title: "You vs a top player", icon: "⇄", color: "var(--accent)"},
@@ -949,8 +949,8 @@ function renderCompare(r) {
     "Damage taken / s": `${(st.intake * 100).toFixed(1)}% of group HP`,
     "Avoidable damage": st.avoidable == null ? "-" : `${pct(st.avoidable)}${st.avoidable_names.length ? ` (${st.avoidable_names.join(", ")})` : ""}`,
     "Cooldowns": st.cooldowns.map(([n, t]) => `${n} (${t}s in)`).join(", ") || "-",
-    "Trinkets / potions": st.items.length, "Riptides before hits": st.riptides_before_hits ?? "-",
-    "Chain Heal with 2+ injured": pct(st.ch_share_busy),
+    "Trinkets / potions": st.items.length, [`${SP.maintenance || "HoTs"} before hits`]: st.riptides_before_hits ?? "-",
+    [`${SP.group} with 2+ injured`]: pct(st.ch_share_busy),
     "Dispels": st.dispels.map(([who, what, t]) => `${who === "self" ? "self" : "other"}: ${what} (${t}s in)`).join(", ") || "-",
     "Group defensives": st.group_defensives.join(", ") || "-",
   });
@@ -1089,6 +1089,7 @@ function renderPhases(res) {
 function renderSpells(res) {
   const sc = res.spell_choice;
   if (!sc || !sc.you) return "";
+  const G = esc(SP.group), S = esc(SP.single);  // table keys: ch_* = group heal, hw_* = single-target heal
   const pct = (v) => v == null ? "-" : `${Math.round(v * 100)}%`;
   const k = (v) => v == null ? "-" : `${Math.round(v / 1000)}k`;
   const label = {none: "Nobody injured", one: "1 player injured", two: "2 players injured", group: "3+ players injured"};
@@ -1105,12 +1106,12 @@ function renderSpells(res) {
       <td>${k(y.ch_effective)} / ${k(y.hw_effective)}</td><td>${k(t.ch_effective)} / ${k(t.hw_effective)}</td></tr>`;
   }).join("");
   return `<details><summary>Show data</summary><div class="tablewrap"><table>
-    <tr><th>Situation at cast</th><th>Your heals</th><th>Your Chain Heal share</th><th>Top Chain Heal share</th>
-    <th>CH overheal (you / top)</th><th>HW overheal (you / top)</th><th>Your healing per cast (CH / HW)</th><th>Your mana</th></tr>
+    <tr><th>Situation at cast</th><th>Your heals</th><th>Your ${G} share</th><th>Top ${G} share</th>
+    <th>${G} overheal (you / top)</th><th>${S} overheal (you / top)</th><th>Your healing per cast (${G} / ${S})</th><th>Your mana</th></tr>
     ${rows}</table></div>
     ${buffRows ? `<div class="tablewrap" style="margin-top:12px"><table>
-    <tr><th>Buff up at cast</th><th>Your heals</th><th>Your Chain Heal share</th><th>Top Chain Heal share</th>
-    <th>Your per cast (CH / HW)</th><th>Top per cast (CH / HW)</th></tr>${buffRows}</table></div>` : ""}
+    <tr><th>Buff up at cast</th><th>Your heals</th><th>Your ${G} share</th><th>Top ${G} share</th>
+    <th>Your per cast (${G} / ${S})</th><th>Top per cast (${G} / ${S})</th></tr>${buffRows}</table></div>` : ""}
     <div class="compnote">"Injured" = below 80% HP just before the heal landed. Healing per cast counts every target hit.</div></details>`;
 }
 
@@ -1130,7 +1131,12 @@ function renderFinding(f, i, res) {
     </div></details>`;
 }
 
+// The analyzed healer's spec: names used in labels (results saved before specs existed are Resto Shaman).
+let SP = {};
 function render(res, url) {
+  SP = res.spec || {label: "Resto Shaman", plural: "Resto Shamans", single: "Healing Wave", group: "Chain Heal",
+                    maintenance: "Riptides", majors: "Healing Tide or Spirit Link"};
+  SECTIONS.spells.title = SP.single && SP.group ? `${SP.single} vs ${SP.group}` : "Single-target vs group heal";
   const r = res.run, c = res.compared, v = res.verdicts || {};
   const levels = c.levels.map((l) => `+${l}`).join(", ") || "none";
   const good = res.good_calls.map((g) => `
@@ -1151,7 +1157,7 @@ function render(res, url) {
       <div class="actions"><a class="link" href="${esc(url)}" target="_blank" rel="noopener">Open log</a>
       <button class="link" id="fresh">Re-analyze</button></div></div>
     <div class="meta">${esc(r.player)} · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"} ·
-      compared with ${c.count} top Resto Shaman logs (${levels})${(c.skipped || []).length
+      compared with ${c.count} top ${esc(SP.label)} logs (${levels})${(c.skipped || []).length
         ? ` <span title="${esc(c.skipped.map((s) => `${s.player} +${s.key}: ${s.reasons.join(", ")}`).join("\n"))}">(${c.skipped.length} skipped: incomplete data)</span>`
         : ""}${c.model ? ` · context from top runs ${esc(c.model)}` : ""}</div>
     ${renderGroup(res)}

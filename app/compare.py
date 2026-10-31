@@ -9,43 +9,49 @@ from app.context import CooldownTracker
 from app.deaths import load_defensives
 from app.defense_spans import fetch_defense_spans
 from app.healer_state import fetch_healer_state
-from app.metrics import riptide_active
+from app.deaths import _applies
+from app.metrics import hots_active
 from app.reports import get_fights, get_players, get_trinkets, parse_report_url, pick_fight
 from app.runs import fetch_run
 from app.segments import all_segments
-from app.specs import resto_shaman as rs
+from app.specs import healers_in
+from app.specs.base import Spec
 from app.spells import fetch_spell_heals, heal_casts
 from app.timeline import build_timeline
 from app.wcl import WCLClient
 
 SAME_SCORE = 10  # below this a pull "played out the same"
 HP_GAP, DAMAGE_RATIO, DURATION_RATIO = 0.05, 1.25, 1.4
-CD_TIMING_S, RIPTIDE_GAP, CH_GAP = 20, 1.0, 0.2
+CD_TIMING_S, RIPTIDE_GAP, CH_GAP = 20, 1.0, 0.2  # RIPTIDE_GAP: maintenance HoTs out before big hits
 
 
 class Side:
     """Everything one run needs for the comparison."""
 
-    def __init__(self, client: WCLClient, url: str, player_name: str | None):
+    def __init__(self, client: WCLClient, url: str, player_name: str | None, spec: Spec | None = None):
+        """spec: only consider healers of this spec (the other side of a comparison must match yours)."""
         code, fid = parse_report_url(url)
         self.fight = pick_fight(get_fights(client, code), fid)
         self.players = get_players(client, self.fight)
-        shamans = [p for p in self.players if p.class_name == rs.CLASS_NAME and p.spec == rs.SPEC_NAME]
-        named = [p for p in shamans if player_name and p.name.lower() == player_name.lower()]
-        if not (named or shamans):
-            raise ValueError("No Restoration Shaman found in that run.")
-        self.me = (named or shamans)[0]
-        self.run = fetch_run(client, self.fight, self.me.id)
+        healers = [(p, s) for p, s in healers_in(self.players) if not spec or s == spec]
+        named = [h for h in healers if player_name and h[0].name.lower() == player_name.lower()]
+        if not (named or healers):
+            raise ValueError(f"No {spec.label if spec else 'supported healer'} found in that run.")
+        self.me, self.spec = (named or healers)[0]
+        self.run = fetch_run(client, self.fight, self.me.id, self.spec)
         self.tl = build_timeline(self.run)
-        self.segs = all_segments(self.run, self.tl)
-        state = fetch_healer_state(client, self.fight, self.run)
-        self.heals = heal_casts(self.run, self.tl, fetch_spell_heals(client, self.fight, self.run), state)
+        self.segs = all_segments(self.run, self.tl, self.spec)
+        state = fetch_healer_state(client, self.fight, self.run, self.spec)
+        self.heals = heal_casts(self.run, self.tl, fetch_spell_heals(client, self.fight, self.run, self.spec),
+                                state, self.spec)
         self.auras = fetch_auras(client, self.fight, self.run.player_ids)
-        self.spans = fetch_defense_spans(client, self.fight, self.run, self.players, load_defensives())
+        defensives = load_defensives()
+        self.spans = fetch_defense_spans(client, self.fight, self.run, self.players, defensives)
+        self.escapes = {n for n, d in defensives.items() if d["effect"].get("escape") and _applies(d, self.me)}
         self.trinkets = get_trinkets(client, self.fight).get(self.me.id, [])
         self.mods = intake_modifiers(self.players, load_effects())
-        self.riptide = riptide_active(self.run, self.tl)
-        self.cds = CooldownTracker(self.run)
+        self.hots = hots_active(self.run, self.tl)
+        self.cds = CooldownTracker(self.run, self.spec.healing_cooldowns)
         self.avoid = cached_avoidance(client, code, self.fight.id)  # set when this run was analyzed
 
     def pull_stats(self, seg) -> dict:
@@ -53,10 +59,11 @@ class Side:
         inside = lambda t: p.start <= t <= p.end
         rel = lambda t: round((t - p.start) / 1000)
         name = run.ability_name
-        tools = {**rs.HEALING_COOLDOWNS, **rs.PERSONAL_COOLDOWNS}
-        cds = [(name(a), rel(t)) for t, a, _ in run.casts if inside(t) and (a in tools or name(a) == "Spirit Walk")]
+        tools = {**self.spec.healing_cooldowns, **self.spec.personal_cooldowns}
+        cds = [(name(a), rel(t)) for t, a, _ in run.casts if inside(t) and (a in tools or name(a) in self.escapes)]
         items = [name(a) for t, a, _ in run.casts if inside(t) and (name(a) in self.trinkets or "Potion" in name(a))]
-        rip = [self.riptide[max(0, self.tl.bin_of(h.t) - 1)] for h in seg.hits]
+        rip = [self.hots[max(0, self.tl.bin_of(h.t) - 1)] for h in seg.hits] if self.spec.maintenance else []
+        group_heal = self.spec.spell_pair.group if self.spec.spell_pair else None
         busy = [h for h in self.heals if inside(h.t) and h.injured >= 2]
         dispels = [d for d in self.auras.dispels if d[1] == self.me.id and inside(d[0])]
         avoid, total, names = self.avoid.damage_in(run, p.start, p.end) if self.avoid else (0.0, 0.0, {})
@@ -67,14 +74,15 @@ class Side:
             "deaths": sum(1 for d in run.deaths if inside(d[0])), "intake": seg.intake_frac_ps,
             "cooldowns": cds, "items": items,
             "riptides_before_hits": round(statistics.mean(rip), 1) if rip else None,
-            "ch_share_busy": round(sum(1 for h in busy if h.spell == "Chain Heal") / len(busy), 2) if len(busy) >= 8 else None,
+            "ch_share_busy": round(sum(1 for h in busy if h.spell == group_heal) / len(busy), 2) if len(busy) >= 8 else None,
             "dispels": [("self" if d[2] == self.me.id else "other", name(d[3]), rel(d[0])) for d in dispels],
             "group_defensives": sorted({s["name"] for s in self.spans if s["scope"] == "group" and inside(s["start"])}),
         }
 
 
 def compare_runs(client: WCLClient, my_url: str, other_url: str, my_name: str | None) -> dict:
-    mine, theirs = Side(client, my_url, my_name), Side(client, other_url, None)
+    mine = Side(client, my_url, my_name)
+    theirs = Side(client, other_url, None, mine.spec)
     verdicts, same, unmatched = [], 0, 0
     pairs = _pair_pulls(mine.segs, theirs.segs)
     for i, seg in enumerate(mine.segs):
@@ -155,9 +163,11 @@ def _verdict(name: str, idx: int, a: dict, b: dict, mine: Side, theirs: Side) ->
             healer.append(f"{n}: they pressed it {_rel(ts[:1])}, you {_rel(my_cds[n][:1])}")
     if a["riptides_before_hits"] is not None and b["riptides_before_hits"] is not None \
             and b["riptides_before_hits"] - a["riptides_before_hits"] >= RIPTIDE_GAP:
-        healer.append(f"{b['riptides_before_hits']:g} Riptides out before big hits vs your {a['riptides_before_hits']:g}")
+        healer.append(f"{b['riptides_before_hits']:g} {mine.spec.maintenance.plural} out before big hits "
+                      f"vs your {a['riptides_before_hits']:g}")
     if a["ch_share_busy"] is not None and b["ch_share_busy"] is not None and abs(b["ch_share_busy"] - a["ch_share_busy"]) >= CH_GAP:
-        healer.append(f"with 2+ injured they Chain Healed {b['ch_share_busy']:.0%} of the time, you {a['ch_share_busy']:.0%}")
+        healer.append(f"with 2+ injured they cast {mine.spec.spell_pair.group} {b['ch_share_busy']:.0%} of the time, "
+                      f"you {a['ch_share_busy']:.0%}")
     mine_self = [d for d in a["dispels"] if d[0] == "self"]
     their_self = [d for d in b["dispels"] if d[0] == "self"]
     if their_self and not mine_self and a["dispels"]:

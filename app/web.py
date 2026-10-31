@@ -13,13 +13,13 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.config import CACHE_PATH, PROJECT_ROOT, wcl_credentials
-from app.pipeline import AnalysisError, cache_key, run_analysis
+from app.pipeline import AnalysisError, cache_key, pick_healer, run_analysis
 from app.baseline import comparable_fights, top_rankings
 from app.compare import compare_runs
 from app.quality import check as quality_check
 from app.reports import get_fights, get_players, parse_report_url, pick_fight
 from app.runs import fetch_run
-from app.specs import resto_shaman as rs
+from app.specs import SPECS, spec_for
 from app.study_runner import DEFAULT_RUNS, run_study, study_info
 from app.wcl import WCLClient
 
@@ -118,7 +118,7 @@ def recent():
             started = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc)
             runs.append({
                 "spec": me.label if me else None,
-                "analyzable": bool(me and me.class_name == rs.CLASS_NAME and me.spec == rs.SPEC_NAME),
+                "analyzable": bool(me and spec_for(me.class_name, me.spec)),
                 "url": f"https://www.warcraftlogs.com/reports/{rep['code']}#fight={f.id}",
                 "dungeon": f.name,
                 "level": f.keystone_level,
@@ -160,15 +160,24 @@ def start_analysis(req: AnalyzeRequest):
 
 class StudyRequest(BaseModel):
     runs: int = DEFAULT_RUNS
+    spec: str = SPECS[0].key
+
+
+def _spec(key: str):
+    s = next((s for s in SPECS if s.key == key), None)
+    if not s:
+        raise HTTPException(404, f"Unknown spec {key}.")
+    return s
 
 
 @app.get("/api/study")
-def get_study():
-    return {**study_info(), "job": study_job}
+def get_study(spec: str = SPECS[0].key):
+    return {**study_info(_spec(spec)), "job": study_job}
 
 
 @app.post("/api/study")
 def start_study(req: StudyRequest):
+    spec = _spec(req.spec)
     if study_job.get("status") == "running":
         raise HTTPException(409, "A study is already running.")
     study_job.clear()
@@ -176,7 +185,7 @@ def start_study(req: StudyRequest):
 
     def work():
         try:
-            run_study(client, max(3, min(req.runs, 20)), progress=study_job["progress"].append)
+            run_study(client, spec, max(3, min(req.runs, 20)), progress=study_job["progress"].append)
             study_job["status"] = "done"
         except Exception as e:  # report to the page; cached runs make a retry cheap
             study_job["status"], study_job["error"] = "error", f"{type(e).__name__}: {e}"
@@ -195,11 +204,12 @@ def compare_candidates(url: str):
     """Top logs for the same dungeon and key level that pass the data-quality gate."""
     code, fid = parse_report_url(url)
     fight = pick_fight(get_fights(client, code), fid)
+    _, spec = pick_healer(get_players(client, fight), (load_settings() or {}).get("name"))
     ranks = {r["name"]: r for lvl in {fight.keystone_level - 1, fight.keystone_level, fight.keystone_level + 1}
-             for r in top_rankings(client, fight.encounter_id, rs.CLASS_NAME, rs.SPEC_NAME, lvl - 1)}
+             for r in top_rankings(client, fight.encounter_id, spec.class_name, spec.spec_name, lvl - 1)}
     out = []
-    for f, p in comparable_fights(client, fight, rs.CLASS_NAME, rs.SPEC_NAME, 12):
-        run = fetch_run(client, f, p.id) if client.get_cached(f"run:v2:{f.report_code}:{f.id}:{p.id}") else None
+    for f, p in comparable_fights(client, fight, spec.class_name, spec.spec_name, 12):
+        run = fetch_run(client, f, p.id, spec) if client.get_cached(f"run:v2:{f.report_code}:{f.id}:{p.id}") else None
         if run:
             ok, _ = quality_check(run.damage, run.player_ids, f.duration_s, fight.duration_s)
             if not ok:

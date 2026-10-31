@@ -1,10 +1,18 @@
-"""Loads the study output (data/context_model.json) and matches it to a run's pulls."""
+"""Loads the study output (data/context_models/<spec>.json) and matches it to a run's pulls."""
 import json
+from pathlib import Path
 
 from app.config import PROJECT_ROOT
 from app.runs import Pull
+from app.specs.base import Spec
 
-MODEL_PATH = PROJECT_ROOT / "data" / "context_model.json"
+
+def model_path(spec: Spec) -> Path:
+    return PROJECT_ROOT / "data" / "context_models" / f"{spec.key}.json"
+
+
+def doc_path(spec: Spec) -> Path:
+    return PROJECT_ROOT / "docs" / "context_models" / f"{spec.key}.md"
 
 
 class DungeonModel:
@@ -30,8 +38,9 @@ class DungeonModel:
         return ", ".join(f"+{r['key']}" for r in self.data["runs"])
 
 
-def load_dungeon(name: str) -> DungeonModel | None:
-    if not MODEL_PATH.exists():
+def load_dungeon(name: str, spec: Spec) -> DungeonModel | None:
+    path = model_path(spec)
+    if not path.exists():
         return None
-    d = json.loads(MODEL_PATH.read_text()).get("dungeons", {}).get(name)
+    d = json.loads(path.read_text()).get("dungeons", {}).get(name)
     return DungeonModel(d) if d else None

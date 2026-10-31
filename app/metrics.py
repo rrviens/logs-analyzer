@@ -1,15 +1,15 @@
-"""Resto Shaman spell tracking on top of RunData. Pure functions - no API calls."""
+"""Maintenance-HoT tracking (Riptide for Resto Shaman) on top of RunData. Pure functions - no API calls."""
 from app.runs import RunData
-from app.specs import resto_shaman as rs
+from app.specs.base import Spec
 from app.timeline import Timeline
 
 
-def riptide_active(run: RunData, tl: Timeline) -> list[int]:
-    """Number of the healer's Riptides active in each timeline bin."""
+def hots_active(run: RunData, tl: Timeline) -> list[int]:
+    """Number of the healer's maintenance HoTs active in each timeline bin."""
     counts = [0] * len(tl.group_ehp)
     open_since: dict[int, int] = {}
     intervals: list[tuple[int, int]] = []
-    for t, kind, target in sorted(run.riptide, key=lambda r: r[0]):
+    for t, kind, target in sorted(run.hots, key=lambda r: r[0]):
         if kind == "applybuff":
             open_since[target] = t
         elif kind == "refreshbuff":
@@ -23,13 +23,15 @@ def riptide_active(run: RunData, tl: Timeline) -> list[int]:
     return counts
 
 
-def riptide_refreshes(run: RunData) -> list[tuple[int, bool, float]]:
+def hot_refreshes(run: RunData, spec: Spec) -> list[tuple[int, bool, float]]:
     """(time, early, wasted_ms) per refresh. Early = more left than the pandemic window."""
-    duration_ms = rs.RIPTIDE_DURATION_S * 1000
-    pandemic_ms = duration_ms * rs.PANDEMIC_FRACTION
+    if not spec.maintenance:
+        return []
+    duration_ms = spec.maintenance.duration_s * 1000
+    pandemic_ms = duration_ms * spec.maintenance.pandemic
     expiry: dict[int, float] = {}
     out = []
-    for t, kind, target in sorted(run.riptide, key=lambda r: r[0]):
+    for t, kind, target in sorted(run.hots, key=lambda r: r[0]):
         if kind == "applybuff":
             expiry[target] = t + duration_ms
         elif kind == "refreshbuff":

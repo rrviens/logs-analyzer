@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from app.runs import RunData
 from app.segments import Profile, SegmentMetrics
-from app.specs import resto_shaman as rs
 from app.timeline import Timeline
 
 LETHAL_EHP = 0.20  # any player below this = near death
@@ -132,8 +131,9 @@ class CooldownTracker:
     Effective cooldown = shortest observed gap if shorter than base (talents/CDR).
     Cooldowns never cast in the run are treated as not talented."""
 
-    def __init__(self, run: RunData, cooldowns: dict[int, tuple[str, int]] | None = None):
-        self.cooldowns = cooldowns or rs.HEALING_COOLDOWNS
+    def __init__(self, run: RunData, cooldowns: dict[int, tuple[str, int]]):
+        """cooldowns: ability id -> (name, base cooldown s), e.g. spec.healing_cooldowns."""
+        self.cooldowns = cooldowns
         self.casts = {aid: sorted(c[0] for c in run.casts if c[1] == aid) for aid in self.cooldowns}
         self.casts = {aid: ts for aid, ts in self.casts.items() if ts}
         self.cd_ms = {}

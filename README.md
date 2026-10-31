@@ -1,6 +1,8 @@
 # wow-log-analyzer
 
-Context-aware Resto Shaman M+ analysis on top of the Warcraft Logs API.
+Context-aware M+ healer analysis on top of the Warcraft Logs API.
+
+Supported specs: Restoration Shaman (more healer specs are being added; each is a module in `app/specs/`).
 
 ## Setup
 
@@ -35,7 +37,7 @@ Command line, if you prefer:
   (e.g. Lightwarden Ruia's Shapeshift: Bear / Haranir). Findings carry the phase, and "Group lower than top
   groups in P3" compares each phase against the same phase in the top logs.
 - **Buffs & mana**: Tidal Waves, Unleash Life, Ascendance, Coalescing Water and Nature's Swiftness are tracked
-  at each heal (`TRACKED_BUFFS` in `app/healer_state.py`), plus your mana. Low mana during danger is flagged.
+  at each heal (`tracked_buffs` in the spec module, e.g. `app/specs/resto_shaman.py`), plus your mana. Low mana during danger is flagged.
 - **What to look at per pull**: picking a pull (dropdown or a click on the overview) shows only the findings from
   that pull; "Show full dungeon" brings back the whole list. Time links zoom without filtering.
 - **Top-player study** button (header): shows the study's age; click to refresh it with 10 runs per dungeon.
@@ -54,7 +56,7 @@ separately ("may not be talented").
 Death findings name the real cause by damage share over the last 10s (constant pulses are background), and when a
 debuff was behind it: how long it sat, who else it hit and how they cleared it, where your dispels went, which of
 the victim's tools clear it (learned from your run and the top logs - escapes, immunities, dispels only), and how
-top Resto Shamans handle the same debuff. "Nothing was ready" always says why (when each cooldown was used and on
+top healers of your spec handle the same debuff. "Nothing was ready" always says why (when each cooldown was used and on
 what, procs already spent).
 
 ## Avoidable damage
@@ -132,11 +134,11 @@ healing events to stay inside the API budget).
 ## Context model (what top players do)
 
 ```
-.\.venv\Scripts\python study.py --runs 5
+.\.venv\Scripts\python study.py --spec resto_shaman --runs 5
 ```
 
-Studies the top-ranked Resto Shaman runs in every dungeon of the current season and writes
-`data/context_model.json` (used by the analyzer) and a readable `docs/context_model.md`:
+Studies the top-ranked runs of one healer spec in every dungeon of the current season and writes
+`data/context_models/<spec>.json` (used by the analyzer) and a readable `docs/context_models/<spec>.md`:
 cooldowns per pull and their planned boss timings, recurring group hits, Riptides out before them,
 what top players answer them with, and how many deaths even top groups take per pull.
 Re-run after a patch. ~13 API points per studied run.
@@ -144,7 +146,7 @@ Re-run after a patch. ~13 API points per studied run.
 ## How it judges a run
 
 1. **HP timeline** - per-second group and per-player HP (incl. absorbs), rebuilt from damage snapshots and healing.
-2. **Profiles** - each pull is matched to the same pull in top Resto Shaman logs at the same key level
+2. **Profiles** - each pull is matched to the same pull in top logs of your spec at the same key level
    (boss by encounter, trash by enemy set). "Topped" is what those groups actually hold there - not a fixed number.
 3. **Context** - every second is labelled calm / pressure / spike / lethal against that profile. Team defensives
    are detected from a jump in damage mitigation.
@@ -157,7 +159,13 @@ Re-run after a patch. ~13 API points per studied run.
    - you low with Astral Shift ready (skipped right after Reincarnation)
    - not topped / Riptide prep before recurring group hits, slow recovery under normal intake, extra avoidable damage
 
-Thresholds live at the top of `app/context.py` and `app/findings.py`. Spell IDs in `app/specs/resto_shaman.py`.
+Thresholds live at the top of `app/context.py` and `app/findings.py`. Spell IDs and spec-specific mechanics live in the spec modules under `app/specs/`.
+
+## Adding a healer spec
+
+A spec is one `Spec` (`app/specs/base.py`): cooldowns (healing / utility / personal), the maintenance HoT
+(Riptide for Resto Shaman), the single-target vs group heal pair, tracked buffs, procs and wording. Add a module with a
+`SPEC` and list it in `app/specs/__init__.py`. The spec is detected from the log (the analyzed player's class and spec).
 
 ## Known limits
 

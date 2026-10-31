@@ -6,8 +6,9 @@ the same dungeon and similar key level.
 import statistics
 from dataclasses import dataclass, field
 
-from app.metrics import riptide_active, riptide_refreshes
+from app.metrics import hot_refreshes, hots_active
 from app.runs import Pull, RunData
+from app.specs.base import Spec
 from app.timeline import Timeline
 
 MELEE_ID = 1
@@ -44,8 +45,8 @@ class SegmentMetrics:
     ability_intake: dict[int, float]  # share of group max HP per second, by ability
     hits: list[GroupHit]
     pressure_bins: list[int]  # busier-than-typical moments of this pull
-    riptide_pressure_uptime: float | None
-    riptide_wasted_pressure_s: float  # duration thrown away by early refreshes in pressure
+    hot_pressure_uptime: float | None  # maintenance HoT (Riptide) uptime in the busy moments
+    hot_wasted_pressure_s: float  # duration thrown away by early refreshes in pressure
     intake_modifiers: frozenset = frozenset()  # comp effects that lower damage taken (see composition.py)
 
 
@@ -61,12 +62,12 @@ class Profile:
     hit_pre: dict[int, float] = field(default_factory=dict)
     hit_recovery: dict[int, float] = field(default_factory=dict)
     hit_count: dict[int, int] = field(default_factory=dict)  # hits observed across top runs
-    riptide_pressure_uptime: float | None = None
-    riptide_wasted_pressure_s: float = 0.0
+    hot_pressure_uptime: float | None = None
+    hot_wasted_pressure_s: float = 0.0
     segments: list = field(default_factory=list)  # the matched top segments, for comp-aware subsets
 
 
-def segment_metrics(run: RunData, tl: Timeline, pull: Pull, riptide: list[int] | None = None,
+def segment_metrics(run: RunData, tl: Timeline, pull: Pull, hots: list[int] | None = None,
                     refreshes: list[tuple[int, bool, float]] | None = None) -> SegmentMetrics:
     bins = tl.slice(pull.start, pull.end)
     duration_s = max(1.0, len(bins) * tl.bin_ms / 1000)
@@ -84,8 +85,8 @@ def segment_metrics(run: RunData, tl: Timeline, pull: Pull, riptide: list[int] |
     pressure = [b for b, r in zip(bins, rolling) if r > typical and r > 0]
 
     rip_uptime = None
-    if riptide is not None and pressure:
-        rip_uptime = sum(1 for b in pressure if riptide[b] > 0) / len(pressure)
+    if hots is not None and pressure:
+        rip_uptime = sum(1 for b in pressure if hots[b] > 0) / len(pressure)
     pressure_set = set(pressure)
     wasted_ms = sum(w for t, early, w in refreshes or [] if early and tl.bin_of(t) in pressure_set
                     and pull.start <= t < pull.end)
@@ -103,14 +104,15 @@ def segment_metrics(run: RunData, tl: Timeline, pull: Pull, riptide: list[int] |
         ability_intake=ability_intake,
         hits=group_hits(run, tl, pull),
         pressure_bins=pressure,
-        riptide_pressure_uptime=rip_uptime,
-        riptide_wasted_pressure_s=wasted_ms / 1000,
+        hot_pressure_uptime=rip_uptime,
+        hot_wasted_pressure_s=wasted_ms / 1000,
     )
 
 
-def all_segments(run: RunData, tl: Timeline) -> list[SegmentMetrics]:
-    riptide, refreshes = riptide_active(run, tl), riptide_refreshes(run)
-    return [segment_metrics(run, tl, p, riptide, refreshes) for p in run.pulls]
+def all_segments(run: RunData, tl: Timeline, spec: Spec) -> list[SegmentMetrics]:
+    hots = hots_active(run, tl) if spec.maintenance else None
+    refreshes = hot_refreshes(run, spec)
+    return [segment_metrics(run, tl, p, hots, refreshes) for p in run.pulls]
 
 
 def group_hits(run: RunData, tl: Timeline, pull: Pull) -> list[GroupHit]:
@@ -187,7 +189,7 @@ def build_profile(top: list[SegmentMetrics]) -> Profile | None:
         for h in s.hits:
             hit_pre.setdefault(h.ability, []).append(h.pre_ehp)
             hit_rec.setdefault(h.ability, []).append(h.recovery_s if h.recovery_s is not None else RECOVERY_CAP_S)
-    rip = [s.riptide_pressure_uptime for s in top if s.riptide_pressure_uptime is not None]
+    rip = [s.hot_pressure_uptime for s in top if s.hot_pressure_uptime is not None]
 
     return Profile(
         n=len(top),
@@ -200,8 +202,8 @@ def build_profile(top: list[SegmentMetrics]) -> Profile | None:
         hit_pre={a: med(v) for a, v in hit_pre.items()},
         hit_recovery={a: med(v) for a, v in hit_rec.items()},
         hit_count={a: len(v) for a, v in hit_pre.items()},
-        riptide_pressure_uptime=med(rip) if rip else None,
-        riptide_wasted_pressure_s=med(s.riptide_wasted_pressure_s for s in top),
+        hot_pressure_uptime=med(rip) if rip else None,
+        hot_wasted_pressure_s=med(s.hot_wasted_pressure_s for s in top),
         segments=list(top),
     )
 

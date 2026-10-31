@@ -12,7 +12,7 @@ from app.context import build_context
 from app.context_model import load_dungeon
 from app.chains import OUTCOME_S, Chain, find_chains
 from app.findings import Finding, TopRun, analyze
-from app.metrics import riptide_active, riptide_refreshes
+from app.metrics import hot_refreshes, hots_active
 from app.reports import get_fights, get_players, get_trinkets, parse_report_url, pick_fight
 from app.runs import fetch_run
 from app.segments import all_segments, build_profile, match_pull, segment_metrics
@@ -27,7 +27,7 @@ from app.phases import fetch_boss_casts, phase_breakdown
 from app.quality import check as quality_check
 from app.spells import fetch_spell_heals, heal_casts
 from app.verdicts import items_verdict, phases_verdict, pulls_verdict, spell_verdict
-from app.specs import resto_shaman as rs
+from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient
 
@@ -46,6 +46,16 @@ class AnalysisError(ValueError):
     pass
 
 
+def pick_healer(players, player_name: str | None):
+    """(player, spec): the named player if they heal on a supported spec, else the first supported healer."""
+    healers = healers_in(players)
+    named = [h for h in healers if player_name and h[0].name.lower() == player_name.lower()]
+    if named or healers:
+        return (named or healers)[0]
+    supported = ", ".join(s.label for s in SPECS)
+    raise AnalysisError(f"No supported healer in that run (supported: {supported}).")
+
+
 def cache_key(code: str, fight_id: int, player: str, top: int) -> str:
     return f"analysis:v{RULES_VERSION}:{code}:{fight_id}:{player.lower()}:{top}"
 
@@ -54,13 +64,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
                  progress: Callable[[str], None] = lambda msg: None, use_cache: bool = True) -> dict:
     code, fight_id = parse_report_url(url)
     fight = pick_fight(get_fights(client, code), fight_id)
-    shamans = [p for p in get_players(client, fight) if p.class_name == rs.CLASS_NAME and p.spec == rs.SPEC_NAME]
-    named = [p for p in shamans if player_name and p.name.lower() == player_name.lower()]
-    if named:
-        shamans = named
-    if not shamans:
-        raise AnalysisError("No Restoration Shaman found in that run.")
-    me = shamans[0]
+    me, spec = pick_healer(get_players(client, fight), player_name)
 
     key = cache_key(code, fight.id, me.name, top)
     if use_cache:
@@ -72,36 +76,37 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     effects = load_effects()
     my_players = get_players(client, fight)
     my_mods = frozenset(intake_modifiers(my_players, effects))
-    run = fetch_run(client, fight, me.id)
+    run = fetch_run(client, fight, me.id, spec)
     tl = build_timeline(run)
-    segs = all_segments(run, tl)
+    segs = all_segments(run, tl, spec)
 
-    my_state = fetch_healer_state(client, fight, run)
+    my_state = fetch_healer_state(client, fight, run, spec)
     my_boss_casts = fetch_boss_casts(client, fight, run)
 
     progress("Finding comparable top logs...")
     tops, top_boss, candidates, skipped = [], [], [], []
     # Extra candidates so logs failing the data-quality gate can be replaced from further down.
-    for f, p in comparable_fights(client, fight, rs.CLASS_NAME, rs.SPEC_NAME, top + QUALITY_BACKFILL):
+    for f, p in comparable_fights(client, fight, spec.class_name, spec.spec_name, top + QUALITY_BACKFILL):
         if len(tops) >= top:
             break
         progress(f"Fetching top log {len(tops) + 1} of {top} ({p.name} +{f.keystone_level})...")
-        other = fetch_run(client, f, p.id)
+        other = fetch_run(client, f, p.id, spec)
         otl = build_timeline(other)
         ok, reasons = quality_check(other.damage, other.player_ids, f.duration_s, fight.duration_s, otl.group_ehp)
         if not ok:
             skipped.append({"player": p.name, "key": f.keystone_level, "reasons": reasons})
             continue
         candidates.append((f, p))
-        state = fetch_healer_state(client, f, other)
+        state = fetch_healer_state(client, f, other, spec)
         top_run = TopRun(other, get_trinkets(client, f).get(p.id, []),
                          frozenset(intake_modifiers(get_players(client, f), effects)),
-                         heal_casts(other, otl, fetch_spell_heals(client, f, other), state))
+                         heal_casts(other, otl, fetch_spell_heals(client, f, other, spec), state, spec))
         tops.append((top_run, otl))
         top_boss.append((other, otl, fetch_boss_casts(client, f, other)))
 
     progress("Analyzing...")
-    top_rip = [(riptide_active(tr.run, otl), riptide_refreshes(tr.run)) for tr, otl in tops]
+    top_rip = [(hots_active(tr.run, otl) if spec.maintenance else None, hot_refreshes(tr.run, spec))
+               for tr, otl in tops]
     profiles = []
     for seg in segs:
         matched = []
@@ -113,11 +118,11 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
                 matched.append(m)
         profiles.append(build_profile(matched))
 
-    model = load_dungeon(run.dungeon)
+    model = load_dungeon(run.dungeon, spec)
     ctx = build_context(run, tl, segs, profiles)
     my_trinkets = get_trinkets(client, fight).get(me.id, [])
-    my_heals = heal_casts(run, tl, fetch_spell_heals(client, fight, run), my_state)
-    phases, phase_rows = phase_breakdown(run, tl, my_boss_casts, top_boss)
+    my_heals = heal_casts(run, tl, fetch_spell_heals(client, fight, run, spec), my_state, spec)
+    phases, phase_rows = phase_breakdown(run, tl, my_boss_casts, top_boss, spec)
 
     def clock(t: int) -> str:
         s = max(0, (t - run.start) // 1000)
@@ -128,13 +133,13 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     avoid = build_avoidance(client, fight, run, [(f, tr.run) for (tr, _), (f, _) in zip(tops, candidates)],
                             group_casts)
     death_recaps = _death_recaps(client, fight, run, my_players, my_state, [tr.run for tr, _ in tops],
-                                 candidates, clock, progress)
+                                 candidates, clock, progress, spec)
     for r in death_recaps:
         tag = avoid.tag_by_name(run, r["cause"]["name"], r["t"])
         r["avoid"] = {"label": tag.label, "line": tag.line()} if tag else None
     result = analyze(run, tl, segs, profiles, ctx, model, [tr for tr, _ in tops], my_trinkets, my_mods,
-                     my_heals, phases, phase_rows, my_state, death_recaps)
-    chains = find_chains(run, tl, fetch_auras(client, fight, run.player_ids), my_state, tops, group_casts)
+                     my_heals, phases, phase_rows, my_state, death_recaps, spec=spec)
+    chains = find_chains(run, tl, fetch_auras(client, fight, run.player_ids), my_state, tops, group_casts, spec)
     result.findings += _chain_findings(run, chains, clock)
     _soften(result.findings, run, avoid, death_recaps, clock)
     comp_notes = [
@@ -152,8 +157,8 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
                   "clock": clock(r["start"])} for r in phase_rows]
     phase_v = phases_verdict(phase_out)
     verdicts = {
-        "spells": spell_verdict(result.spell_choice, my_heals, clock),
-        "items": items_verdict(result.items),
+        "spells": spell_verdict(result.spell_choice, my_heals, clock, spec),
+        "items": items_verdict(result.items, spec),
         "phases": phase_v,
         "pulls": pulls_verdict(result.requirements, phase_v),
     }
@@ -168,6 +173,11 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
             "duration_min": round(fight.duration_s / 60, 1),
             "deaths": len(run.deaths),
         },
+        "spec": {"key": spec.key, "label": spec.label, "plural": spec.plural,
+                 "single": spec.spell_pair.single if spec.spell_pair else None,
+                 "group": spec.spell_pair.group if spec.spell_pair else None,
+                 "maintenance": spec.maintenance.plural if spec.maintenance else None,
+                 "majors": spec.major_pair_text},
         "compared": {
             "count": len(tops),
             "levels": sorted({tr.run.keystone_level for tr, _ in tops}),
@@ -188,13 +198,13 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         "deaths": death_recaps,
         "timeline": _timeline(run, tl, segs, profiles, phases, my_state, my_trinkets, result, tops, death_recaps,
                               my_players, fetch_defense_spans(client, fight, run, my_players, load_defensives()),
-                              group_casts, avoid, chains),
+                              group_casts, avoid, chains, spec),
     }
     client.set_cached(key, out)
     return out
 
 
-def _death_recaps(client, fight, run, players, state, top_runs, candidates, clock, progress) -> list[dict]:
+def _death_recaps(client, fight, run, players, state, top_runs, candidates, clock, progress, spec) -> list[dict]:
     """Recap for each death: cause, what was ready (group / victim / healer), the debuff and
     dispel story, the victim's last casts, and how top players handle the same debuff."""
     deaths = [d for d in sorted(run.deaths, key=lambda d: d[0])
@@ -217,7 +227,7 @@ def _death_recaps(client, fight, run, players, state, top_runs, candidates, cloc
             self_clears.setdefault(aid, set()).update(names)
     debuff_names = {run.ability_name(d[1]) for t, victim, _ in deaths for d in auras.debuffs
                     if d[0] == victim and t - 10_000 <= d[3] and d[2] <= t}
-    handling = top_debuff_handling(top_auras, debuff_names, tools)
+    handling = top_debuff_handling(top_auras, debuff_names, tools, spec.plural)
     out = []
     for t, victim, killing in deaths:
         ev = fetch_death_events(client, fight, victim, t)
@@ -359,7 +369,7 @@ def _top_curve(seg, tops) -> list[list[float]] | None:
 
 
 def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(), recaps=(), players=(),
-              spans=(), group_casts=(), avoid: Avoidance | None = None, chains=()) -> dict:
+              spans=(), group_casts=(), avoid: Avoidance | None = None, chains=(), spec=None) -> dict:
     """Everything the page needs to draw HP over time: cooldowns, deaths, hits, findings - each
     with hover details - plus each party member's active defensives."""
     rel = lambda t: round((t - run.start) / 1000, 1)
@@ -379,11 +389,12 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
         b = tl.bin_of(t)
         return f"Group {pct(tl.group_ehp[b])} · lowest {pct(tl.min_ehp[b])}"
 
-    cds = CooldownTracker(run)
+    healing, personals = spec.healing_cooldowns, spec.personal_cooldowns
+    cds = CooldownTracker(run, healing)
     markers = []
     for t, aid, target in run.casts:
         name = run.ability_name(aid)
-        kind = ("cooldown" if aid in rs.HEALING_COOLDOWNS else "personal" if aid in rs.PERSONAL_COOLDOWNS
+        kind = ("cooldown" if aid in healing else "personal" if aid in personals
                 else "trinket" if name in trinkets else "potion" if "Potion" in name else None)
         if not kind:
             continue
@@ -467,9 +478,9 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
             if run.ability_name(c[2]) in LUST_SPELLS]
     in_combat = [(p.start, p.end) for p in run.pulls]
     ready_lanes = []
-    personal = CooldownTracker(run, rs.PERSONAL_COOLDOWNS)
-    for tracker, aid, name in [(cds, a, n) for a, (n, _) in rs.HEALING_COOLDOWNS.items() if a in cds.casts] + \
-            [(personal, a, n) for a, (n, _) in rs.PERSONAL_COOLDOWNS.items()]:
+    personal = CooldownTracker(run, personals)
+    for tracker, aid, name in [(cds, a, n) for a, (n, _) in healing.items() if a in cds.casts] + \
+            [(personal, a, n) for a, (n, _) in personals.items()]:
         casts = tracker.casts.get(aid, [])
         cd = tracker.cd_ms.get(aid, tracker.cooldowns[aid][1] * 1000)
         spans_ready, back = [], run.start

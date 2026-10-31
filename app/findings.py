@@ -6,9 +6,10 @@ from dataclasses import dataclass, field
 from app.context import (CALM, EMERGENCY, GROUP_LOW_COUNT, IDLE, LETHAL_EHP, PRESSURE, Context,
                          CooldownTracker, low_count)
 from app.context_model import DungeonModel
-from app.metrics import riptide_active
+from app.metrics import hots_active
 from app.runs import RunData
-from app.specs import resto_shaman as rs
+from app.specs import RACIALS
+from app.specs.base import Spec
 from app.segments import MELEE_ID, RECOVERY_CAP_S, Profile, SegmentMetrics
 from app.healer_state import HealerState
 from app.spells import HealCast, buff_table, choice_table
@@ -89,19 +90,21 @@ class Analysis:
     good_calls: list[Finding]
     requirements: list[dict]
     items: list[dict] = field(default_factory=list)  # trinkets, potions, racials vs top players
-    spell_choice: dict = field(default_factory=dict)  # Healing Wave vs Chain Heal by situation, you vs top
+    spell_choice: dict = field(default_factory=dict)  # single vs group heal by situation, you vs top
 
 
 class _Ctx:
     """Shared lookups for the rules."""
 
     def __init__(self, run, tl, segs, profiles, ctx, model: DungeonModel | None,
-                 tops: list[TopRun], my_trinkets: list[str], my_modifiers: frozenset):
+                 tops: list[TopRun], my_trinkets: list[str], my_modifiers: frozenset, spec: Spec):
         self.run, self.tl, self.segs, self.profiles, self.ctx = run, tl, segs, profiles, ctx
-        self.cds = CooldownTracker(run)
+        self.spec = spec
+        self.top_label = f"Top {spec.plural}"
+        self.cds = CooldownTracker(run, spec.healing_cooldowns)
         self.model = model
         self.seg_models = [model.segment(s.pull) if model else None for s in segs]
-        self.riptide = riptide_active(run, tl)
+        self.hots = hots_active(run, tl)
         self.covered: dict[int, list[tuple[int, int]]] = {}  # cooldown -> bin ranges already reported
         self.tops, self.my_trinkets, self.my_modifiers = tops, my_trinkets, my_modifiers
         self.minutes = (run.end - run.start) / 60000
@@ -143,7 +146,7 @@ class _Ctx:
         use = sm["cooldowns"].get(name)
         runs = sm["runs"]
         if not use:
-            return f"Top Resto Shamans don't press it on this pull (0 of {runs} runs)."
+            return f"{self.top_label} don't press it on this pull (0 of {runs} runs)."
         when = (", ".join(f"~{p['at_s']}s in" for p in use["planned"]) if use["planned"]
                 else f"usually ~{use['median_time_s']}s in")
         how = "mostly before the damage" if use["proactive_share"] >= 0.5 else "mostly as damage lands"
@@ -185,9 +188,9 @@ def analyze(run: RunData, tl: Timeline, segs: list[SegmentMetrics], profiles: li
             my_trinkets: list[str] | None = None, my_modifiers: frozenset = frozenset(),
             heal_casts: list[HealCast] | None = None, phases: dict | None = None,
             phase_rows: list[dict] | None = None, state: HealerState | None = None,
-            death_recaps: list[dict] | None = None) -> Analysis:
+            death_recaps: list[dict] | None = None, *, spec: Spec) -> Analysis:
     profiles = [None if s.duration_s < MIN_PULL_S else p for s, p in zip(segs, profiles)]
-    c = _Ctx(run, tl, segs, profiles, ctx, model, tops or [], my_trinkets or [], my_modifiers)
+    c = _Ctx(run, tl, segs, profiles, ctx, model, tops or [], my_trinkets or [], my_modifiers, spec)
     c.heal_casts = heal_casts or []
     c.recaps = {(r["t"], r["victim"]): r for r in death_recaps or []}
     c.phases, c.phase_rows, c.state = phases or {}, phase_rows or [], state
@@ -220,28 +223,32 @@ def analyze(run: RunData, tl: Timeline, segs: list[SegmentMetrics], profiles: li
     for f in findings + good:
         f.pull += _phase_suffix(c, f.t)
     for f in findings:
-        f.short, f.fix = _shorthand(f)
+        f.short, f.fix = _shorthand(f, spec)
     findings.sort(key=lambda f: -f.severity)
     return Analysis(findings, sorted(good, key=lambda f: f.t), _requirements(c), items, choice)
 
 
-SHORT_NAMES = {"Healing Tide Totem": "Healing Tide", "Spirit Link Totem": "Spirit Link"}
-FIXES = {
-    "held_cooldown": "Press it into the damage", "planned_cooldown": "Press it on the timing",
-    "cooldown_rate": "Press it on cooldown", "riptide_prep": "3 Riptides out first",
-    "not_topped": "Top them before the hit", "self_danger": "Astral Shift", "low_value_cooldown": "Save it for damage",
-    "slow_recovery": "Faster heals after it", "damage_intake": "Group: avoidable damage",
-    "riptide_pressure": "Keep Riptides rolling", "spell_choice": "More Chain Heal", "buff_choice": "More Chain Heal",
-    "low_mana": "Manage mana earlier",
-}
+def _fixes(spec: Spec) -> dict[str, str]:
+    """Rule -> short fix. Rule keys keep their original (Resto Shaman) names: riptide_* = maintenance HoT."""
+    hot = spec.maintenance.plural if spec.maintenance else "HoTs"
+    personal = next(iter(spec.personal_cooldowns.values()), ("a personal", 0))[0]
+    group = spec.spell_pair.group if spec.spell_pair else "group heals"
+    return {
+        "held_cooldown": "Press it into the damage", "planned_cooldown": "Press it on the timing",
+        "cooldown_rate": "Press it on cooldown", "riptide_prep": f"3 {hot} out first",
+        "not_topped": "Top them before the hit", "self_danger": personal, "low_value_cooldown": "Save it for damage",
+        "slow_recovery": "Faster heals after it", "damage_intake": "Group: avoidable damage",
+        "riptide_pressure": f"Keep {hot} rolling", "spell_choice": f"More {group}", "buff_choice": f"More {group}",
+        "low_mana": "Manage mana earlier",
+    }
 
 
-def _shorthand(f: Finding) -> tuple[str, str]:
+def _shorthand(f: Finding, spec: Spec) -> tuple[str, str]:
     """Collapsed view: a ~10-word line and a short fix."""
     title = f.title
-    for long, short in SHORT_NAMES.items():
+    for long, short in spec.short_names.items():
         title = title.replace(long, short)
-    fix = f.fix or FIXES.get(f.rule, "")
+    fix = f.fix or _fixes(spec).get(f.rule, "")
     if f.rule == "death":
         title = title.replace(" died - mostly ", " died in ").split(" (")[0]
     elif f.rule == "held_cooldown":
@@ -249,7 +256,8 @@ def _shorthand(f: Finding) -> tuple[str, str]:
     elif f.rule == "cooldown_rate":
         title = title.replace(" pressed far less than top players", " pressed less than top players")
     elif f.rule == "items":
-        fix = "Pair with Healing Tide / Spirit Link" if "not lined up" in title else "Press it on cooldown"
+        fix = (f"Pair with {spec.major_pair_text.replace(' or ', ' / ')}" if "not lined up" in title
+               else "Press it on cooldown")
     elif f.rule == "phase_gap":
         title = title.replace("Group lower than top groups in ", "Low group HP in ")
         fix = "Group: less damage taken" if any("more damage" in d for d in f.detail) else "More healing / cooldowns"
@@ -314,7 +322,7 @@ def _low_mana(c: _Ctx) -> list[Finding]:
         out.append(Finding(c.t_of(start), c.pull_label(c.ctx.pull_of_bin[start]), 40 + (10 if any(w.deaths for w in dangers) else 0),
                            f"Under {LOW_MANA:.0%} mana for {b - start}s during dangerous moments", [
             f"Mana bottomed out at {lowest:.0%}; {len(dangers)} group-wide dangerous moment(s) in that stretch.",
-            "Low mana limits Chain Heal and Healing Rain exactly when they're needed."]))
+            f"Low mana limits {c.spec.mana_spells or 'your bigger heals'} exactly when they're needed."]))
     return out
 
 
@@ -504,7 +512,7 @@ def _death_basic(c: _Ctx, group: list[list]) -> Finding:
 
     # A healer dying alone is a personal-defensive question, not a group-cooldown one.
     if victims == [c.run.healer_id]:
-        pool, candidates = CooldownTracker(c.run, rs.PERSONAL_COOLDOWNS), list(rs.PERSONAL_COOLDOWNS)
+        pool, candidates = CooldownTracker(c.run, c.spec.personal_cooldowns), list(c.spec.personal_cooldowns)
     else:
         pool, candidates = c.cds, list(c.cds.casts)
     ready, late = [], []
@@ -592,7 +600,7 @@ def _held_cooldowns(c: _Ctx) -> list[Finding]:
         sm = c.seg_models[windows[0].pull_idx]
         rarely = sm is not None and sm["cooldowns"].get(name, {}).get("share_of_runs", 0) < 0.3
         if rarely:
-            detail.append("Top Resto Shamans rarely use it on this pull either.")
+            detail.append(f"{c.top_label} rarely use it on this pull either.")
 
         severity = (40 + (20 if worst.min_ehp < LETHAL_EHP else 0) + 5 * min(len(uncovered), 4)
                     - (25 if not uncovered else 0) - (15 if rarely else 0))
@@ -651,14 +659,14 @@ def _cooldown_rate(c: _Ctx) -> list[Finding]:
         return []
     out = []
     minutes = (c.run.end - c.run.start) / 60000
-    for aid, (name, _) in rs.HEALING_COOLDOWNS.items():
+    for aid, (name, _) in c.spec.healing_cooldowns.items():
         top_rate = c.model.casts_per_min.get(name, 0)
         if top_rate <= 0:
             continue
         casts = c.cds.casts.get(aid, [])
         if len(casts) >= top_rate * minutes * RATE_RATIO:
             continue
-        cd_ms = c.cds.cd_ms.get(aid, rs.HEALING_COOLDOWNS[aid][1] * 1000)
+        cd_ms = c.cds.cd_ms.get(aid, c.spec.healing_cooldowns[aid][1] * 1000)
 
         def ready(t: int) -> bool:
             last = max((x for x in casts if x <= t), default=None)
@@ -698,7 +706,7 @@ def _cooldown_rate(c: _Ctx) -> list[Finding]:
                           if longest else ".")],
             ["Needed?", f"{ready_pressure / 60:.1f} min of pressure while it was ready, "
                         f"{len(danger_windows)} group-wide dangerous moment(s)."],
-            ["Top runs", f"Top Resto Shamans in this dungeon press it ~{top_rate * minutes:.0f} times in a run this "
+            ["Top runs", f"{c.top_label} in this dungeon press it ~{top_rate * minutes:.0f} times in a run this "
                          f"long (about every {60 / top_rate:.0f}s); you pressed it {len(casts)} times."],
         ]
         out.append(Finding(c.run.start, "Whole run", 45 + (15 if len(danger_windows) >= 2 else 0),
@@ -725,9 +733,13 @@ def _dur(ms: float) -> str:
 
 
 def _riptide_prep(c: _Ctx) -> list[Finding]:
-    """Top players have ~3 Riptides out before big group hits. Flag hits you went into
-    with far fewer that then left someone near death."""
+    """Top players have ~3 maintenance HoTs (Riptides) out before big group hits. Flag hits you
+    went into with far fewer that then left someone near death. ("riptides_*" model keys hold
+    the spec's maintenance HoT.)"""
     out = []
+    if not c.spec.maintenance:
+        return out
+    hot = c.spec.maintenance
     for i, seg in enumerate(c.segs):
         sm = c.seg_models[i]
         if not sm:
@@ -738,14 +750,14 @@ def _riptide_prep(c: _Ctx) -> list[Finding]:
             if not mh or mh["riptides_median"] < RIPTIDE_PREP_GAP:
                 continue
             short = [h for h in hits
-                     if c.riptide[max(0, c.tl.bin_of(h.t) - 1)] <= mh["riptides_median"] - RIPTIDE_PREP_GAP
+                     if c.hots[max(0, c.tl.bin_of(h.t) - 1)] <= mh["riptides_median"] - RIPTIDE_PREP_GAP
                      and h.min_after < LETHAL_EHP]
             if len(short) < 2:
                 continue
-            avg = statistics.mean(c.riptide[max(0, c.tl.bin_of(h.t) - 1)] for h in short)
+            avg = statistics.mean(c.hots[max(0, c.tl.bin_of(h.t) - 1)] for h in short)
             out.append(Finding(short[0].t, c.pull_label(i), min(55, 30 + 5 * len(short)),
-                               f"Riptide prep before {c.ability(ability)}", [
-                f"{len(short)} of {len(hits)} times you had {avg:.1f} Riptides out before it "
+                               f"{hot.name} prep before {c.ability(ability)}", [
+                f"{len(short)} of {len(hits)} times you had {avg:.1f} {hot.plural} out before it "
                 f"(top players: {mh['riptides_median']:g}), and it left someone below {LETHAL_EHP:.0%}."]))
     return out
 
@@ -814,9 +826,10 @@ def _not_topped(c: _Ctx) -> list[Finding]:
             if near:
                 detail.append(f"{near} of {len(hits)} left someone below {LETHAL_EHP:.0%}.")
             mh = model_hits.get(ability)
-            if mh:
-                mine_rip = statistics.mean(c.riptide[max(0, c.tl.bin_of(h.t) - 1)] for h in hits)
-                line = f"Top Resto Shamans go in with {mh['riptides_median']:g} Riptides out (you: {mine_rip:.1f})"
+            if mh and c.spec.maintenance:
+                mine_rip = statistics.mean(c.hots[max(0, c.tl.bin_of(h.t) - 1)] for h in hits)
+                line = (f"{c.top_label} go in with {mh['riptides_median']:g} {c.spec.maintenance.plural} out "
+                        f"(you: {mine_rip:.1f})")
                 answer = next(iter(mh["answered_by"].items()), None)
                 if answer and answer[1] >= 0.3:
                     line += f" and answer it with {answer[0]} {answer[1]:.0%} of the time"
@@ -897,13 +910,15 @@ def _intake_reference(c: _Ctx, prof: Profile) -> tuple[dict, str | None]:
 
 def _items(c: _Ctx) -> tuple[list[dict], list[Finding]]:
     """Trinkets, potions and racials vs the comparable top logs: how often, how long they
-    sat ready during pressure, and whether they were lined up with Healing Tide / Spirit Link."""
+    sat ready during pressure, and whether they were lined up with the major healing cooldowns."""
+    majors_text = c.spec.major_pair_text
+
     def kind_of(name: str) -> str | None:
         if name in c.my_trinkets:
             return "Trinket"
         if "Potion" in name:
             return "Potion"
-        if name in rs.RACIALS:
+        if name in RACIALS:
             return "Racial"
         return None
 
@@ -915,7 +930,7 @@ def _items(c: _Ctx) -> tuple[list[dict], list[Finding]]:
         d: dict[str, list[int]] = {}
         for t, a, _ in tr.run.casts:
             d.setdefault(tr.run.ability_name(a), []).append(t)
-        majors = sorted(t for t, a, _ in tr.run.casts if a in rs.HEALING_COOLDOWNS)
+        majors = sorted(t for t, a, _ in tr.run.casts if a in c.spec.healing_cooldowns)
         tops_by.append((tr, d, majors))
     my_majors = sorted(t for ts in c.cds.casts.values() for t in ts)
 
@@ -955,9 +970,9 @@ def _items(c: _Ctx) -> tuple[list[dict], list[Finding]]:
 
         if kind != "Trinket" or len(users) < 2:
             continue
-        top_line = f"{len(users)} of {len(c.tops)} comparable top Resto Shamans run it"
+        top_line = f"{len(users)} of {len(c.tops)} comparable top {c.spec.plural} run it"
         if top_paired is not None:
-            top_line += f"; {top_paired:.0%} of their uses line up with Healing Tide or Spirit Link"
+            top_line += f"; {top_paired:.0%} of their uses line up with {majors_text}"
         if top_uses and len(mine) < top_uses * ITEM_RATE_RATIO and (ready_pressure or 0) >= ITEM_MIN_READY_PRESSURE_S:
             out.append(Finding(c.run.start, "Whole run", 40, f"{name} used less than top players", [
                 f"You used it {len(mine)} times; top players who run it use it ~{top_uses:.0f} times in a run this long."],
@@ -967,25 +982,26 @@ def _items(c: _Ctx) -> tuple[list[dict], list[Finding]]:
         elif (top_paired is not None and paired is not None and len(mine) >= 3
               and top_paired >= 0.5 and paired <= top_paired - 0.3):
             out.append(Finding(c.run.start, "Whole run", 30, f"{name} not lined up with your cooldowns", [
-                f"{paired:.0%} of your uses were within {PAIR_WINDOW_MS // 1000}s of Healing Tide or Spirit Link."],
+                f"{paired:.0%} of your uses were within {PAIR_WINDOW_MS // 1000}s of {majors_text}."],
                 [["Top runs", top_line + "."]]))
     return rows, out
 
 
 def _spell_choice(c: _Ctx) -> tuple[dict, list[Finding]]:
-    """Healing Wave vs Chain Heal judged by the situation at each cast, against the same
-    situations in the comparable top logs. Only stretches that clearly mattered are flagged:
-    a run of Chain Heals while one player was dying, or Healing Waves through a group spike."""
-    mine = c.heal_casts
+    """Single-target vs group heal (Healing Wave vs Chain Heal) judged by the situation at each cast,
+    against the same situations in the comparable top logs. Only stretches that clearly mattered are
+    flagged: a run of group heals while one player was dying, or single heals through a group spike."""
+    mine, pair = c.heal_casts, c.spec.spell_pair
     top_all = [h for tr in c.tops for h in tr.heal_casts]
-    if not mine:
+    if not mine or not pair:
         return {}, []
-    table = {"you": choice_table(mine), "top": choice_table(top_all) if top_all else None,
-             "buffs": {"you": buff_table(mine), "top": buff_table(top_all) if top_all else None}}
+    one, grp = pair.single, pair.group
+    table = {"you": choice_table(mine, pair), "top": choice_table(top_all, pair) if top_all else None,
+             "buffs": {"you": buff_table(mine, c.spec), "top": buff_table(top_all, c.spec) if top_all else None}}
     top = table["top"] or {}
     out = []
 
-    # Whole run: picking Healing Wave where top players Chain Heal, when your own Chain Heals
+    # Whole run: picking the single heal where top players group-heal, when your own group heals
     # in that situation clearly healed more per cast.
     labels = {"two": "2 players", "group": "3+ players"}
     for sit, label in labels.items():
@@ -996,14 +1012,14 @@ def _spell_choice(c: _Ctx) -> tuple[dict, list[Finding]]:
         gain = you["ch_effective"] / you["hw_effective"] - 1
         if them["ch_share"] - you["ch_share"] < SPELL_SHARE_GAP or gain < SPELL_CH_GAIN:
             continue
-        out.append(Finding(c.run.start, "Whole run", 35, f"Healing Wave over Chain Heal with {label} injured", [
-            f"Your Chain Heals in that situation healed {gain:.0%} more per cast than your Healing Waves "
+        out.append(Finding(c.run.start, "Whole run", 35, f"{one} over {grp} with {label} injured", [
+            f"Your {grp}s in that situation healed {gain:.0%} more per cast than your {one}s "
             f"({you['ch_effective'] / 1000:.0f}k vs {you['hw_effective'] / 1000:.0f}k effective), "
             f"at {you['ch_overheal']:.0%} overheal.",
-            f"Your mana averaged {you['mana']:.0%} during those heals - Chain Heal costs more, so this is the trade-off."
-            if you.get("mana") is not None else "Chain Heal costs more mana - that is the trade-off."],
+            f"Your mana averaged {you['mana']:.0%} during those heals - {grp} costs more, so this is the trade-off."
+            if you.get("mana") is not None else f"{grp} costs more mana - that is the trade-off."],
             [["Situation", f"{you['casts']} heals cast with {label} below 80%."],
-             ["Top runs", f"Top Resto Shamans Chain Heal {them['ch_share']:.0%} of the time here "
+             ["Top runs", f"{c.top_label} use {grp} {them['ch_share']:.0%} of the time here "
                           f"(you: {you['ch_share']:.0%})."]]))
 
     # Under a healing buff: top players switch spells (e.g. Chain Heal during Ascendance) and you don't.
@@ -1019,18 +1035,18 @@ def _spell_choice(c: _Ctx) -> tuple[dict, list[Finding]]:
                       if s.get("ch_effective") and s.get("hw_effective")]
         if not favours_ch or not all(favours_ch):
             continue
-        out.append(Finding(c.run.start, "Whole run", 40, f"Chain Heal underused during {name}", [
-            f"During {name}, Chain Heal healed more per cast than Healing Wave - yours "
+        out.append(Finding(c.run.start, "Whole run", 40, f"{grp} underused during {name}", [
+            f"During {name}, {grp} healed more per cast than {one} - yours "
             f"{_k(you['ch_effective'])} vs {_k(you['hw_effective'])}, top players' "
             f"{_k(them['ch_effective'])} vs {_k(them['hw_effective'])}."],
             [["Situation", f"{you['casts']} heals cast with {name} up."],
-             ["Top runs", f"Top Resto Shamans Chain Heal {them['ch_share']:.0%} of the time during {name} "
+             ["Top runs", f"{c.top_label} use {grp} {them['ch_share']:.0%} of the time during {name} "
                           f"(you: {you['ch_share']:.0%})."]], rule="buff_choice"))
 
-    # Chain Heal while a single player was in danger (top players mostly Healing Wave here).
+    # Group heals while a single player was in danger (top players mostly single-heal here).
     top_one = top.get("one", {}).get("ch_share")
     if top_one is not None and top_one <= CH_SINGLE_TOP_MAX:
-        for stretch in _stretches([h for h in mine if h.spell == "Chain Heal" and h.situation in ("none", "one")]):
+        for stretch in _stretches([h for h in mine if h.spell == grp and h.situation in ("none", "one")]):
             if (statistics.mean(h.overheal_share for h in stretch) < CH_SINGLE_OVERHEAL
                     or min(h.lowest for h in stretch) >= HELD_MIN_EHP):
                 continue
@@ -1038,31 +1054,31 @@ def _spell_choice(c: _Ctx) -> tuple[dict, list[Finding]]:
             b0, b1 = c.tl.bin_of(t0), c.tl.bin_of(t1)
             low = min(range(b0, b1 + 1), key=lambda b: c.tl.min_ehp[b])
             out.append(Finding(t0, c.pull_label(c.ctx.pull_of_bin[b0]), 40,
-                               f"{len(stretch)} Chain Heals while only {c.player(c.tl.lowest_player[low])} needed healing", [
-                f"{statistics.mean(h.overheal_share for h in stretch):.0%} of those Chain Heals overhealed; "
+                               f"{len(stretch)} {grp}s while only {c.player(c.tl.lowest_player[low])} needed healing", [
+                f"{statistics.mean(h.overheal_share for h in stretch):.0%} of those {grp}s overhealed; "
                 f"{c.player(c.tl.lowest_player[low])} dropped to {c.tl.min_ehp[low]:.0%} meanwhile."],
                 [["Situation", f"One player injured, the rest topped ({c.clock(t0)}-{c.clock(t1)})."],
-                 ["Top runs", f"With one player injured, top Resto Shamans use Chain Heal {top_one:.0%} of the time "
-                              f"(you: {table['you']['one']['ch_share']:.0%}) - Healing Wave lands the big single heal."]]))
+                 ["Top runs", f"With one player injured, {c.top_label.lower()} use {grp} {top_one:.0%} of the time "
+                              f"(you: {table['you']['one']['ch_share']:.0%}) - {one} lands the big single heal."]]))
 
-    # Healing Waves through a group spike (top players mostly Chain Heal here).
+    # Single heals through a group spike (top players mostly group-heal here).
     top_group = top.get("group", {}).get("ch_share")
     if top_group is not None and top_group >= HW_GROUP_TOP_MIN:
-        hw = [h for h in mine if h.spell == "Healing Wave" and h.situation == "group" and not h.after_swiftness]
+        hw = [h for h in mine if h.spell == one and h.situation == "group" and not h.after_swiftness]
         for stretch in _stretches(hw):
             t0, t1 = stretch[0].t, stretch[-1].t
-            if any(h.spell == "Chain Heal" and t0 <= h.t <= t1 for h in mine):
+            if any(h.spell == grp and t0 <= h.t <= t1 for h in mine):
                 continue
             b0, b1 = c.tl.bin_of(t0), c.tl.bin_of(t1)
             sustained = sum(1 for b in range(b0, b1 + 2) if low_count(c.tl, b) >= GROUP_LOW_COUNT)
             if sustained < SUSTAINED_S:
                 continue
             out.append(Finding(t0, c.pull_label(c.ctx.pull_of_bin[b0]), 40,
-                               f"{len(stretch)} Healing Waves through group-wide damage", [
+                               f"{len(stretch)} {one}s through group-wide damage", [
                 f"{min(h.injured for h in stretch)}+ players were injured at every cast and 2+ sat under 50% for "
-                f"{sustained}s; no Chain Heal in between."],
+                f"{sustained}s; no {grp} in between."],
                 [["Situation", f"Group-wide damage ({c.clock(t0)}-{c.clock(t1)})."],
-                 ["Top runs", f"With 3+ players injured, top Resto Shamans use Chain Heal {top_group:.0%} of the time "
+                 ["Top runs", f"With 3+ players injured, {c.top_label.lower()} use {grp} {top_group:.0%} of the time "
                               f"(you: {table['you']['group']['ch_share']:.0%})."]]))
     return table, out
 
@@ -1110,10 +1126,14 @@ def _paired_share(times: list[int], majors: list[int]) -> float | None:
 
 
 def _riptide_under_pressure(c: _Ctx) -> list[Finding]:
+    """Maintenance-HoT uptime and early refreshes in the busiest moments vs top players."""
     out = []
+    if not c.spec.maintenance:
+        return out
+    hot = c.spec.maintenance.name
     for i, seg in enumerate(c.segs):
         prof = c.profiles[i]
-        if (not prof or prof.riptide_pressure_uptime is None or seg.riptide_pressure_uptime is None
+        if (not prof or prof.hot_pressure_uptime is None or seg.hot_pressure_uptime is None
                 or len(seg.pressure_bins) < MIN_PRESSURE_BINS):
             continue
         if not _comparable(seg, prof):
@@ -1121,22 +1141,22 @@ def _riptide_under_pressure(c: _Ctx) -> list[Finding]:
         hurt = seg.median_ehp < prof.target_ehp - 0.03 or any(
             w.pull_idx == i and (w.deaths or w.sustained_group_s >= SUSTAINED_S) for w in c.ctx.windows)
         if not hurt:
-            continue  # the group was fine - Riptide habits here cost nothing
-        mine, top = seg.riptide_pressure_uptime, prof.riptide_pressure_uptime
+            continue  # the group was fine - HoT habits here cost nothing
+        mine, top = seg.hot_pressure_uptime, prof.hot_pressure_uptime
         low_uptime = mine < top - RIPTIDE_GAP
-        wasted, top_wasted = seg.riptide_wasted_pressure_s, prof.riptide_wasted_pressure_s
+        wasted, top_wasted = seg.hot_wasted_pressure_s, prof.hot_wasted_pressure_s
         over_refresh = wasted >= 2 * top_wasted and wasted - top_wasted >= RIPTIDE_WASTE_S
         if not low_uptime and not over_refresh:
             continue
         detail = []
         if low_uptime:
-            detail.append(f"During the busiest moments of this pull Riptide was out {mine:.0%} of the time; "
-                          f"top Resto Shamans: {top:.0%}.")
+            detail.append(f"During the busiest moments of this pull {hot} was out {mine:.0%} of the time; "
+                          f"{c.top_label.lower()}: {top:.0%}.")
         if over_refresh:
-            detail.append(f"Early refreshes in those moments wasted {wasted:.0f}s of Riptide "
-                          f"vs {top_wasted:.0f}s for top Resto Shamans - those GCDs could have gone elsewhere.")
+            detail.append(f"Early refreshes in those moments wasted {wasted:.0f}s of {hot} "
+                          f"vs {top_wasted:.0f}s for {c.top_label.lower()} - those GCDs could have gone elsewhere.")
         severity = 20 + min(25, int(max(0.0, top - mine) * 100)) + (10 if over_refresh else 0)
-        out.append(Finding(seg.pull.start, c.pull_label(i), severity, "Riptide under pressure", detail))
+        out.append(Finding(seg.pull.start, c.pull_label(i), severity, f"{hot} under pressure", detail))
     return out
 
 
@@ -1177,13 +1197,14 @@ def _comparable(seg: SegmentMetrics, prof: Profile) -> bool:
 
 
 def _self_danger(c: _Ctx) -> list[Finding]:
-    """The healer low for several seconds with Astral Shift ready. Group cooldowns are
+    """The healer low for several seconds with a personal defensive ready. Group cooldowns are
     the wrong answer to being focused; a personal is the right one."""
     me = c.run.healer_id
     series = c.tl.player_ehp.get(me)
-    if not series:
+    personals = c.spec.personal_cooldowns
+    if not series or not personals:
         return []
-    personal = CooldownTracker(c.run, rs.PERSONAL_COOLDOWNS)
+    personal = CooldownTracker(c.run, personals)
     out, b = [], 0
     while b < len(series):
         if not 0 < series[b] < SELF_DANGER_EHP:
@@ -1196,8 +1217,8 @@ def _self_danger(c: _Ctx) -> list[Finding]:
             continue
         t0, t1 = c.t_of(start), c.t_of(b)
         if any(d[1] == me and t0 - REZ_GRACE_MS <= d[0] <= t0 for d in c.run.deaths):
-            continue  # low HP right after Reincarnation, not incoming damage
-        ready = [a for a in rs.PERSONAL_COOLDOWNS
+            continue  # low HP right after a death / self-res (Reincarnation), not incoming damage
+        ready = [a for a in personals
                  if a not in personal.casts or (personal.ready(a, t0) and not personal.used_between(a, t0 - 5000, t1))]
         if not ready:
             continue
@@ -1208,12 +1229,13 @@ def _self_danger(c: _Ctx) -> list[Finding]:
         if not hitters:
             continue
         top_hits = ", ".join(c.ability(a) for a, _ in sorted(hitters.items(), key=lambda x: -x[1])[:3])
-        names = ", ".join(rs.PERSONAL_COOLDOWNS[a][0] for a in ready)
+        names = ", ".join(personals[a][0] for a in ready)
         died = any(d[1] == me and t0 <= d[0] <= t1 + 2000 for d in c.run.deaths)
+        detail = [f"Damage on you: {top_hits}."]
+        if c.spec.personal_habit:
+            detail.append(f"{c.top_label} {c.spec.personal_habit}.")
         out.append(Finding(t0, c.pull_label(c.ctx.pull_of_bin[start]), 50 + (20 if died else 0),
-                           f"You were under {SELF_DANGER_EHP:.0%} for {b - start}s with {names} ready", [
-            f"Damage on you: {top_hits}.",
-            "Top Resto Shamans press Astral Shift ~13 times a run - often before targeted damage lands."]))
+                           f"You were under {SELF_DANGER_EHP:.0%} for {b - start}s with {names} ready", detail))
     return out
 
 

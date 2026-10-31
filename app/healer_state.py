@@ -4,22 +4,21 @@ from dataclasses import dataclass, field
 
 from app.reports import Fight
 from app.runs import RunData, _events
+from app.specs.base import Spec
 from app.wcl import WCLClient
 
-CACHE_VERSION = 3
+CACHE_VERSION = 3  # the healer id fixes the spec, so the tracked buff list needs no key of its own
 MANA_TYPE = 0
-# Buffs on the healer that change how heals behave. Found in Season 2 Midnight logs;
-# High Tide no longer exists. Edit if a patch changes them.
-TRACKED_BUFFS = ("Tidal Waves", "Unleash Life", "Ascendance", "Coalescing Water", "Nature's Swiftness")
-# Passive cheat-death / emergency procs - shown in death recaps as already spent. Some are
-# logged as buffs, others only as a heal (Nature's Guardian), so both are checked.
-PROC_BUFFS = ("Nature's Guardian",)
 
 
 @dataclass
 class HealerState:
+    """Mana plus the spec's tracked buffs (spec.tracked_buffs) and passive cheat-death procs
+    (spec.proc_buffs - some are logged as buffs, others only as a heal, so both are checked)."""
     mana: list[list] = field(default_factory=list)  # [t, fraction 0-1]
     buffs: dict[str, list[list]] = field(default_factory=dict)  # name -> [[start, end], ...]
+    tracked: tuple = ()
+    proc_names: tuple = ()
 
     def __post_init__(self):
         self._times = [m[0] for m in self.mana]
@@ -29,13 +28,14 @@ class HealerState:
         return self.mana[i][1] if i >= 0 else (self.mana[0][1] if self.mana else None)
 
     def active(self, t: int) -> list[str]:
-        return [n for n, spans in self.buffs.items() if n in TRACKED_BUFFS and any(a <= t <= b for a, b in spans)]
+        return [n for n, spans in self.buffs.items() if n in self.tracked and any(a <= t <= b for a, b in spans)]
 
     def procs(self) -> dict[str, list[list]]:
-        return {n: s for n, s in self.buffs.items() if n in PROC_BUFFS}
+        return {n: s for n, s in self.buffs.items() if n in self.proc_names}
 
 
-def fetch_healer_state(client: WCLClient, fight: Fight, run: RunData) -> HealerState:
+def fetch_healer_state(client: WCLClient, fight: Fight, run: RunData, spec: Spec) -> HealerState:
+    tracked, procs = spec.tracked_buffs, spec.proc_buffs
     key = f"healerstate:v{CACHE_VERSION}:{fight.report_code}:{fight.id}:{run.healer_id}"
     cached = client.get_cached(key)
     if cached is None:
@@ -52,7 +52,7 @@ def fetch_healer_state(client: WCLClient, fight: Fight, run: RunData) -> HealerS
             if e.get("targetID") != run.healer_id:
                 continue
             name = run.ability_name(e.get("abilityGameID", 0))
-            if name not in TRACKED_BUFFS + PROC_BUFFS:
+            if name not in tracked + procs:
                 continue
             if e["type"] in ("applybuff", "applybuffstack", "refreshbuff"):
                 open_at.setdefault(name, e["timestamp"])
@@ -61,11 +61,11 @@ def fetch_healer_state(client: WCLClient, fight: Fight, run: RunData) -> HealerS
         for name, start in open_at.items():
             spans.setdefault(name, []).append([start, fight.end])
         for aid, name in run.abilities:
-            if name in PROC_BUFFS and name not in spans:
+            if name in procs and name not in spans:
                 procs = [[e["timestamp"], e["timestamp"]] for e in _events(client, fight, "Healing", source_id=run.healer_id,
                                                                            ability_id=aid) if e.get("type") == "heal"]
                 if procs:
                     spans[name] = procs
         cached = {"mana": mana, "buffs": spans}
         client.set_cached(key, cached)
-    return HealerState(cached["mana"], cached["buffs"])
+    return HealerState(cached["mana"], cached["buffs"], tracked, procs)
