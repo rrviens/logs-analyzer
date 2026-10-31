@@ -36,7 +36,7 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
-RULES_VERSION = 43
+RULES_VERSION = 44
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -264,7 +264,8 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         "deaths": death_recaps,
         "timeline": _timeline(run, tl, segs, profiles, phases, my_state, my_trinkets, result, tops, death_recaps,
                               my_players, fetch_defense_spans(client, fight, run, my_players, load_defensives()),
-                              group_casts, avoid, chains, spec, ability_icons(client, code), encounter),
+                              group_casts, avoid, chains, spec, ability_icons(client, code), encounter,
+                              get_trinkets(client, fight)),
     }
     progress("Finding DPS windows...")
     out["dps"], out["timeline"]["dps_windows"] = _dps_windows(client, fight, run, tl, segs, profiles, tops,
@@ -502,7 +503,7 @@ def _top_curve(seg, tops) -> list[list[float]] | None:
 
 def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(), recaps=(), players=(),
               spans=(), group_casts=(), avoid: Avoidance | None = None, chains=(), spec=None,
-              icons=({}, {}), encounter: Encounter | None = None) -> dict:
+              icons=({}, {}), encounter: Encounter | None = None, all_trinkets: dict | None = None) -> dict:
     """Everything the page needs to draw HP over time: cooldowns, deaths, hits, findings - each
     with hover details - plus each party member's active defensives."""
     rel = lambda t: round((t - run.start) / 1000, 1)
@@ -523,6 +524,7 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
         return f"Group {pct(tl.group_ehp[b])} · lowest {pct(tl.min_ehp[b])}"
 
     healing, personals = spec.healing_cooldowns, spec.personal_cooldowns
+    all_trinkets = all_trinkets or {}
     cds = CooldownTracker(run, healing)
     markers = []
     for t, aid, target in run.casts:
@@ -542,12 +544,16 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
                            else "Pressed as soon as it came back.")
         markers.append({"t_s": rel(t), "kind": kind, "label": name, "tip": tip,
                         "icon": icons[0].get(aid) or icons[1].get(name)})
-    for t, src, aid, _ in group_casts:  # the whole group's potions, healer included
+    # Each player's potions, healthstones and on-use trinkets, drawn on that player's own lane.
+    uses = []
+    for t, src, aid, _ in group_casts:
         name = run.ability_name(aid)
-        if "Potion" in name:
-            markers.append({"t_s": rel(t), "kind": "potion", "label": f"{name} ({pname(src)})",
-                            "tip": [f"{name} - {pname(src)} at {clock(t)}", where(t), hp_line(t)],
-                            "icon": icons[0].get(aid) or icons[1].get(name)})
+        kind = ("potion" if "Potion" in name else "healthstone" if "Healthstone" in name
+                else "trinket" if name in all_trinkets.get(src, ()) else None)
+        if kind:
+            uses.append({"lane": src, "t_s": rel(t), "kind": kind, "name": name,
+                         "icon": icons[0].get(aid) or icons[1].get(name),
+                         "tip": [f"{name} - {pname(src)} at {clock(t)}", where(t), hp_line(t)]})
 
     recap_by = {(r["t"], r["victim"]): r for r in recaps}
     for t, victim, ability in run.deaths:
@@ -705,6 +711,7 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
         "markers": sorted(markers, key=lambda m: m["t_s"]),
         "lanes": lanes,
         "defense": defense,
+        "uses": uses,
         "uncovered_hits": uncovered,
         "lust": lust,
         "ready_lanes": ready_lanes,

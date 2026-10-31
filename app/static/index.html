@@ -529,7 +529,7 @@ function pullShort(label) {
 // Marker lanes: [marker kind, label, toggle key, short label for narrow screens].
 const LANES = [
   ["cooldown", "Healing cooldowns", "l:cooldown", "Cooldowns"], ["personal", "Personal", "l:personal", "Personal"],
-  ["trinket", "Your trinkets", "l:trinket", "Trinkets"], ["potion", "Potions (group)", "l:potion", "Potions"],
+  ["trinket", "Your trinkets", "l:trinket", "Trinkets"],
   ["hit", "Big group hits", "l:hit", "Hits"], ["death", "Deaths", "deaths", "Deaths"], ["finding", "Findings", "l:finding", "Findings"],
 ];
 const SCOPE_COLOR = {personal: "var(--series-1)", external: "var(--series-3)", group: "var(--series-7)"};
@@ -545,7 +545,7 @@ const TOGGLES = [
   ["deaths", "Healing", `<span class="sym" style="color:var(--critical)">✕</span>`, "Deaths"],
   ["l:personal", "Healing", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Your personal"],
   ["l:trinket", "Other", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Your trinkets"],
-  ["l:potion", "Party", `<i class="box" style="background:var(--text);opacity:.6"></i>`, "Potions (whole group)"],
+  ["uses", "Party", `<i class="dot" style="background:var(--text)"></i>`, "Potions, healthstones & trinkets (per player)"],
   ["l:finding", "Other", `<i class="dot" style="background:var(--warning)"></i>`, "Finding dots"],
   ["mana", "Healing", `<i style="background:var(--series-1)"></i>`, "Your mana"],
   ["party", "Party", `<span class="sym">▤</span>`, "Party member lanes"],
@@ -561,9 +561,9 @@ const TOGGLES = [
 const SCOPE_KEY = {personal: "personal", external: "external", group: "groupdef"};
 // Presets switch whole sets of toggles; any change in the Lanes menu makes it "custom".
 const PRESETS = {
-  healing: {label: "Healing", on: ["group", "lowest", "top", "l:cooldown", "l:hit", "deaths", "chain"]},
+  healing: {label: "Healing", on: ["group", "lowest", "top", "l:cooldown", "l:hit", "deaths", "chain", "l:trinket"]},
   party: {label: "Party", on: ["group", "lowest", "top", "uncovered", "l:cooldown", "l:hit", "deaths", "chain", "l:personal",
-                               "party", "personal", "external", "groupdef", "avoid", "l:potion"]},
+                               "party", "personal", "external", "groupdef", "avoid", "uses"]},
   everything: {label: "Everything", on: TOGGLES.map((t) => t[0])},
 };
 let TL_PRESET = PRESETS[lsGet("tlPreset")] || lsGet("tlPreset") === "custom" ? lsGet("tlPreset") : "healing";
@@ -926,6 +926,15 @@ function drawTimeline() {
       // Whole run: bars only (too squeezed - icons would drift off their bars); the name is on hover.
       const slot = all.slice(0, k).filter((o) => o.end_s > d.start_s && x(d.start_s) - x(o.start_s) < barH).length;
       if (d.icon && !whole && (w >= barH || slot)) g += iconSvg(d.icon, xa + slot * (barH + 1), yc - barH / 2, barH, tip);
+    });
+    // That player's potions / healthstones / trinkets: an icon in pull view, a small dot in the squeezed whole run.
+    if (isOn("uses") && ln.id !== "group") (t.uses || []).filter((u) => u.lane === ln.id && u.t_s >= s0 && u.t_s <= s1
+        && (!whole || pullAt(u.t_s))).forEach((u) => {
+      const xu = x(u.t_s), tip = tipAttr(u.tip), s = Math.round(barH * 0.85);
+      g += !whole && u.icon
+        ? `<g>${iconSvg(u.icon, xu - s / 2, yc - s / 2, s, tip)}<rect x="${xu - s / 2 - 1.5}" y="${yc - s / 2 - 1.5}"
+            width="${s + 3}" height="${s + 3}" rx="3" fill="none" stroke="var(--high)" stroke-width="1.5" pointer-events="none"/></g>`
+        : `<circle cx="${xu}" cy="${yc}" r="${Math.max(3, r * 0.7)}" fill="var(--text)" stroke="var(--panel)" stroke-width="1.5" ${tip}/>`;
     });
   });
   if (manaH && t.mana.length) {
