@@ -824,9 +824,10 @@ def _cooldown_uses(c: _Ctx) -> tuple[list[Finding], list[Finding]]:
 
 
 def _overlaps(c: _Ctx) -> list[Finding]:
-    """Healing overlap: two or more big tools (your healing cooldowns + the group's defensives) spent on one damage
-    spike the group got through comfortably - one would have done. Worse when the next spike lands while your
-    cooldown is still down and someone nearly dies or dies."""
+    """Healing overlap: two or more of YOUR healing cooldowns spent on one damage spike the group got through
+    comfortably - one would have done. Worse when the next spike lands while one is still down and someone nearly
+    dies or dies. Other players' group defensives are context: your cooldown on top of one only counts (at lower
+    weight) when it cost you the next spike - they never weigh like a healer cooldown."""
     out, used, safe = [], set(), []
     hits = sorted((h for s in c.segs for h in s.hits), key=lambda h: h.t)
     my_cds = [(t, a) for a, ts in c.cds.casts.items() for t in ts]
@@ -835,7 +836,10 @@ def _overlaps(c: _Ctx) -> list[Finding]:
             continue  # same spike as one already reported
         mine = [(t, a) for t, a in my_cds if -OVERLAP_WINDOW_MS <= t - h.t <= OVERLAP_WINDOW_MS]
         theirs = [g for g in c.group_defs if -OVERLAP_WINDOW_MS <= g[0] - h.t <= OVERLAP_WINDOW_MS]
-        if not mine or len(mine) + len(theirs) < 2:
+        # Your own cooldowns lead: 2+ of yours on one spike is the overlap. Yours on top of another player's group
+        # defensive counts too, but weighs less and only when it cost you the next spike.
+        own_overlap = len(mine) >= 2
+        if not mine or (not own_overlap and not theirs):
             continue
         b = c.tl.bin_of(h.t)
         after = range(b, min(len(c.tl.group_ehp), b + OVERLAP_AFTER_S + 1))
@@ -860,12 +864,16 @@ def _overlaps(c: _Ctx) -> list[Finding]:
         if planned and not hurt:
             continue  # top players stack these here too
         used.add(h.t)
-        tools = [f"{c.cds.name(a)} ({c.clock(t)})" for t, a in sorted(mine)] + \
-                [f"{n} from {who} ({c.clock(t)})" for t, n, who in sorted(theirs)]
+        yours = [f"{c.cds.name(a)} ({c.clock(t)})" for t, a in sorted(mine)]
+        others = [f"{n} from {who} ({c.clock(t)})" for t, n, who in sorted(theirs)]
         pull = c.ctx.pull_of_bin[b]
-        detail = [f"{len(tools)} big tools on {c.ability(h.ability)} at {c.clock(h.t)}: {', '.join(tools)}.",
+        detail = [(f"{len(yours)} of your cooldowns on {c.ability(h.ability)} at {c.clock(h.t)}: {', '.join(yours)}."
+                   if own_overlap else f"{yours[0]} on {c.ability(h.ability)} at {c.clock(h.t)}, with group defensives "
+                                       f"already covering it."),
                   f"The group never dropped below {group_low:.0%} and the lowest player held {h.min_after:.0%} - "
-                  f"one of them would likely have been enough."]
+                  + ("one of your cooldowns would likely have been enough." if own_overlap else "it was handled without yours.")]
+        if others:
+            detail.append(f"Also up (others): {', '.join(others)}.")
         if hurt:
             n, what = hurt
             back = ", ".join(f"{c.cds.name(a)} back at {c.clock(t)}" for a, t in downs.items() if n.t < t)
@@ -873,17 +881,22 @@ def _overlaps(c: _Ctx) -> list[Finding]:
         elif nxt:
             detail.append(f"The next spike ({c.ability(nxt.ability)} at {c.clock(nxt.t)}) came while it was "
                           f"still down; it went fine this time.")
-        if not hurt:  # harmless this time: summed up below, not a finding of its own
-            safe.append((h.t, f"{c.clock(h.t)} {c.ability(h.ability)}: {' + '.join(tools)}"))
+        if not hurt:  # harmless this time: your own stacks are summed up below; yours + others' is not worth a line
+            if own_overlap:
+                safe.append((h.t, f"{c.clock(h.t)} {c.ability(h.ability)}: {' + '.join(yours)}"
+                                  + (f" (also up: {', '.join(others)})" if others else "")))
             continue
-        title = "Healing overlap left the next spike uncovered"
+        died = "death" in hurt[1]
+        title = ("Healing overlap left the next spike uncovered" if own_overlap
+                 else f"{c.cds.name(mine[0][1])} spent on a covered spike - the next one went short")
+        severity = (65 if died else 50) if own_overlap else (45 if died else 35)
         context = [["Top runs", c.top_text(c.cds.name(mine[0][1]), pull)]]
-        out.append(Finding(h.t, c.pull_label(pull), 65 if "death" in hurt[1] else 50, title, detail, context))
+        out.append(Finding(h.t, c.pull_label(pull), severity, title, detail, context))
     if len(safe) >= OVERLAP_SAFE_MIN:
         # Timed at the first overlap: whole-run findings at the run start would merge into each other.
         out.append(Finding(safe[0][0], "Whole run", 20, f"{len(safe)} healing overlaps on spikes the group handled", [
-            "Two or more big tools went on one spike while the group stayed healthy - one would likely have done, "
-            "and the other would have been ready for the next spike. Nothing went wrong this time:",
+            "Two or more of your cooldowns went on one spike while the group stayed healthy - one would likely have "
+            "done, and the other would have been ready for the next spike. Nothing went wrong this time:",
             *[s for _, s in safe[:6]], *([f"+{len(safe) - 6} more"] if len(safe) > 6 else [])]))
     return out
 

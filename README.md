@@ -121,12 +121,16 @@ someone under 25% or the group under 50%).
 
 ## Healing overlaps
 
-Two or more big tools (your healing cooldowns plus other players' group defensives) within 5s of one big hit, while
-the group stayed healthy (above 60%, lowest player above 40%, nobody died) - one would likely have done. When the
-next big hit lands while your overlapped cooldown is still down and someone drops below the lethal line or dies,
-that is its own finding ("Healing overlap left the next spike uncovered", with when each cooldown came back).
-Harmless overlaps are summed up in one low-priority line (from 3). Overlaps top players also do there (planned
-timings) are skipped unless they hurt. Thresholds are the OVERLAP_* constants in `app/findings.py`.
+Your own healing cooldowns are the critique point; other players' defensives are shown as context and never weigh
+the same. An overlap is two or more of your cooldowns within 5s of one big hit while the group stayed healthy (above
+60%, lowest player above 40%, nobody died) - one would likely have done. When the next big hit lands while one is
+still down and someone drops below the lethal line or dies, that is its own finding ("Healing overlap left the next
+spike uncovered"). Your cooldown on top of another player's group defensive only counts, at lower weight, when it
+cost you the next spike. Harmless overlaps are summed up in one low-priority line (from 3); ones top players also do
+there (planned timings) are skipped unless they hurt. Thresholds: OVERLAP_* in `app/findings.py`.
+
+On the timeline, a big hit is red when one of your cooldowns was ready, none was used, and the group dropped below
+60%; its tooltip leads with your cooldowns and lists other players' defensives as "Also up".
 
 ## DPS windows
 

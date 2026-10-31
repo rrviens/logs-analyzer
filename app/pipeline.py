@@ -36,7 +36,7 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
-RULES_VERSION = 46
+RULES_VERSION = 47
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -45,7 +45,9 @@ TOP_WORKERS = max(1, int(os.getenv("TOP_WORKERS", "3")))
 CURVE_POINTS = 60
 LUST_SPELLS = {"Heroism", "Bloodlust", "Time Warp", "Fury of the Aspects", "Primal Rage", "Ancient Hysteria",
                "Netherwinds", "Drums of the Maelstrom"}
-UNCOVERED_MIN_HIT = 0.18  # only flag "no defensives up" on hits this big (share of max HP per player)
+UNCOVERED_MIN_HIT = 0.18  # only flag a big hit without your cooldowns when it's this big (share of max HP per player)
+UNCOVERED_LOW_EHP = 0.6  # ...and the group dropped below this after it
+OWN_CD_BEFORE_MS, OWN_CD_AFTER_MS = 10000, 3000  # your cooldown pressed this close counts as answering the hit
 MINOR_CD_S = 60  # defensives on a shorter cooldown are near-rotational: "minor", behind a toggle
 SOFTEN_RULES = {"not_topped", "slow_recovery", "phase_gap", "damage_intake", "riptide_pressure"}
 SOFTEN_SHARE = 0.2  # avoidable share of the damage around a healing finding that softens it
@@ -609,30 +611,38 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
             b = tl.bin_of(h.t)
             after = min(tl.group_ehp[b:b + 3] or [tl.group_ehp[b]])
             up = [s for s in active_at(spans, h.t)]
-            # Covered = a group defensive, or personals/externals on at least half the party.
-            # (A tank's Barkskin alone doesn't make a group-wide hit "covered".)
-            on = {s["target"] for s in up if s["scope"] != "group"}
-            covered = any(s["scope"] == "group" for s in up) or len(on) * 2 >= max(1, len(players))
             names: dict[str, set] = {}
             for s in up:
                 names.setdefault(s["name"], set()).add(s["target"])
             up_text = ", ".join(f"{n} ({'everyone' if len(ts) >= len(players) else ', '.join(sorted(pname(x) for x in ts))})"
                                 for n, ts in sorted(names.items()))
+            # Your healing cooldowns lead the judgement; other players' defensives are context only.
+            mine = [(t, a) for a, ts in cds.casts.items() for t in ts if -OWN_CD_BEFORE_MS <= t - h.t <= OWN_CD_AFTER_MS]
+            ready = [n for a, (n, _) in healing.items()
+                     if (last := max((t for t in cds.casts.get(a, []) if t <= h.t), default=None)) is None
+                     or h.t - last >= cds.cd_ms.get(a, 0)]
+            if mine:
+                own_text = "Your cooldowns: " + ", ".join(
+                    f"{run.ability_name(a)} ({abs(t - h.t) / 1000:.0f}s {'before' if t <= h.t else 'after'})" for t, a in sorted(mine))
+            else:
+                own_text = ("Your cooldowns: none used - ready: " + ", ".join(ready)) if ready else \
+                           "Your cooldowns: none used (all on cooldown)"
             top_pre = prof.hit_pre.get(h.ability) if prof else None
             tip = [f"{run.ability_name(h.ability)} at {clock(h.t)} - hit {h.targets} players for ~{h.avg_frac:.0%} "
                    f"of max HP each", where(h.t),
                    f"Group {pct(h.pre_ehp)} before → {pct(after)} after"
                    + (f"; back up in {h.recovery_s:.0f}s" if h.recovery_s else "; not back up within 30s"),
                    f"Top groups held {pct(top_pre)} before this hit" if top_pre is not None else "",
-                   (("Covered: " if covered else "Not covered - only ") + up_text) if up
-                   else "Not covered - no defensive active on anyone"]
+                   own_text,
+                   ("Also up (others): " + up_text) if up else "Others: no defensives up"]
             tag = avoid.tag_at(run, h.ability, h.t) if avoid else None
             if tag:
                 tip.insert(1, f"⚠ {tag.label} - {tag.evidence}")
             if encounter and (note := encounter.note(h.ability, run.ability_name(h.ability))):
                 tip.insert(1, f"ℹ {note}")
-            # Highlight only big hits where nobody had any protective defensive up at all.
-            bare = h.avg_frac >= UNCOVERED_MIN_HIT and not up
+            # Highlight big hits that went through with none of YOUR cooldowns while one was ready - other players'
+            # defensives don't clear it (they never weigh like a healer cooldown in heavy damage).
+            bare = h.avg_frac >= UNCOVERED_MIN_HIT and not mine and bool(ready) and after < UNCOVERED_LOW_EHP
             markers.append({"t_s": rel(h.t), "kind": "hit", "label": run.ability_name(h.ability),
                             "tip": [x for x in tip if x], "covered": not bare, "avoid": tag.label if tag else None})
             if bare:
