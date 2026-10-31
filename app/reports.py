@@ -133,6 +133,25 @@ def get_players(client: WCLClient, fight: Fight) -> list[Player]:
     return players
 
 
+ICONS_QUERY = "query($code:String!){reportData{report(code:$code){masterData{abilities{gameID name icon}}}}}"
+GENERIC_ICONS = ("trade_", "inv_misc_questionmark", "temp")
+
+
+def ability_icons(client: WCLClient, code: str) -> tuple[dict[int, str], dict[str, str]]:
+    """Spell icons from the report: by ability id, and by name (skipping generic icons - the same name can
+    belong to a helper spell with a placeholder icon). Icon = file name without extension."""
+    abilities = client.query(ICONS_QUERY, {"code": code})["reportData"]["report"]["masterData"]["abilities"]
+    by_id, by_name = {}, {}
+    for a in abilities:
+        icon = (a.get("icon") or "").rsplit(".", 1)[0]
+        if not icon:
+            continue
+        by_id[a["gameID"]] = icon
+        if not icon.startswith(GENERIC_ICONS):
+            by_name.setdefault(a["name"], icon)
+    return by_id, by_name
+
+
 def get_trinkets(client: WCLClient, fight: Fight) -> dict[int, list[str]]:
     """Equipped trinket names per player id."""
     data = client.query(COMBATANT_QUERY, {"code": fight.report_code, "fightIDs": [fight.id]})

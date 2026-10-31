@@ -538,6 +538,7 @@ const TOGGLES = [
   ["personal", "Party", `<i class="box" style="background:var(--series-1)"></i>`, "Personal defensives"],
   ["external", "Party", `<i class="box" style="background:var(--series-3)"></i>`, "Externals"],
   ["groupdef", "Party", `<i class="box" style="background:var(--series-7)"></i>`, "Group defensives"],
+  ["minor", "Party", `<i class="box" style="background:var(--series-1);opacity:.4"></i>`, "Minor defensives (short CD)"],
   ["avoid", "Party", `<i class="dot" style="background:var(--warning)"></i>`, "Avoidable / ◆ not kicked"],
   ["chain", "Other", `<span class="sym">⛓</span>`, "Chain pulls"],
   ["lust", "Other", `<span class="sym" style="color:var(--high)">⚡</span>`, "Bloodlust"],
@@ -563,6 +564,12 @@ function applyPreset(name) {
   lsSet("tlPreset", name);
   lsSet("tlHidden", [...TL_HIDDEN].join(","));
 }
+
+// Spell icons (file names from the log) from the public WoW icon CDN.
+const iconUrl = (icon) => `https://wow.zamimg.com/images/wow/icons/medium/${encodeURIComponent(icon)}.jpg`;
+const iconSvg = (icon, x, y, s, extra = "") => `<image href="${iconUrl(icon)}" x="${x}" y="${y}" width="${s}" height="${s}"
+  preserveAspectRatio="xMidYMid slice" ${extra}/><rect x="${x}" y="${y}" width="${s}" height="${s}" rx="2" fill="none"
+  stroke="var(--panel)" stroke-width="1" pointer-events="none"/>`;
 
 // Sizes follow the text size (html font-size): timeline text is 13px at Normal, lanes scale with it.
 function tlMetrics(W, pinned) {
@@ -730,6 +737,24 @@ function drawOverview() {
   svg.ondblclick = () => selectPull(-1);
 }
 
+// Group defensives arrive as one span per covered player: merge the same cast (name + start within 2s) into one,
+// with who it covered in the tooltip. Area effects (Anti-Magic Zone) cover only those who stood in them.
+function groupDefenses(defense, members) {
+  const name = (id) => (members.find((m) => m.id === id) || {}).name || "pet";
+  const out = [];
+  for (const d of defense.filter((x) => x.scope === "group").sort((a, b) => a.start_s - b.start_s)) {
+    const same = out.find((o) => o.name === d.name && Math.abs(o.start_s - d.start_s) <= 2);
+    if (same) { same.end_s = Math.max(same.end_s, d.end_s); same.covered.push(name(d.lane)); continue; }
+    out.push({...d, covered: [name(d.lane)]});
+  }
+  out.forEach((o) => {
+    const all = o.covered.length >= members.length;
+    o.tip = [o.tip[0].replace(/ on [^ ]+( from)?/, (_, from) => from ? " from" : ""), o.tip[1],
+             all ? "Covered the whole group" : `Covered ${o.covered.length} of ${members.length}: ${o.covered.join(", ")}`];
+  });
+  return out;
+}
+
 function markerKind(m) { return m.kind === "potion" ? "trinket" : m.kind; }
 
 function drawTimeline() {
@@ -748,7 +773,11 @@ function drawTimeline() {
   const marked = (kind) => TL.mark && t.markers.some((m) => markerKind(m) === kind
     && m.t_s >= TL.mark[0] - 1 && m.t_s <= TL.mark[1] + 1);
   const shownLanes = LANES.filter(([kind, , key]) => isOn(key) || marked(kind));
-  const lanes = isOn("party") ? t.lanes || [] : [];
+  // Party rows: one "Group" row for group defensives (drawn once, not on every member), then one row per member
+  // for personals and externals.
+  const groupSpans = groupDefenses(t.defense || [], t.lanes || []);
+  const lanes = isOn("party") ? [...(isOn("groupdef") && groupSpans.length ? [{id: "group", name: "Group"}] : []),
+                                 ...(t.lanes || [])] : [];
   const hpTop = Math.round(fs + 10), hpH = pinned ? Math.round(fs * 5) : Math.max(180, Math.round(fs * 13));
   const lanesTop = hpTop + hpH + 10;
   const partyTop = lanesTop + shownLanes.length * laneH + (lanes.length ? 10 : 0);
@@ -859,19 +888,27 @@ function drawTimeline() {
         g += `<line${near(m)} x1="${xm}" x2="${xm}" y1="${yc - r - 1}" y2="${yc + r + 1}" stroke="${m.covered === false ? "var(--critical)" : "var(--muted)"}"
           stroke-width="3" stroke-linecap="round" ${tip}/>`;
         if (m.avoid && isOn("avoid")) g += `<circle cx="${xm}" cy="${yc - r - 4}" r="2.5" fill="var(--warning)" pointer-events="none"/>`;
+      } else if (m.icon) {  // cooldowns, personals, trinkets: the spell's icon; name and details on hover
+        const s = laneH - 4;
+        g += `<g${near(m)}>${iconSvg(m.icon, xm - s / 2, yc - s / 2, s, tip)}</g>`;
       } else {
         g += `<rect${near(m)} x="${xm - r}" y="${yc - r - 2}" width="${2 * r}" height="${2 * r + 4}" rx="2" fill="var(--text)" opacity=".75" ${tip}/>`;
       }
     });
   });
-  const barH = Math.max(8, laneH - 8);
+  const barH = Math.max(8, laneH - 6);
   lanes.forEach((ln, i) => {
     const yc = partyTop + i * laneH + laneH / 2;
     g += `<line x1="${L}" x2="${W - R}" y1="${yc}" y2="${yc}" stroke="var(--grid)"/>`;
-    (t.defense || []).filter((d) => d.lane === ln.id && isOn(SCOPE_KEY[d.scope]) && d.end_s >= s0 && d.start_s <= s1).forEach((d) => {
-      const xa = x(Math.max(d.start_s, s0)), xb = x(Math.min(d.end_s, s1));
-      g += `<rect x="${xa}" y="${yc - barH / 2}" width="${Math.max(3, xb - xa)}" height="${barH}" rx="2" fill="${SCOPE_COLOR[d.scope]}"
-        opacity="${d.protective ? .85 : .4}" ${tipAttr(d.tip)}/>`;
+    (ln.id === "group" ? groupSpans : (t.defense || []).filter((d) => d.lane === ln.id && d.scope !== "group"))
+      .filter((d) => isOn(SCOPE_KEY[d.scope]) && (!d.minor || isOn("minor")) && d.end_s >= s0 && d.start_s <= s1)
+      .sort((a, b) => a.start_s - b.start_s).forEach((d, k, all) => {
+      const xa = x(Math.max(d.start_s, s0)), xb = x(Math.min(d.end_s, s1)), w = Math.max(3, xb - xa), tip = tipAttr(d.tip);
+      g += `<rect x="${xa}" y="${yc - barH / 2}" width="${w}" height="${barH}" rx="2" fill="${SCOPE_COLOR[d.scope]}"
+        opacity="${d.minor ? .3 : d.protective ? .55 : .35}" ${tip}/>`;
+      // The icon at the start of the bar says what was pressed; icons of overlapping spans sit side by side.
+      const slot = all.slice(0, k).filter((o) => o.end_s > d.start_s && x(d.start_s) - x(o.start_s) < barH).length;
+      if (d.icon && (w >= barH || slot)) g += iconSvg(d.icon, xa + slot * (barH + 1), yc - barH / 2, barH, tip);
     });
   });
   if (manaH && t.mana.length) {
@@ -887,8 +924,8 @@ function drawTimeline() {
     g += `<text class="lane" x="8" y="${lanesTop + i * laneH + laneH / 2 + mid}">${W < 560 ? short : label}</text>`);
   lanes.forEach((ln, i) => {
     const yc = partyTop + i * laneH + laneH / 2;
-    g += `<rect x="8" y="${yc - fs / 2}" width="3" height="${fs}" fill="${CLASS_COLORS[ln.class] || "var(--line)"}"/>
-      <text class="lane" x="16" y="${yc + mid}">${esc(ln.name)}</text>`;
+    g += `<rect x="8" y="${yc - fs / 2}" width="3" height="${fs}" fill="${ln.id === "group" ? "var(--series-7)" : CLASS_COLORS[ln.class] || "var(--line)"}"/>
+      <text class="lane" x="16" y="${yc + mid}" ${ln.id === "group" ? 'style="font-weight:700"' : ""}>${esc(ln.name)}</text>`;
   });
   if (manaH) g += `<text class="lane" x="8" y="${manaTop + fs}">Your mana</text>`;
   const tickY = axisY + fs + 2;
@@ -1430,6 +1467,7 @@ loadStudy();
   if (["dark", "light"].includes(q.get("theme"))) document.documentElement.dataset.theme = q.get("theme");
   if (!q.get("run")) return;
   await analyze(q.get("run"));
+  if (TL && PRESETS[q.get("preset")]) { applyPreset(q.get("preset")); syncToggles(); drawTimeline(); }
   if (TL && q.get("pull")) selectPull(q.get("pull") === "whole" ? -1 : +q.get("pull") - 1);
   if (q.get("at") && $(q.get("at"))) $(q.get("at")).scrollIntoView({block: "start"});
   if (q.get("open") && $(q.get("open"))) $(q.get("open")).open = true;  // e.g. &open=tlLanes

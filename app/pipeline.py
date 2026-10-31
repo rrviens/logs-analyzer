@@ -13,7 +13,7 @@ from app.context_model import load_dungeon
 from app.chains import OUTCOME_S, Chain, find_chains
 from app.findings import Finding, TopRun, analyze
 from app.metrics import hot_refreshes, hots_active
-from app.reports import get_fights, get_players, get_trinkets, parse_report_url, pick_fight
+from app.reports import ability_icons, get_fights, get_players, get_trinkets, parse_report_url, pick_fight
 from app.runs import fetch_run
 from app.segments import all_segments, build_profile, match_pull, segment_metrics
 from app.avoidable import Avoidance, build as build_avoidance
@@ -31,12 +31,13 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient
 
-RULES_VERSION = 34
+RULES_VERSION = 35
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 CURVE_POINTS = 60
 LUST_SPELLS = {"Heroism", "Bloodlust", "Time Warp", "Fury of the Aspects", "Primal Rage", "Ancient Hysteria",
                "Netherwinds", "Drums of the Maelstrom"}
 UNCOVERED_MIN_HIT = 0.18  # only flag "no defensives up" on hits this big (share of max HP per player)
+MINOR_CD_S = 60  # defensives on a shorter cooldown are near-rotational: "minor", behind a toggle
 SOFTEN_RULES = {"not_topped", "slow_recovery", "phase_gap", "damage_intake", "riptide_pressure"}
 SOFTEN_SHARE = 0.2  # avoidable share of the damage around a healing finding that softens it
 SOFTEN_WINDOW_MS = 15_000
@@ -207,7 +208,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         "deaths": death_recaps,
         "timeline": _timeline(run, tl, segs, profiles, phases, my_state, my_trinkets, result, tops, death_recaps,
                               my_players, fetch_defense_spans(client, fight, run, my_players, load_defensives()),
-                              group_casts, avoid, chains, spec),
+                              group_casts, avoid, chains, spec, ability_icons(client, code)),
     }
     client.set_cached(key, out)
     return out
@@ -390,7 +391,8 @@ def _top_curve(seg, tops) -> list[list[float]] | None:
 
 
 def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(), recaps=(), players=(),
-              spans=(), group_casts=(), avoid: Avoidance | None = None, chains=(), spec=None) -> dict:
+              spans=(), group_casts=(), avoid: Avoidance | None = None, chains=(), spec=None,
+              icons=({}, {})) -> dict:
     """Everything the page needs to draw HP over time: cooldowns, deaths, hits, findings - each
     with hover details - plus each party member's active defensives."""
     rel = lambda t: round((t - run.start) / 1000, 1)
@@ -428,7 +430,8 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
                 back = prev + cds.cd_ms[aid]
                 tip.append(f"Came back at {clock(back)}; pressed {(t - back) / 1000:.0f}s later." if t > back + 1000
                            else "Pressed as soon as it came back.")
-        markers.append({"t_s": rel(t), "kind": kind, "label": name, "tip": tip})
+        markers.append({"t_s": rel(t), "kind": kind, "label": name, "tip": tip,
+                        "icon": icons[0].get(aid) or icons[1].get(name)})
 
     recap_by = {(r["t"], r["victim"]): r for r in recaps}
     for t, victim, ability in run.deaths:
@@ -551,8 +554,12 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
 
     lanes = [{"id": p.id, "name": p.name, "class": p.class_name, "role": p.role}
              for p in sorted(players, key=lambda p: {"tank": 0, "healer": 1, "dps": 2}.get(p.role, 3))]
+    # Short-cooldown, near-rotational defensives (Feint, Prismatic Barrier...) are "minor": hidden by default.
+    defensives = load_defensives()
+    minor = lambda n: defensives.get(n, {}).get("minor", defensives.get(n, {}).get("cd", 999) < MINOR_CD_S)
     defense = [{"lane": s["target"], "name": s["name"], "scope": s["scope"], "start_s": rel(s["start"]),
-                "end_s": rel(s["end"]), "protective": s["protective"],
+                "end_s": rel(s["end"]), "protective": s["protective"], "icon": icons[1].get(s["name"]),
+                "minor": minor(s["name"]),
                 "tip": [f"{s['name']} on {pname(s['target'])}" + (f" from {pname(s['source'])}" if s["source"] != s["target"] else ""),
                         f"{clock(s['start'])}-{clock(s['end'])} ({(s['end'] - s['start']) / 1000:.0f}s) · {s['scope']}"]}
                for s in spans]
