@@ -36,7 +36,7 @@ from app.specs import SPECS, healers_in
 from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
-RULES_VERSION = 45
+RULES_VERSION = 46
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -193,8 +193,15 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         tag = avoid.tag_by_name(run, r["cause"]["name"], r["t"])
         r["avoid"] = {"label": tag.label, "line": tag.line()} if tag else None
         r["note"] = encounter.note(name=r["cause"]["name"])
+    spans = fetch_defense_spans(client, fight, run, my_players, load_defensives())
+    group_defs, seen = [], []
+    for s in sorted(spans, key=lambda s: s["start"]):  # one entry per press (a group span is logged per player)
+        if s["scope"] == "group" and s["source"] != run.healer_id and s["source"] in run.player_ids and \
+                not any(n == s["name"] and abs(t - s["start"]) <= 2000 for t, n in seen):
+            seen.append((s["start"], s["name"]))
+            group_defs.append((s["start"], s["name"], run.player_name(s["source"])))
     result = analyze(run, tl, segs, profiles, ctx, model, [tr for tr, _ in tops], my_trinkets, my_mods,
-                     my_heals, phases, phase_rows, my_state, death_recaps, spec=spec)
+                     my_heals, phases, phase_rows, my_state, death_recaps, spec=spec, group_defs=group_defs)
     chains = find_chains(run, tl, fetch_auras(client, fight, run.player_ids), my_state, tops, group_casts, spec)
     result.findings += _chain_findings(run, chains, clock)
     _soften(result.findings, run, avoid, death_recaps, clock)
@@ -263,7 +270,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         "verdicts": verdicts,
         "deaths": death_recaps,
         "timeline": _timeline(run, tl, segs, profiles, phases, my_state, my_trinkets, result, tops, death_recaps,
-                              my_players, fetch_defense_spans(client, fight, run, my_players, load_defensives()),
+                              my_players, spans,
                               group_casts, avoid, chains, spec, ability_icons(client, code), encounter,
                               get_trinkets(client, fight)),
     }

@@ -63,6 +63,10 @@ MIN_PHASE_TOPS, PHASE_HP_GAP, PHASE_DAMAGE_RATIO = 2, 0.08, 1.2
 LOW_MANA, LOW_MANA_S = 0.15, 15
 BUFF_MIN_CASTS, BUFF_SHARE_GAP = 15, 0.2
 ITEM_EXAMPLE_S = 15  # a trinket "sat ready" example must last this long
+OVERLAP_WINDOW_MS = 5000  # big tools this close to one spike count as stacked on it
+OVERLAP_AFTER_S = 6  # how long after the spike the group's HP is judged
+OVERLAP_SAFE_GROUP, OVERLAP_SAFE_LOWEST = 0.6, 0.4  # stayed above these = one tool would have done
+OVERLAP_SAFE_MIN = 3  # harmless overlaps are mentioned (as one whole-run line) from this many
 
 
 @dataclass
@@ -191,12 +195,15 @@ def analyze(run: RunData, tl: Timeline, segs: list[SegmentMetrics], profiles: li
             my_trinkets: list[str] | None = None, my_modifiers: frozenset = frozenset(),
             heal_casts: list[HealCast] | None = None, phases: dict | None = None,
             phase_rows: list[dict] | None = None, state: HealerState | None = None,
-            death_recaps: list[dict] | None = None, *, spec: Spec) -> Analysis:
+            death_recaps: list[dict] | None = None, *, spec: Spec,
+            group_defs: list[tuple] | None = None) -> Analysis:
+    """group_defs: other players' group defensive presses [(t, name, who)] - for healing overlaps."""
     profiles = [None if s.duration_s < MIN_PULL_S else p for s, p in zip(segs, profiles)]
     c = _Ctx(run, tl, segs, profiles, ctx, model, tops or [], my_trinkets or [], my_modifiers, spec)
     c.heal_casts = heal_casts or []
     c.recaps = {(r["t"], r["victim"]): r for r in death_recaps or []}
     c.phases, c.phase_rows, c.state = phases or {}, phase_rows or [], state
+    c.group_defs = group_defs or []
 
     def tag(found: list[Finding], rule: str) -> list[Finding]:
         for f in found:
@@ -212,6 +219,7 @@ def analyze(run: RunData, tl: Timeline, segs: list[SegmentMetrics], profiles: li
     findings += tag(_self_danger(c), "self_danger")
     low_value, good = _cooldown_uses(c)
     findings += tag(low_value, "low_value_cooldown")
+    findings += tag(_overlaps(c), "overlap")
     findings += tag(_not_topped(c), "not_topped")
     findings += tag(_slow_recovery(c), "slow_recovery")
     findings += tag(_damage_intake(c), "damage_intake")
@@ -242,7 +250,7 @@ def _fixes(spec: Spec) -> dict[str, str]:
         "not_topped": "Top them before the hit", "self_danger": personal, "low_value_cooldown": "Save it for damage",
         "slow_recovery": "Faster heals after it", "damage_intake": "Group: avoidable damage",
         "riptide_pressure": f"Keep {hot} rolling", "spell_choice": f"More {group}", "buff_choice": f"More {group}",
-        "low_mana": "Manage mana earlier",
+        "low_mana": "Manage mana earlier", "overlap": "One cooldown per spike",
     }
 
 
@@ -813,6 +821,71 @@ def _cooldown_uses(c: _Ctx) -> tuple[list[Finding], list[Finding]]:
                        ["Top runs", c.top_text(name, pull)]]
             low_value.append(Finding(t, c.pull_label(pull), severity, f"{name} used with no pressure", detail, context))
     return low_value, good
+
+
+def _overlaps(c: _Ctx) -> list[Finding]:
+    """Healing overlap: two or more big tools (your healing cooldowns + the group's defensives) spent on one damage
+    spike the group got through comfortably - one would have done. Worse when the next spike lands while your
+    cooldown is still down and someone nearly dies or dies."""
+    out, used, safe = [], set(), []
+    hits = sorted((h for s in c.segs for h in s.hits), key=lambda h: h.t)
+    my_cds = [(t, a) for a, ts in c.cds.casts.items() for t in ts]
+    for h in hits:
+        if any(abs(h.t - u) <= OVERLAP_WINDOW_MS for u in used):
+            continue  # same spike as one already reported
+        mine = [(t, a) for t, a in my_cds if -OVERLAP_WINDOW_MS <= t - h.t <= OVERLAP_WINDOW_MS]
+        theirs = [g for g in c.group_defs if -OVERLAP_WINDOW_MS <= g[0] - h.t <= OVERLAP_WINDOW_MS]
+        if not mine or len(mine) + len(theirs) < 2:
+            continue
+        b = c.tl.bin_of(h.t)
+        after = range(b, min(len(c.tl.group_ehp), b + OVERLAP_AFTER_S + 1))
+        died = any(h.t <= d[0] <= c.t_of(after.stop) for d in c.run.deaths)
+        group_low = min(c.tl.group_ehp[k] for k in after)
+        if died or group_low < OVERLAP_SAFE_GROUP or h.min_after < OVERLAP_SAFE_LOWEST:
+            continue  # it took everything: not an overlap
+        # The next spike while one of your overlapped cooldowns was still down.
+        downs = {a: t + c.cds.cd_ms[a] for t, a in mine}
+        nxt = next((n for n in hits if n.t > h.t + OVERLAP_WINDOW_MS and any(n.t < back for back in downs.values())), None)
+        hurt = None
+        if nxt:
+            nb = c.tl.bin_of(nxt.t)
+            n_after = range(nb, min(len(c.tl.group_ehp), nb + OVERLAP_AFTER_S + 1))
+            n_deaths = [d for d in c.run.deaths if nxt.t <= d[0] <= c.t_of(n_after.stop)]
+            n_low = min(n_after, key=lambda k: c.tl.min_ehp[k])
+            if n_deaths:
+                hurt = (nxt, f"{len(n_deaths)} death{'s' if len(n_deaths) > 1 else ''}")
+            elif c.tl.min_ehp[n_low] < LETHAL_EHP:
+                hurt = (nxt, f"{c.player(c.tl.lowest_player[n_low])} down to {c.tl.min_ehp[n_low]:.0%}")
+        planned = all(c.planned_near(a, t) for t, a in mine)
+        if planned and not hurt:
+            continue  # top players stack these here too
+        used.add(h.t)
+        tools = [f"{c.cds.name(a)} ({c.clock(t)})" for t, a in sorted(mine)] + \
+                [f"{n} from {who} ({c.clock(t)})" for t, n, who in sorted(theirs)]
+        pull = c.ctx.pull_of_bin[b]
+        detail = [f"{len(tools)} big tools on {c.ability(h.ability)} at {c.clock(h.t)}: {', '.join(tools)}.",
+                  f"The group never dropped below {group_low:.0%} and the lowest player held {h.min_after:.0%} - "
+                  f"one of them would likely have been enough."]
+        if hurt:
+            n, what = hurt
+            back = ", ".join(f"{c.cds.name(a)} back at {c.clock(t)}" for a, t in downs.items() if n.t < t)
+            detail.append(f"Next spike, {c.ability(n.ability)} at {c.clock(n.t)}: {what} - with {back}.")
+        elif nxt:
+            detail.append(f"The next spike ({c.ability(nxt.ability)} at {c.clock(nxt.t)}) came while it was "
+                          f"still down; it went fine this time.")
+        if not hurt:  # harmless this time: summed up below, not a finding of its own
+            safe.append((h.t, f"{c.clock(h.t)} {c.ability(h.ability)}: {' + '.join(tools)}"))
+            continue
+        title = "Healing overlap left the next spike uncovered"
+        context = [["Top runs", c.top_text(c.cds.name(mine[0][1]), pull)]]
+        out.append(Finding(h.t, c.pull_label(pull), 65 if "death" in hurt[1] else 50, title, detail, context))
+    if len(safe) >= OVERLAP_SAFE_MIN:
+        # Timed at the first overlap: whole-run findings at the run start would merge into each other.
+        out.append(Finding(safe[0][0], "Whole run", 20, f"{len(safe)} healing overlaps on spikes the group handled", [
+            "Two or more big tools went on one spike while the group stayed healthy - one would likely have done, "
+            "and the other would have been ready for the next spike. Nothing went wrong this time:",
+            *[s for _, s in safe[:6]], *([f"+{len(safe) - 6} more"] if len(safe) > 6 else [])]))
+    return out
 
 
 def _not_topped(c: _Ctx) -> list[Finding]:

@@ -108,6 +108,15 @@ start, or your mana under 35%; cooldowns on cooldown are listed as context). The
 at the same spot and what happened in the next 20s. A finding only fires when a risky chain then hurt (a death,
 someone under 25% or the group under 50%).
 
+## Healing overlaps
+
+Two or more big tools (your healing cooldowns plus other players' group defensives) within 5s of one big hit, while
+the group stayed healthy (above 60%, lowest player above 40%, nobody died) - one would likely have done. When the
+next big hit lands while your overlapped cooldown is still down and someone drops below the lethal line or dies,
+that is its own finding ("Healing overlap left the next spike uncovered", with when each cooldown came back).
+Harmless overlaps are summed up in one low-priority line (from 3). Overlaps top players also do there (planned
+timings) are skipped unless they hurt. Thresholds are the OVERLAP_* constants in `app/findings.py`.
+
 ## DPS windows
 
 Calm stretches (3s+) with almost no damage coming in, nobody low, no big group hit in the next 3s, and either the group

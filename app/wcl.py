@@ -133,8 +133,9 @@ class WCLClient:
                                    f"saved - analyze again then and it continues where it stopped.")
             if attempt == RETRIES:
                 if r.status_code == 429:
-                    raise WCLError("Warcraft Logs is limiting requests right now (too many in a short time). "
-                                   "Everything fetched so far is saved - try again in a few minutes.")
+                    raise WCLError("Warcraft Logs is limiting requests right now - either too many in a short time "
+                                   "or this hour's API limit is used up. Everything fetched so far is saved - try "
+                                   "again in a few minutes (or after the hourly reset).")
                 return r
             wait = float(r.headers.get("Retry-After") or 0) or min(30.0, 2.0 * 2 ** attempt)
             time.sleep(min(wait, 60.0))
