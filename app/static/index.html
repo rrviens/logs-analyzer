@@ -414,6 +414,9 @@
   .iocmp { color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); font-weight: 500; }
   .iocmp .gap { font-weight: 600; }
   .iocmp.behind .gap { color: var(--high); } .iocmp.ahead .gap { color: var(--good); }
+  a.spell { color: inherit; text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent);
+            text-underline-offset: 2px; cursor: help; }
+  a.spell:hover { color: var(--accent); }
   /* Raider.io hover lists */
   .iohov { position: relative; text-decoration: underline dotted; cursor: help; }
   .iotip { display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 6; min-width: 240px; padding: 8px 10px;
@@ -485,6 +488,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+<!-- Wowhead tooltips: hovering an ability name shows its in-game tooltip -->
+<script>const whTooltips = {colorLinks: false, iconizeLinks: false, renameLinks: false};</script>
+<script src="https://wow.zamimg.com/js/tooltips.js" async></script>
 </head>
 <body>
 <header>
@@ -1824,6 +1830,7 @@ function render(res, url) {
   initTimeline(res, url);
   drawDps();
   paintIcons();
+  linkSpells($("main"), res.spell_ids || {});
   loadIO(url);
   if (!res._bestAsked) {
     res._bestAsked = true;
@@ -1931,6 +1938,38 @@ function setStrict(pick, rerender = true) {
 }
 document.querySelectorAll("[data-strict-pick]").forEach((b) => b.onclick = () => setStrict(b.dataset.strictPick));
 setStrict(lsGet("strict") || "auto", false);
+
+// Ability names in the text -> Wowhead tooltip links (hover only; Ctrl/Cmd-click opens Wowhead).
+function linkSpells(root, ids) {
+  const names = Object.keys(ids).sort((a, b) => b.length - a.length);
+  if (!root || !names.length) return;
+  const re = new RegExp(`(?<![\\w'])(${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![\\w'])`, "g");
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode: (n) =>
+    n.parentElement.closest("a, button, svg, script, style, .spell, input, select, textarea, .tlwrap")
+      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
+  const nodes = [];
+  const has = new RegExp(re.source);  // non-global: .test() keeps no position between nodes
+  while (walker.nextNode()) if (has.test(walker.currentNode.nodeValue)) nodes.push(walker.currentNode);
+  nodes.forEach((node) => {
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    node.nodeValue.replace(re, (m, name, at) => {
+      frag.append(node.nodeValue.slice(last, at));
+      const a = document.createElement("a");
+      a.className = "spell"; a.textContent = m; a.target = "_blank"; a.rel = "noopener";
+      a.href = `https://www.wowhead.com/spell=${ids[name]}`;
+      frag.append(a);
+      last = at + m.length;
+    });
+    frag.append(node.nodeValue.slice(last));
+    node.replaceWith(frag);
+  });
+  try { if (window.$WowheadPower) $WowheadPower.refreshLinks(); } catch {}
+}
+document.addEventListener("click", (e) => {  // inside a finding's summary a name shouldn't navigate or fold it
+  const a = e.target.closest("a.spell");
+  if (a && !e.ctrlKey && !e.metaKey) { e.preventDefault(); e.stopPropagation(); }
+}, true);
 
 // Lucide UI icons (pinned CDN build): <i data-lucide="name">fallback glyph</i> becomes an SVG; offline, the glyph stays.
 function paintIcons() { try { if (window.lucide) lucide.createIcons({attrs: {"stroke-width": 2}}); } catch {} }

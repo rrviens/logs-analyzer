@@ -27,6 +27,7 @@ Discipline Priest (beta).
   defensives, potions and trinkets.
 - Whole run or one pull; drag to zoom into any range (also across pulls), with a summary of that window.
 - Every time on the page is a link that jumps the timeline there; pin it to keep it on screen.
+- Hover any ability name for its in-game tooltip (Wowhead).
 
 **Around the run**
 - Group composition and what each player brings (Rallying Cry, Zephyr, …).

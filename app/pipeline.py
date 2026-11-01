@@ -4,6 +4,7 @@ Results are cached per run + rules version, so reopening a key is instant. Bump
 RULES_VERSION when findings logic changes.
 """
 import os
+import json
 import logging
 import statistics
 import time
@@ -38,7 +39,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 51
+RULES_VERSION = 52
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -108,6 +109,20 @@ def _preview(client, fight, run, tl, segs, me, spec, players, state, effects) ->
             "spec": {"key": spec.key, "label": spec.label, "plural": spec.plural},
             "group": _with_brings(describe(players, effects), players, run, segs, group_casts),
             "findings": [], "timeline": timeline}
+
+
+SPELL_LINK_SKIP = {"Melee", "Auto Attack", "Shoot", "Unknown"}
+
+
+def _spell_ids(run, out: dict) -> dict[str, int]:
+    """Spell id per ability named anywhere in the result's text - the page turns those names into hover tooltips."""
+    text = json.dumps({k: out.get(k) for k in ("findings", "deaths", "verdicts", "phases", "items", "group",
+                                               "good_calls", "spell_choice")}, ensure_ascii=False)
+    ids: dict[str, int] = {}
+    for aid, name in run.abilities:
+        if aid > 0 and len(name) >= 4 and name not in SPELL_LINK_SKIP and name not in ids and name in text:
+            ids[name] = aid
+    return ids
 
 
 def latest_key(code: str, fight_id: int, player: str, top: int) -> str:
@@ -334,6 +349,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     progress("Finding DPS windows...")
     out["dps"], out["timeline"]["dps_windows"] = _dps_windows(client, fight, run, tl, segs, profiles, tops,
                                                                candidates, spec)
+    out["spell_ids"] = _spell_ids(run, out)
     out["key"], out["rules_version"] = key, RULES_VERSION
     client.set_cached(key, out)
     # The newest stored analysis of this run, whatever the rules version: shown at once (marked as updating)
