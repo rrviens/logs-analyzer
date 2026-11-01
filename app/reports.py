@@ -192,3 +192,12 @@ def get_events(
         events.extend(page["data"])
         start = page["nextPageTimestamp"]
     return events
+
+def player_realms(client: WCLClient, fight: Fight) -> list[dict]:
+    """[{name, realm, region, class}] of the players in a fight (same cached query as get_players)."""
+    data = client.query(PLAYERS_QUERY, {"code": fight.report_code, "fightIDs": [fight.id]})
+    details = data["reportData"]["report"]["playerDetails"]
+    details = details.get("data", details).get("playerDetails", details)
+    raw = {p["id"]: p for group in ("tanks", "healers", "dps") for p in details.get(group, [])}
+    return [{"name": p.name, "class": p.class_name, "realm": raw[p.id].get("server"), "region": raw[p.id].get("region")}
+            for p in get_players(client, fight) if p.id in raw and raw[p.id].get("server") and raw[p.id].get("region")]

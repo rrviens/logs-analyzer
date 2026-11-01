@@ -25,7 +25,8 @@ from app import auth
 from app.config import AUTH_MODE, CACHE_PATH, DATA_DIR, PROJECT_ROOT, SECURE_COOKIES, wcl_credentials
 from app.jobs import Jobs
 from app.pipeline import RULES_VERSION, AnalysisError, cache_key, run_analysis, stored_analysis
-from app.reports import get_fights, get_players, parse_report_url
+from app import raiderio
+from app.reports import get_fights, get_players, parse_report_url, pick_fight, player_realms
 from app.specs import SPECS, spec_for
 from app.study_runner import DEFAULT_RUNS, run_study, study_info
 from app.wcl import WCLClient, WCLError
@@ -426,6 +427,46 @@ def start_analysis(req: AnalyzeRequest, w: Who = Depends(who)):
     job_id = (None if req.fresh else queue.pending(w.user_id, "analyze", req.url)) or \
         queue.submit(w.user_id, "analyze", {"url": req.url, "name": name, "fresh": req.fresh})  # already queued: reuse
     return {"job": job_id, "result": stored, "stale": bool(stored)}
+
+
+_io_running: set[str] = set()
+
+
+@app.get("/api/io")
+def raiderio_scores(url: str, w: Who = Depends(who)):
+    """Average Raider.io score of your group and of each compared top group (players' CURRENT season scores).
+    Answers from the cache at once; missing scores are fetched in the background - the page asks again while
+    "pending". Never fails the page: on any trouble it just has fewer numbers."""
+    try:
+        code, fid = parse_report_url(url)
+        fight = pick_fight(get_fights(w.client, code), fid)
+        mine = player_realms(w.client, fight)
+        stored = stored_analysis(w.client, code, fight.id, (load_settings(w) or {}).get("name") or "", TOP_LOGS) or {}
+        pub = app_client.public()
+        tops = []
+        for lg in (stored.get("compared") or {}).get("logs", []):
+            f = next((x for x in get_fights(pub, lg["code"]) if x.id == lg["fight_id"]), None)
+            if f:
+                tops.append((lg, player_realms(pub, f)))
+    except (WCLError, httpx.HTTPError, ValueError, KeyError, StopIteration) as e:
+        log.warning("io scores unavailable for %s: %s", url, e)
+        return {"group": None, "tops": [], "pending": False}
+    group = raiderio.group_scores(pub, mine, fetch=False)
+    top_rows = [{**lg, **raiderio.group_scores(pub, ps, fetch=False)} for lg, ps in tops]
+    pending = bool(group["pending"] or any(t["pending"] for t in top_rows))
+    if pending and url not in _io_running:  # fill the cache in the background, one request at a time
+        _io_running.add(url)
+
+        def fill():
+            try:
+                for ps in [mine] + [ps for _, ps in tops]:
+                    raiderio.group_scores(pub, ps, fetch=True)
+            finally:
+                _io_running.discard(url)
+        threading.Thread(target=fill, daemon=True).start()
+    avgs = [t["avg"] for t in top_rows if t["avg"]]
+    return {"group": group, "tops": [{k: v for k, v in t.items() if k != "players"} for t in top_rows],
+            "top_avg": round(sum(avgs) / len(avgs)) if avgs else None, "pending": pending}
 
 
 @app.get("/api/public-analysis")

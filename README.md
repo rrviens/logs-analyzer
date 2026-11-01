@@ -108,6 +108,15 @@ start, or your mana under 35%; cooldowns on cooldown are listed as context). The
 at the same spot and what happened in the next 20s. A finding only fires when a risky chain then hurt (a death,
 someone under 25% or the group under 50%).
 
+## Raider.io scores
+
+The run header shows your group's average Raider.io score and the compared top groups' average (hover: each
+player / each top group). These are players' CURRENT season scores from the public Raider.io API, not their scores
+at the time of the run. Missing players are left out ("4 of 5"); realms written in non-Latin script (e.g. Korean)
+don't resolve. Lookups go one at a time with a short pause and a descriptive User-Agent, are cached for a day, stop at
+the first refusal, and run in the background, so they never slow down or break an analysis. Optional
+RAIDERIO_API_KEY is sent as Raider.io's access_key.
+
 ## When Warcraft Logs is slow or rate limiting
 
 - Finished analyses are stored (SQLite on the data disk). Opening an analyzed run makes no Warcraft Logs calls. When

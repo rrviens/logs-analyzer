@@ -38,7 +38,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 47
+RULES_VERSION = 48
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -310,6 +310,8 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
             "levels": sorted({tr.run.keystone_level for tr, _ in tops}),
             "model": model.runs_label() if model else None,
             "skipped": skipped,
+            "logs": [{"code": f.report_code, "fight_id": f.id, "player": p.name, "key": f.keystone_level,
+                      "timed": bool(f.kill), "duration_min": round(f.duration_s / 60, 1)} for f, p in candidates],
         },
         "group": _with_brings(describe(my_players, effects), my_players, run, segs,
                               fetch_group_casts(client, fight, {p.id for p in my_players})),

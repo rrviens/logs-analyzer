@@ -397,7 +397,14 @@
   .cm-form .primary { margin-top: 10px; }
   @media (max-width: 600px) {
     .charmenu { position: fixed; left: 12px; right: 12px; top: 12px; width: auto; max-height: calc(100vh - 24px); }
-  }  /* ---------- design pass: type, surfaces, controls, focus ---------- */
+  }  /* Raider.io hover lists */
+  .iohov { position: relative; text-decoration: underline dotted; cursor: help; }
+  .iotip { display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 6; min-width: 240px; padding: 8px 10px;
+           background: var(--panel-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+           box-shadow: var(--shadow-pop); color: var(--text); font-size: 0.8667rem; line-height: 1.6; }
+  .iotip div { display: flex; justify-content: space-between; gap: 12px; }
+  .iotip .ionote { display: block; color: var(--muted); margin-top: 6px; font-size: 0.8rem; }
+  .iohov:hover .iotip, .iohov:focus .iotip { display: block; }  /* ---------- design pass: type, surfaces, controls, focus ---------- */
   body { font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; font-feature-settings: "cv11", "ss01";
          -webkit-font-smoothing: antialiased; letter-spacing: -0.005em; }
   .when, .tip, table, .budget, .tl-head .scope, a.tl, .dpslist, .run .sub { font-variant-numeric: tabular-nums; }
@@ -1748,8 +1755,8 @@ function render(res, url) {
     <div class="meta">${esc(r.player)} (${esc(SP.label)}) · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"} ·
       compared with ${c.count} top ${esc(SP.label)} logs (${levels})${(c.skipped || []).length
         ? ` <span title="${esc(c.skipped.map((s) => `${s.player} +${s.key}: ${s.reasons.join(", ")}`).join("\n"))}">(${c.skipped.length} skipped: incomplete data)</span>`
-        : ""}${c.model ? ` · context from top runs ${esc(c.model)}` : ""}</div>
-    ${renderGroup(res)}</div>
+        : ""}${c.model ? ` · context from top runs ${esc(c.model)}` : ""}<span id="ioLine"></span></div>
+    ${renderGroup(res)}<div class="compnote" id="ioNote"></div></div>
     ${renderTimelineShell(res)}
     ${nav(counts)}
     ${sec("look", res.findings.length, `<div class="lookbar" id="lookBar" hidden></div>`
@@ -1778,8 +1785,34 @@ function render(res, url) {
   initTimeline(res, url);
   drawDps();
   paintIcons();
+  loadIO(url);
 }
 
+// ---------- Raider.io: average current-season score of your group and of the compared top groups ----------
+// Filled in after the page shows (scores are fetched politely in the background); missing players just don't count.
+async function loadIO(url, tries = 0) {
+  if (current !== url && tries) return;
+  const d = await api(`/api/io?url=${encodeURIComponent(url)}`).catch(() => null);
+  if (!d || !d.group || !$("ioLine")) return;
+  const fmt = (n) => n == null ? "-" : n.toLocaleString("en-US");
+  const g = d.group, part = (x) => x.with_score < x.total ? ` (${x.with_score} of ${x.total})` : "";
+  const who = g.players.map((p) => `<div><span style="color:${CLASS_COLORS[p.class] || "inherit"}">${esc(p.name)}</span>
+    <b>${p.score ? fmt(p.score) : p.known ? "no score" : "..."}</b></div>`).join("");
+  const tops = d.tops.filter((t) => t.avg).map((t) => `<div>${esc(t.player)} +${t.key} ${t.timed ? "timed" : "not timed"},
+    ${t.duration_min} min <b>${fmt(t.avg)}</b>${part(t)}</div>`).join("");
+  const note = "Raider.io current-season scores, not the scores at the time of the run.";
+  $("ioLine").innerHTML = (g.avg ? ` · <span class="iohov" tabindex="0">Group avg ${fmt(g.avg)} IO${part(g)}<span class="iotip">${who}
+      <div class="ionote">${note}</div></span></span>` : "")
+    + (d.top_avg ? ` · <span class="iohov" tabindex="0">top groups avg ${fmt(d.top_avg)} IO<span class="iotip">${tops}
+      <div class="ionote">${note}</div></span></span>` : "");
+  if (g.avg && d.top_avg) {
+    const gap = d.top_avg - g.avg;
+    $("ioNote").textContent = Math.abs(gap) >= 100
+      ? `Top groups averaged ${gap > 0 ? "+" : "-"}${fmt(Math.abs(gap))} IO ${gap > 0 ? "more" : "less"} than yours (current scores).`
+      : "Your group's IO is about the same as the top groups' (current scores).";
+  }
+  if (d.pending && tries < 12) setTimeout(() => loadIO(url, tries + 1), 5000);
+}
 // Lucide UI icons (pinned CDN build): <i data-lucide="name">fallback glyph</i> becomes an SVG; offline, the glyph stays.
 function paintIcons() { try { if (window.lucide) lucide.createIcons({attrs: {"stroke-width": 2}}); } catch {} }
 
