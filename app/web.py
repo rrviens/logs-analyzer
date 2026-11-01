@@ -480,11 +480,29 @@ def start_analysis(req: AnalyzeRequest, w: Who = Depends(who)):
         raise HTTPException(400, str(e))
     name = (load_settings(w) or {}).get("name")
     stored = stored_analysis(w.client, code, fid, name, TOP_LOGS) if fid is not None and name and not req.fresh else None
+    if stored and _outdated(w.client, code, fid, stored):
+        log.info("stored analysis of %s#%s no longer matches the report - redoing it", code, fid)
+        w.client.forget_fight(code, int(fid))
+        app_client.public().forget_fight(code, int(fid))
+        stored = None
     if stored and stored.get("rules_version") == RULES_VERSION:
         return {"result": stored}
     job_id = (None if req.fresh else queue.pending(w.user_id, "analyze", req.url)) or \
         queue.submit(w.user_id, "analyze", {"url": req.url, "name": name, "fresh": req.fresh})  # already queued: reuse
     return {"job": job_id, "result": stored, "stale": bool(stored)}
+
+
+def _outdated(client: WCLClient, code: str, fid: str, stored: dict) -> bool:
+    """A key analyzed while it was still live-logging can be a different key by now (Warcraft Logs renumbers or
+    extends fights): its saved level or length no longer match the report's fight list. That list is the one the
+    key list already cached, so this costs no extra request."""
+    try:
+        fight = pick_fight(get_fights(client.quick(), code), fid)
+    except (WCLError, httpx.HTTPError, ValueError, StopIteration):
+        return False  # can't tell: keep what we have
+    run = stored.get("run") or {}
+    return (run.get("level") != (fight.keystone_level or 0)
+            or abs((run.get("duration_min") or 0) - fight.duration_s / 60) > 1)
 
 
 _io_running: set[str] = set()

@@ -22,7 +22,7 @@ EVENT_PAGE = max(500, min(10000, int(os.environ.get("EVENT_PAGE", "10000"))))
 RUN_QUERY = """
 query($code: String!) {
   reportData { report(code: $code) {
-    fights { id dungeonPulls { id name startTime endTime encounterID enemyNPCs { gameID } } }
+    fights { id endTime dungeonPulls { id name startTime endTime encounterID enemyNPCs { gameID } } }
     masterData { abilities { gameID name } }
   } }
 }
@@ -113,8 +113,8 @@ def fetch_run(client: WCLClient, fight: Fight, healer_id: int, spec: Spec) -> Ru
         return RunData(**cached)
 
     report = client.query(RUN_QUERY, {"code": fight.report_code})["reportData"]["report"]
-    if not any(f["id"] == fight.id for f in report["fights"]):
-        # Live-logged report: the cached copy predates this key. ttl=1 forces a refresh that is stored.
+    if not any(f["id"] == fight.id and f.get("endTime") == fight.end for f in report["fights"]):
+        # Live-logged report: the cached copy predates this key (or this fight grew since). ttl=1 forces a stored refresh.
         report = client.query(RUN_QUERY, {"code": fight.report_code}, ttl=1)["reportData"]["report"]
     raw_fight = next(f for f in report["fights"] if f["id"] == fight.id)
     pulls = [
