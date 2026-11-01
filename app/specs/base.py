@@ -55,6 +55,7 @@ class Spec:
     dps_aoe: str = ""  # damage spell for 2+ enemies in calm windows, e.g. "Chain Lightning"
     dps_aoe_targets: int = 3  # enemies it hits
     dps_aoe_cast_s: float = 1.7
+    dps_aoe_ticks: int = 1  # hits on each enemy per cast (channels like Spinning Crane Kick tick several times)
     dps_st: tuple = ()  # single-target damage spells, e.g. ("Lava Burst", "Lightning Bolt")
     dps_st_cast_s: float = 1.5  # average time per single-target cast
 

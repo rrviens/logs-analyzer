@@ -25,4 +25,6 @@ SPEC = Spec(
     personal_habit="press Desperate Prayer about every 3 minutes",
     # Ramps are pressed on a plan, not into every dip: a trial on a top +23 log flagged Ultimate Penitence three times.
     ramp_cooldowns=("Evangelism", "Ultimate Penitence"),
+    # One hit per cast (Penance fires several bolts, which would skew the per-cast average). No AoE button.
+    dps_st=("Smite", "Mind Blast"),
 )

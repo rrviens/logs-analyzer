@@ -23,4 +23,8 @@ SPEC = Spec(
     short_names={"Convoke the Spirits": "Convoke"},
     mana_spells="Wild Growth and Regrowth",
     personal_habit="press Barkskin about every 95 seconds",
+    dps_aoe="Starfire",
+    dps_aoe_targets=3,
+    dps_aoe_cast_s=2.25,
+    dps_st=("Wrath", "Starsurge"),
 )

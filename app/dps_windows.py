@@ -93,10 +93,11 @@ class DamageModel:
     aoe_cast_s: float
     st_cast: float | None  # average damage per cast of the single-target spells (Lava Burst, Lightning Bolt)
     st_cast_s: float
+    aoe_ticks: int = 1  # hits on each enemy per AoE cast
 
     def dps(self, enemies: int) -> float:
         if enemies >= 2 and self.aoe_hit:
-            return self.aoe_hit * min(enemies, self.aoe_targets) / self.aoe_cast_s
+            return self.aoe_hit * self.aoe_ticks * min(enemies, self.aoe_targets) / self.aoe_cast_s
         if enemies >= 1 and self.st_cast:
             return self.st_cast / self.st_cast_s
         return 0.0
@@ -111,7 +112,7 @@ def damage_model(run: RunData, damage: list[list], spec) -> DamageModel | None:
     aoe = by_name.get(spec.dps_aoe, [])
     st = [a for n in spec.dps_st for a in by_name.get(n, [])]
     m = DamageModel(statistics.mean(aoe) if len(aoe) >= 5 else None, spec.dps_aoe_targets, spec.dps_aoe_cast_s,
-                    statistics.mean(st) if len(st) >= 5 else None, spec.dps_st_cast_s)
+                    statistics.mean(st) if len(st) >= 5 else None, spec.dps_st_cast_s, spec.dps_aoe_ticks)
     return m if m.aoe_hit or m.st_cast else None
 
 
