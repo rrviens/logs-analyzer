@@ -187,16 +187,17 @@
          color: var(--text); cursor: pointer; font: inherit; }
   .run:hover:not([disabled]), .run.active { border-color: var(--accent); }
   .run[disabled] { opacity: .5; cursor: default; }
-  /* key card: text on the left, a fixed badge column on the right (result on top, analysis status under it) */
-  .run { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "top top" "sub st";
-         column-gap: 8px; row-gap: 4px; align-items: center; }
-  .run .top { grid-area: top; display: grid; grid-template-columns: minmax(0, 1fr) 5.4rem; gap: 8px; font-weight: 600;
-              align-items: start; }
-  .run .top .nm { overflow-wrap: anywhere; }  /* long names wrap; the badge column keeps its place */
-  .run .top .tag, .run .st .tag { justify-self: end; white-space: nowrap; }
-  .run .sub { grid-area: sub; color: var(--muted); font-size: 0.8667rem; display: flex; gap: 8px; flex-wrap: wrap; }
-  .run .st { grid-area: st; display: grid; width: 5.4rem; min-height: 1.4em; }
-  .tag { font-size: 0.8667rem; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
+  /* key card: [key level] [dungeon name / time + length] [result / analysis status] - same layout on every card */
+  .run { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) 5.4rem; grid-template-rows: auto auto;
+         grid-template-areas: "lvl nm res" "lvl sub st"; column-gap: 10px; row-gap: 3px; align-items: center; }
+  .run .lvl { grid-area: lvl; align-self: center; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums;
+              background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-xs); padding: 6px 0; }
+  .run .nm { grid-area: nm; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+             font-size: clamp(0.8667rem, 2.2vw, 0.9333rem); }
+  .run .res { grid-area: res; justify-self: end; white-space: nowrap; }
+  .run .sub { grid-area: sub; color: var(--muted); font-size: 0.8667rem; display: flex; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .run .st { grid-area: st; justify-self: end; min-height: 1.4em; }
+  .run .st .tag { white-space: nowrap; }  .tag { font-size: 0.8667rem; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
   .tag.timed { background: var(--good-bg); color: var(--good); }
   .tag.depleted { background: var(--low-bg); color: var(--low); }
   .tag.done { background: var(--med-bg); color: var(--med); }
@@ -261,7 +262,7 @@
   .ctx dd { margin: 0; }
   @media (max-width: 600px) { .ctx { margin-left: 0; } }
   /* ---------- page structure: every block is a card; calm headers; wide but bounded ---------- */
-  .layout { max-width: 1800px; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; padding: 24px; }
+  .layout { max-width: 1800px; grid-template-columns: 340px minmax(0, 1fr); gap: 24px; padding: 24px; }
   @media (max-width: 860px) {
     .layout { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 16px; }
     .runs { max-height: 240px; overflow-y: auto; }  /* keep the analysis near the top on phones */
@@ -587,12 +588,13 @@ async function loadRuns(limit = RUNS_LIMIT) {
     $("runs").innerHTML = quiet + data.runs.map((r) => `
       <button class="run${current === r.url ? " active" : ""}" data-url="${esc(r.url)}" ${r.analyzable ? "" :
         `disabled title="You played ${esc(r.spec || "another character")} - only supported healer specs can be analyzed"`}>
-        <div class="top"><span class="nm">${esc(r.dungeon)} +${r.level}</span>
-          <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span></div>
-        <div class="sub"><span>${ago(r.started)}</span><span>${r.duration_min} min</span>
-          ${r.analyzable ? "" : `<span>${esc(r.spec || "not in group")}</span>`}</div>
-        <div class="st">${r.analyzed ? `<span class="tag done">Analyzed</span>` : r.queued
-          ? `<span class="tag prep" title="Being analyzed in the background - ready soon">Preparing...</span>` : ""}</div>
+        <span class="lvl">+${r.level}</span>
+        <span class="nm" title="${esc(r.dungeon)} +${r.level}">${esc(r.dungeon)}</span>
+        <span class="tag res ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span>
+        <span class="sub"><span>${ago(r.started)}</span><span>${r.duration_min} min</span>
+          ${r.analyzable ? "" : `<span>${esc(r.spec || "not in group")}</span>`}</span>
+        <span class="st">${r.analyzed ? `<span class="tag done">Analyzed</span>` : r.queued
+          ? `<span class="tag prep" title="Being analyzed in the background - ready soon">Preparing...</span>` : ""}</span>
       </button>`).join("") + note + (more ? `<div class="empty">${more}</div>` : "");
     document.querySelectorAll(".run:not([disabled])").forEach((el) => el.onclick = () => analyze(el.dataset.url));
     // Keys being prepared in the background: refresh the list until they're done.
