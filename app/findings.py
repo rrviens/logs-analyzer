@@ -365,9 +365,14 @@ def _deaths(c: _Ctx) -> list[Finding]:
         else:
             groups.append([d])
 
+    # Deaths after the tank went down in a wipe: listed on the tank's death, no finding of their own.
+    after_tank = {(a["clock"], a["victim"]) for r in c.recaps.values() for a in r.get("after_tank", [])}
     out, i = [], 0
     while i < len(groups):
         first = groups[i]
+        if all((c.clock(d[0]), c.player(d[1])) in after_tank for d in first):
+            i += 1
+            continue
         pull = c.ctx.pull_of_bin[c.tl.bin_of(first[0][0])]
         j = i + 1
         while (j < len(groups) and c.ctx.pull_of_bin[c.tl.bin_of(groups[j][0][0])] == pull

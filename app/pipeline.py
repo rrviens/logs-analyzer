@@ -19,7 +19,7 @@ from app.chains import OUTCOME_S, Chain, find_chains
 from app.dps_windows import (BUCKET_LABEL, apply_peer_rates, bucket, calm_bins, calm_dps, damage_model, fetch_damage_done,
                              find_windows, gear_factor, learn_peer_rates, median_rate, summarize)
 from app.encounters import Encounter, load_encounter
-from app.findings import Analysis, Finding, TopRun, analyze
+from app.findings import DEATH_GROUP_MS as SAME_EVENT_MS, WIPE_DEATHS, WIPE_WINDOW_S, Analysis, Finding, TopRun, analyze
 from app.metrics import hot_refreshes, hots_active
 from app.reports import ability_icons, get_fights, get_players, get_trinkets, parse_report_url, pick_fight
 from app.runs import fetch_run
@@ -40,7 +40,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 60
+RULES_VERSION = 61
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -433,7 +433,9 @@ def _death_recaps(client, fight, run, players, state, top_runs, candidates, cloc
     """Recap for each death: cause, what was ready (group / victim / healer), the debuff and
     dispel story, the victim's last casts, and how top players handle the same debuff."""
     deaths = [d for d in sorted(run.deaths, key=lambda d: d[0])
-              if d[2] or d[0] < run.end - 10_000][:MAX_RECAPS]  # skip end-of-key resets
+              if d[2] or d[0] < run.end - 10_000]  # skip end-of-key resets
+    after = _after_tank(run, deaths)
+    deaths = [d for d in deaths if (d[0], d[1]) not in after][:MAX_RECAPS]
     if not deaths:
         return []
     progress("Building death recaps...")
@@ -466,7 +468,28 @@ def _death_recaps(client, fight, run, players, state, top_runs, candidates, cloc
         r["clock"] = clock(t)
         r["pull"] = next((f"Pull {i + 1}: {p.name}" for i, p in enumerate(run.pulls) if p.start <= t <= p.end), "")
         r["short"], r["fix"] = _death_short(r)
+        r["after_tank"] = [{"clock": clock(at), "victim": run.player_name(av)}
+                           for (at, av), tank_t in sorted(after.items()) if tank_t == t]
         out.append(r)
+    return out
+
+
+def _after_tank(run, deaths: list[list]) -> dict[tuple[int, int], int]:
+    """Deaths in a wipe that came after the tank died: (t, victim) -> the tank's death time. Once the tank is down
+    the pull is lost, so these get no recap of their own - they're listed on the tank's card."""
+    out = {}
+    pull_of = lambda t: next((i for i, p in enumerate(run.pulls) if p.start <= t <= p.end), None)
+    for tank_t, tank, _ in deaths:
+        if tank not in run.tank_ids:
+            continue
+        p = pull_of(tank_t)
+        near = [d for d in deaths if pull_of(d[0]) == p and abs(d[0] - tank_t) <= WIPE_WINDOW_S * 1000]
+        if len(near) < WIPE_DEATHS:
+            continue  # the tank died but the group held: every death still counts
+        for t, victim, _ in near:
+            # Dying in the same moment as the tank (same hit) still counts; only the deaths that followed don't.
+            if t - tank_t > SAME_EVENT_MS and victim not in run.tank_ids and (t, victim) not in out:
+                out[(t, victim)] = tank_t
     return out
 
 
