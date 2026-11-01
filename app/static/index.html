@@ -2264,6 +2264,7 @@ paintIcons();
   await analyze(q.get("run"));
   if (TL && PRESETS[q.get("preset")]) { applyPreset(q.get("preset")); syncToggles(); drawTimeline(); }
   if (TL && q.get("pull")) selectPull(q.get("pull") === "whole" ? -1 : +q.get("pull") - 1);
+  if (TL && ["peers", "top"].includes(q.get("base"))) setBase(q.get("base"));  // &base=top: open on that baseline
   const zoom = (q.get("view") || "").match(/^(\d+)-(\d+)$/);  // &view=<from s>-<to s>: open zoomed to that range
   if (TL && zoom && +zoom[2] > +zoom[1]) { TL.view = [+zoom[1], +zoom[2]]; drawTimeline(); }
   if (q.get("at") && $(q.get("at"))) $(q.get("at")).scrollIntoView({block: "start"});
