@@ -52,6 +52,7 @@ class Spec:
     personal_habit: str = ""  # how top players use the personal, e.g. "press Astral Shift ~13 times a run"
     self_res: tuple = ()  # abilities that bring the healer back (low HP right after is not incoming damage)
     ramp_cooldowns: tuple = ()  # planned ramps (Evangelism): judged by top players' timings, not "held through danger"
+    dispels: tuple = ()  # debuff types the spec's own dispel removes: "magic", "curse", "disease", "poison"
     dps_aoe: str = ""  # damage spell for 2+ enemies in calm windows, e.g. "Chain Lightning"
     dps_aoe_targets: int = 3  # enemies it hits
     dps_aoe_cast_s: float = 1.7

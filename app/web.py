@@ -29,6 +29,7 @@ from app.pipeline import RULES_VERSION, AnalysisError, cache_key, run_analysis, 
 from app import raiderio
 from app.reports import get_fights, get_players, parse_report_url, pick_fight, player_realms
 from app.specs import SPECS, spec_for
+from app.spellfacts import FACTS
 from app.context_model import model_path
 from app.study_runner import DEFAULT_RUNS, add_curves, run_study, study_info
 from app.wcl import WCLClient, WCLError
@@ -468,6 +469,7 @@ def _analyze_job(owner: int, p: dict, progress, preview) -> str:
 @app.on_event("startup")
 def _start_queue():
     queue.start()
+    FACTS.refresh_if_stale()  # game spell data + community avoidable list, weekly, in the background
 
 
 @app.post("/api/analyze")

@@ -21,6 +21,7 @@ SPEC = Spec(
     short_names={"Invoke Chi-Ji, the Red Crane": "Chi-Ji"},
     mana_spells="Enveloping Mist and Sheilun's Gift",
     personal_habit="press Fortifying Brew about every 3 minutes",
+    dispels=("magic", "poison", "disease"),
     dps_aoe="Spinning Crane Kick",
     dps_aoe_targets=5,
     dps_aoe_cast_s=1.5,

@@ -1689,7 +1689,7 @@ function renderDeaths(res) {
           deaths aren't analyzed.</div>` : ""}
         ${d.stoppable ? `<div class="story note"><strong>⛔ Could likely have been stopped:</strong> ${esc(d.stoppable.ability)} did
           ${Math.round(d.stoppable.share * 100)}% of the damage, and peer groups stop that cast ${Math.round(d.stoppable.rate * 100)}% of the
-          time (interrupt, stun or CC). Ready then: ${d.stoppable.ready.length ? d.stoppable.ready.map((x) =>
+          time (${d.stoppable.kickable === false ? "it can't be interrupted - stun or CC only" : "interrupt, stun or CC"}). Ready then: ${d.stoppable.ready.length ? d.stoppable.ready.map((x) =>
             `<b>${x.you ? "you" : esc(x.player)}</b> - ${esc(x.tools.join(", "))}`).join("; ") : "nothing - every interrupt and stun was on cooldown"}.</div>` : ""}
         ${d.cause ? `<div class="story"><strong>Cause:</strong> ${T(d.cause.lines.join(" · "))}
           ${d.cause.name !== d.killing ? ` · killing blow ${esc(d.killing)}` : ""}</div>` : ""}

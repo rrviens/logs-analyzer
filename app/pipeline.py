@@ -36,11 +36,12 @@ from app.quality import check as quality_check
 from app.spells import fetch_spell_heals, heal_casts
 from app.verdicts import _section, items_verdict, phases_verdict, pulls_verdict, spell_verdict
 from app.specs import SPECS, healers_in
+from app.spellfacts import FACTS
 from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 62
+RULES_VERSION = 63
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -147,12 +148,13 @@ def _stoppable(r: dict, avoid: Avoidance, run) -> dict | None:
         return None
     w, share = best
     healer = run.player_name(run.healer_id)
+    kickable = FACTS.interruptible(w.get("ability_id", 0)) is not False  # game data: some casts only stop to a stun
     ready = {}
-    for who, names in list(w.get("ready_kicks", {}).items()) + list(w.get("ready_cc", {}).items()):
+    for who, names in list(w.get("ready_kicks", {}).items() if kickable else []) + list(w.get("ready_cc", {}).items()):
         ready.setdefault(who, []).extend(n for n in names if n not in ready.get(who, []))
     order = sorted(ready, key=lambda who: (who != healer, who))  # your own tools first
     return {"ability": w["ability"], "share": round(share, 2), "rate": round(w.get("rate", 0), 2), "seen": w.get("seen"),
-            "ready": [{"player": who, "you": who == healer, "tools": ready[who]} for who in order]}
+            "kickable": kickable, "ready": [{"player": who, "you": who == healer, "tools": ready[who]} for who in order]}
 
 
 def _stoppable_finding(recaps: list[dict], clock) -> Finding | None:
@@ -463,6 +465,13 @@ def _death_recaps(client, fight, run, players, state, top_runs, candidates, cloc
     handling = top_debuff_handling(top_auras, debuff_names, tools, spec.plural)
     own_dispel, totems = learn_dispels([(auras, run.healer_id, run.ability_name)]
                                        + [(a, tr.healer_id, tr.ability_name) for tr, a in top_auras])
+    # The game's own data says each debuff's type: that decides what your dispel removes (logs only fill in
+    # this season's newest spells, which the data may not have yet).
+    for aid in {d[1] for d in auras.debuffs}:
+        kind = FACTS.dispel(aid)
+        if kind:
+            can_dispel.add(aid)
+            (own_dispel.add if kind in spec.dispels else own_dispel.discard)(aid)
     out = []
     events = parallel_map(lambda d: fetch_death_events(client, fight, d[1], d[0]), deaths)
     for (t, victim, killing), ev in zip(deaths, events):
@@ -677,6 +686,8 @@ def _dodgeable(r: dict, avoid: Avoidance, encounter, run, top_runs: list) -> dic
         aid = next((a for a, n in run.abilities if n == name), None)
         if encounter.avoidable(aid, name):
             return {"ability": name, "why": encounter.note(aid, name) or "a ground effect to dodge"}
+        if any(FACTS.avoidable(a) for a, n in run.abilities if n == name):
+            return {"ability": name, "why": "on the community's avoidable-damage list (ElitismHelper)"}
         # Across peers' whole runs (not pull by pull): rarely hit at all means they walk out of it.
         # Seen in some of their logs (so it happens on their route too), yet barely hits them.
         hits = [sum(1 for d in t.damage if d[2] in {a for a, n in t.abilities if n == name}) / max(1, len(t.players))

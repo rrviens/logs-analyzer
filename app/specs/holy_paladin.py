@@ -20,6 +20,7 @@ SPEC = Spec(
     tracked_buffs=("Infusion of Light", "Divine Purpose", "Avenging Wrath"),
     mana_spells="Flash of Light and Holy Light",
     personal_habit="press Divine Protection about every 80 seconds",
+    dispels=("magic", "poison", "disease"),
     dps_aoe="Shield of the Righteous",
     dps_aoe_targets=3,
     dps_aoe_cast_s=1.5,

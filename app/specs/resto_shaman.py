@@ -26,6 +26,7 @@ SPEC = Spec(
     short_names={"Healing Tide Totem": "Healing Tide", "Spirit Link Totem": "Spirit Link"},
     mana_spells="Chain Heal and Healing Rain",
     personal_habit="press Astral Shift ~13 times a run - often before targeted damage lands",
+    dispels=("magic", "curse"),
     self_res=("Reincarnation",),
     dps_aoe="Chain Lightning",
     dps_st=("Lava Burst", "Lightning Bolt"),

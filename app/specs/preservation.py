@@ -22,6 +22,7 @@ SPEC = Spec(
     tracked_buffs=("Essence Burst", "Temporal Compression", "Tip the Scales", "Lifespark"),
     mana_spells="Emerald Blossom and Dream Breath",
     personal_habit="press Obsidian Scales about every 90 seconds",
+    dispels=("magic", "poison", "curse", "disease"),
     # Disintegrate (channel ticks) and Fire Breath (mostly DoT) would skew the per-cast average.
     dps_st=("Living Flame",),
     dps_st_cast_s=1.8,

@@ -19,6 +19,7 @@ SPEC = Spec(
     tracked_buffs=("Surge of Light", "Benediction", "Apotheosis"),
     mana_spells="Flash Heal and Prayer of Mending",
     personal_habit="press Desperate Prayer about every 3 minutes",
+    dispels=("magic", "disease"),
     dps_aoe="Holy Nova",
     dps_aoe_targets=5,
     dps_aoe_cast_s=1.5,
