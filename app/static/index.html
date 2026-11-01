@@ -2215,7 +2215,9 @@ async function startApp() {
       <p>Context-aware Mythic+ healing review, compared with top players of your spec at your key level.</p>
       <p>Sign in with your Warcraft Logs account: your analyses run on your own account and API limit, and your
         private logs stay visible only to you.</p>
-      <a class="primary" href="/login">Sign in with Warcraft Logs</a></main>`;
+      <a class="primary" href="/login">Sign in with Warcraft Logs</a>
+      <p class="secempty">If Warcraft Logs asks you to log in first, it may leave you on its home page afterwards -
+        come back here and click Sign in again; it goes straight through then.</p></main>`;
     const q = new URLSearchParams(location.search);
     if (q.get("signin") === "failed") {
       signinError(q.get("reason"));
