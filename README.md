@@ -3,6 +3,9 @@
 Mythic+ healing review built on Warcraft Logs: it compares your run with **peers** (the best healers of your spec at
 your key level) and **top players** (a season study of top-ranked runs), and only flags moments that mattered.
 
+**Use it online: https://healer-review.onrender.com** - sign in with your Warcraft Logs account. Or run it locally
+(below).
+
 ![A run in the dark theme](docs/screenshots/run-dark.png)
 
 Specs: Restoration Shaman, Restoration Druid, Mistweaver Monk, Holy Priest, Preservation Evoker, Holy Paladin,
@@ -40,7 +43,7 @@ Discipline Priest (beta).
 - New analyses queue and wait out rate limits instead of failing; your run's timeline shows while the comparison loads.
 - Errors show one clear banner with Try again; signed out, public runs still open from a link.
 
-## Quick start (local)
+## Run it locally
 
 1. Create a Warcraft Logs API client (https://www.warcraftlogs.com/api/clients) and put its id and secret in `.env`
    (see `.env.example`).
@@ -49,33 +52,10 @@ Discipline Priest (beta).
 
 A first analysis of a dungeon and key level costs ~300 API points (1000/hour); later ones reuse the cached peer logs.
 
-## Hosting for others
-
-Visitors sign in with their own Warcraft Logs account, so analyses use their own API limit and private logs stay
-private. Deploy on [Render](https://render.com) with the included `render.yaml` (Docker, 1 GB disk at `/data`,
-Starter plan ~$7-8/month):
-
-1. Add `https://<your-service>.onrender.com/callback` as a redirect URL in your Warcraft Logs API client.
-2. Render > New > Blueprint > this repository; fill in the secrets below.
-3. Sign in, hover your name to see your Warcraft Logs user id, and set it as `ADMIN_USER_IDS`.
-4. Make sure Auto-Deploy is on for `main` (otherwise use Manual Deploy after a push).
-
-| Setting | Value |
-|---|---|
-| `WCL_CLIENT_ID`, `WCL_CLIENT_SECRET` | your Warcraft Logs API client (secret) |
-| `REDIRECT_URI` | `https://<your-service>.onrender.com/callback` |
-| `ADMIN_USER_IDS` | your Warcraft Logs user id(s); admins refresh the top-player study from the page |
-| `AUTH_MODE`, `DATA_DIR` | `wcl`, `/data` (set by `render.yaml`) |
-| `TOP_WORKERS` | `1` on the 512 MB plan (2 runs out of memory) |
-| optional | `RAIDERIO_API_KEY`, `AUTO_ANALYZE` (default 2), `FETCH_STREAMS`, `EVENT_PAGE` |
-
-Any Docker host works the same way: build the `Dockerfile`, mount a volume at `/data`, set the variables, serve over
-https. To try hosted mode locally, set `AUTH_MODE=wcl` and `SECURE_COOKIES=0` in `.env`.
-
 ## Top-player study
 
 The season study (per spec, ~5 top runs per dungeon) powers planned cooldown timings, cooldown rate, HoT prep and the
-Top players band. Admins run it from the page's Study button; locally:
+Top players band. To refresh it locally:
 
 ```
 .\.venv\Scripts\python study.py --spec resto_shaman --runs 5
