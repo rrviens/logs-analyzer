@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from app import auth
 from app.config import AUTH_MODE, CACHE_PATH, DATA_DIR, PROJECT_ROOT, SECURE_COOKIES, wcl_credentials
+from app.context_model import load_dungeon
 from app.jobs import Jobs
 from app.pipeline import RULES_VERSION, AnalysisError, cache_key, run_analysis, stored_analysis
 from app import raiderio
@@ -448,25 +449,40 @@ def raiderio_scores(url: str, w: Who = Depends(who)):
             f = next((x for x in get_fights(pub, lg["code"]) if x.id == lg["fight_id"]), None)
             if f:
                 tops.append((lg, player_realms(pub, f)))
+        # Top players: the season study's runs of this dungeon (cached lookups - the study fetched them)
+        study = []
+        spec = next((s for s in SPECS if s.key == (stored.get("spec") or {}).get("key")), None)
+        model = load_dungeon(fight.name, spec) if spec else None
+        for sr in (model.data.get("runs", []) if model else []):
+            f = next((x for x in get_fights(pub, sr["code"]) if x.id == sr["fight"]), None)
+            if f:
+                study.append(({"player": sr["player"], "key": sr["key"]}, player_realms(pub, f)))
     except (WCLError, httpx.HTTPError, ValueError, KeyError, StopIteration) as e:
         log.warning("io scores unavailable for %s: %s", url, e)
         return {"group": None, "tops": [], "pending": False}
     group = raiderio.group_scores(pub, mine, fetch=False)
     top_rows = [{**lg, **raiderio.group_scores(pub, ps, fetch=False)} for lg, ps in tops]
-    pending = bool(group["pending"] or any(t["pending"] for t in top_rows))
+    study_rows = [{**lg, **raiderio.group_scores(pub, ps, fetch=False)} for lg, ps in study]
+    pending = bool(group["pending"] or any(t["pending"] for t in top_rows + study_rows))
     if pending and url not in _io_running:  # fill the cache in the background, one request at a time
         _io_running.add(url)
 
         def fill():
             try:
-                for ps in [mine] + [ps for _, ps in tops]:
+                for ps in [mine] + [ps for _, ps in tops] + [ps for _, ps in study]:
                     raiderio.group_scores(pub, ps, fetch=True)
             finally:
                 _io_running.discard(url)
         threading.Thread(target=fill, daemon=True).start()
-    avgs = [t["avg"] for t in top_rows if t["avg"]]
-    return {"group": group, "tops": [{k: v for k, v in t.items() if k != "players"} for t in top_rows],
-            "top_avg": round(sum(avgs) / len(avgs)) if avgs else None, "pending": pending}
+
+    def mean(rows):
+        avgs = [t["avg"] for t in rows if t["avg"]]
+        return round(sum(avgs) / len(avgs)) if avgs else None
+    top_avg, study_avg = mean(top_rows), mean(study_rows)
+    strip = lambda rows: [{k: v for k, v in t.items() if k != "players"} for t in rows]
+    return {"group": {**group, "color": raiderio.score_color(pub, group["avg"])}, "tops": strip(top_rows),
+            "top_avg": top_avg, "top_color": raiderio.score_color(pub, top_avg), "study": strip(study_rows),
+            "study_avg": study_avg, "study_color": raiderio.score_color(pub, study_avg), "pending": pending}
 
 
 @app.get("/api/best")

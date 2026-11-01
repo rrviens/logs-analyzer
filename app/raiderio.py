@@ -115,3 +115,26 @@ def best_timed(pub: WCLClient, region: str, realm: str, name: str) -> int | None
     best = max((x["mythic_level"] for x in runs if x.get("num_keystone_upgrades", 0) > 0), default=None)
     pub.set_cached(key, {"t": time.time(), "best": best})
     return best
+
+TIERS_URL = "https://raider.io/api/v1/mythic-plus/score-tiers"
+
+
+def score_color(pub: WCLClient, score: float | None) -> str | None:
+    """Raider.io's own colour for a score (their published score tiers, cached a day). None if unknown."""
+    if not score:
+        return None
+    hit = pub.get_cached("rio_tiers:v1")
+    if not hit or time.time() - hit["t"] > CACHE_S:
+        if time.time() < _blocked_until[0]:
+            return None
+        try:
+            with _lock:
+                r = _http.get(TIERS_URL)
+            tiers = r.json() if r.status_code == 200 else None
+        except (httpx.HTTPError, ValueError):
+            tiers = None
+        if not tiers:
+            return None
+        hit = {"t": time.time(), "tiers": [[t["score"], t["rgbHex"]] for t in tiers]}
+        pub.set_cached("rio_tiers:v1", hit)
+    return next((hexc for s, hexc in sorted(hit["tiers"], reverse=True) if score >= s), hit["tiers"][-1][1])

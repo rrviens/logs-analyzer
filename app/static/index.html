@@ -401,7 +401,17 @@
   .cm-form .primary { margin-top: 10px; }
   @media (max-width: 600px) {
     .charmenu { position: fixed; left: 12px; right: 12px; top: 12px; width: auto; max-height: calc(100vh - 24px); }
-  }  /* Raider.io hover lists */
+  }  /* Raider.io badges in the run header: your group's IO (Raider.io's own colour), and the baseline's with the gap */
+  .iobadge, .iocmp { display: inline-flex; align-items: baseline; gap: 4px; border-radius: 999px; padding: 2px 10px;
+                     font-size: 0.8667rem; font-weight: 600; font-variant-numeric: tabular-nums; text-decoration: none; }
+  .iobadge { --io: var(--accent); color: var(--io); background: color-mix(in srgb, var(--io) 14%, transparent);
+             border: 1px solid color-mix(in srgb, var(--io) 45%, transparent); }
+  .iobadge b { font-size: 0.9333rem; }
+  .iobadge .dim { color: var(--muted); font-weight: 400; }
+  .iocmp { color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); font-weight: 500; }
+  .iocmp .gap { font-weight: 600; }
+  .iocmp.behind .gap { color: var(--high); } .iocmp.ahead .gap { color: var(--good); }
+  /* Raider.io hover lists */
   .iohov { position: relative; text-decoration: underline dotted; cursor: help; }
   .iotip { display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 6; min-width: 240px; padding: 8px 10px;
            background: var(--panel-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
@@ -1762,14 +1772,15 @@ function render(res, url) {
     <div class="card">
     <div class="runhead"><h3>${esc(r.dungeon)} +${r.level}</h3>
       <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span>
+      <span class="iobadge iohov" id="ioBadge" tabindex="0">IO <span class="dim">...</span></span><span class="iocmp iohov" id="ioCmp" tabindex="0" hidden></span>
       <div class="actions">${(res.encounter || {}).guide ? `<a class="link" href="${esc(res.encounter.guide)}" target="_blank"
         rel="noopener">Wowhead guide</a>` : ""}<a class="link" href="${esc(url)}" target="_blank" rel="noopener">Open log</a>
       <button class="link" id="fresh">Re-analyze</button></div></div>
     <div class="meta">${esc(r.player)} (${esc(SP.label)}) · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"} ·
       compared with <span title="Peers: the best-ranked ${esc(SP.plural)} at your key level (±1) in this dungeon">${c.count} peer ${esc(SP.label)} logs (${levels})</span>${(c.skipped || []).length
         ? ` <span title="${esc(c.skipped.map((s) => `${s.player} +${s.key}: ${s.reasons.join(", ")}`).join("\n"))}">(${c.skipped.length} skipped: incomplete data)</span>`
-        : ""}${c.model ? ` · <span title="Top players: the season study of top-ranked runs - used for timings and habits">top players ${esc(c.model)}</span>` : ""}<span id="ioLine"></span></div>
-    ${renderGroup(res)}<div class="compnote" id="ioNote"></div></div>
+        : ""}${c.model ? ` · <span title="Top players: the season study of top-ranked runs - used for timings and habits">top players ${esc(c.model)}</span>` : ""}</div>
+    ${renderGroup(res)}</div>
     ${renderTimelineShell(res)}
     ${nav(counts)}
     ${sec("look", split.shown.length + split.minor.length, `<div class="lookbar" id="lookBar" hidden></div>`
@@ -1819,26 +1830,38 @@ function render(res, url) {
 async function loadIO(url, tries = 0) {
   if (current !== url && tries) return;
   const d = await api(`/api/io?url=${encodeURIComponent(url)}`).catch(() => null);
-  if (!d || !d.group || !$("ioLine")) return;
-  const fmt = (n) => n == null ? "-" : n.toLocaleString("en-US");
-  const g = d.group, part = (x) => x.with_score < x.total ? ` (${x.with_score} of ${x.total})` : "";
-  const who = g.players.map((p) => `<div><span style="color:${CLASS_COLORS[p.class] || "inherit"}">${esc(p.name)}</span>
-    <b>${p.score ? fmt(p.score) : p.known ? "no score" : "..."}</b></div>`).join("");
-  const tops = d.tops.filter((t) => t.avg).map((t) => `<div>${esc(t.player)} +${t.key} ${t.timed ? "timed" : "not timed"},
-    ${t.duration_min} min <b>${fmt(t.avg)}</b>${part(t)}</div>`).join("");
-  const note = "Raider.io current-season scores, not the scores at the time of the run.";
-  $("ioLine").innerHTML = (g.avg ? ` · <span class="iohov" tabindex="0">Group avg ${fmt(g.avg)} IO${part(g)}<span class="iotip">${who}
-      <div class="ionote">${note}</div></span></span>` : "")
-    + (d.top_avg ? ` · <span class="iohov" tabindex="0">peers avg ${fmt(d.top_avg)} IO<span class="iotip">${tops}
-      <div class="ionote">${note}</div></span></span>` : "");
-  if (g.avg && d.top_avg) {
-    const gap = d.top_avg - g.avg;
-    $("ioNote").textContent = Math.abs(gap) >= 100
-      ? `Peer groups averaged ${gap > 0 ? "+" : "-"}${fmt(Math.abs(gap))} IO ${gap > 0 ? "more" : "less"} than yours (current scores).`
-      : "Your group's IO is about the same as your peers' (current scores).";
-  }
+  if (!$("ioBadge")) return;
+  if (!d || !d.group || (!d.group.avg && !d.pending)) { $("ioBadge").hidden = true; $("ioCmp").hidden = true; return; }
+  IO_DATA = d;
+  paintIO();
   if (d.pending && tries < 12) setTimeout(() => loadIO(url, tries + 1), 5000);
 }
+let IO_DATA = null;
+const fmtIO = (n) => n == null ? "-" : n.toLocaleString("en-US");
+const ioPart = (x) => x.with_score < x.total ? ` (${x.with_score} of ${x.total})` : "";
+const IO_NOTE = "Raider.io current-season scores, not the scores at the time of the run.";
+// The group badge, and next to it the active baseline's (Peers / Top players) average with the gap.
+function paintIO() {
+  const d = IO_DATA, b = $("ioBadge"), cmp = $("ioCmp");
+  if (!d || !b) return;
+  const g = d.group;
+  if (!g.avg) { b.innerHTML = `IO <span class="dim">...</span>`; b.hidden = false; cmp.hidden = true; return; }
+  const who = g.players.map((p) => `<div><span style="color:${CLASS_COLORS[p.class] || "inherit"}">${esc(p.name)}</span>
+    <b>${p.score ? fmtIO(p.score) : p.known ? "no score" : "..."}</b></div>`).join("");
+  b.style.setProperty("--io", g.color || "var(--accent)");
+  b.innerHTML = `IO <b>${fmtIO(g.avg)}</b>${ioPart(g)}<span class="iotip">${who}<div class="ionote">Your group's average. ${IO_NOTE}</div></span>`;
+  b.hidden = false;
+  const top = BASE === "top", avg = top ? d.study_avg : d.top_avg, rows = top ? d.study : d.tops;
+  if (!avg) { cmp.hidden = true; return; }
+  const gap = avg - g.avg, cls = Math.abs(gap) < 100 ? "even" : gap > 0 ? "behind" : "ahead";
+  const list = rows.filter((t) => t.avg).map((t) => `<div>${esc(t.player)} +${t.key}${t.duration_min ? `, ${t.duration_min} min` : ""}
+    <b>${fmtIO(t.avg)}</b>${ioPart(t)}</div>`).join("");
+  cmp.className = `iocmp ${cls}`;
+  cmp.innerHTML = `${top ? "Top players" : "Peers"} ${fmtIO(avg)} <span class="gap">(${gap > 0 ? "+" : ""}${fmtIO(gap)})</span>
+    <span class="iotip">${list}<div class="ionote">${top ? "Season-study runs" : "Peer groups at your key level"}: average per group. ${IO_NOTE}</div></span>`;
+  cmp.hidden = false;
+}
+
 // ---------- comparison baseline: Peers (best healers at your key level, per run) / Top players (season study) ----------
 let BASE = lsGet("baseline") === "top" ? "top" : "peers";
 const curveOf = (q) => BASE === "top" ? q.study_curve : q.top_curve;
@@ -1856,6 +1879,7 @@ function setBase(b) {
   document.querySelectorAll("#tlBase [data-base]").forEach((x) => x.classList.toggle("on", x.dataset.base === b));
   drawTimeline();
   if (TL.sel) renderSelection();
+  paintIO();
 }
 
 // ---------- review strictness: farm keys get only what hurt, push keys the full review ----------
