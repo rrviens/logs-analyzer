@@ -187,8 +187,7 @@ partly, red = mostly missed; the biggest missed windows are listed with clickabl
 
 `data/encounters.json` holds our own one-line note per important enemy ability (type - tank damage, unavoidable
 group damage, targeted, dispellable, interruptible, ticking - and what a healer should do), written from log evidence
-across cached top runs, plus a Wowhead guide link per dungeon (mythictrap.com covers raids only - no M+ dungeon
-pages as of 2026-11 - so there are no links there). Notes show in timeline hovers (ℹ) and death recaps;
+across cached top runs. Notes show in timeline hovers (ℹ) and death recaps;
 `"avoidable": false` overrides a wrong learned "avoidable" tag. Currently covered: The Blinding Vale, Den of Nalorakk,
 Ruby Life Pools (the dungeons with enough cached logs); the others get notes as logs come in. Edit freely.
 

@@ -38,7 +38,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 50
+RULES_VERSION = 51
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -304,7 +304,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
                  "group": spec.spell_pair.group if spec.spell_pair else None,
                  "maintenance": spec.maintenance.plural if spec.maintenance else None,
                  "majors": spec.major_pair_text},
-        "encounter": {"guide": encounter.guide, "covered": encounter.covered},
+        "encounter": {"covered": encounter.covered},
         "compared": {
             "count": len(tops),
             "levels": sorted({tr.run.keystone_level for tr, _ in tops}),

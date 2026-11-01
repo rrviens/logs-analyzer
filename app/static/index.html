@@ -1095,12 +1095,20 @@ function drawTimeline() {
     const lx = xm + 4 + (ph ? ph.name.length * fs * 0.58 + 8 : 0);
     if (!whole) g += `<text x="${lx}" y="${hpTop - 5}" style="fill:${m.risky ? "var(--warning)" : "var(--muted)"};font-weight:700" ${tipAttr(m.tip)}>⛓ chained in</text>`;
   });
+  if (isOn("top")) {  // say why there's no band, instead of silently drawing nothing
+    const why = res.preview ? "Peer and top-player bands appear when the comparison is done"
+      : !whole && !curveOf(p) ? (BASE === "top" ? "No top-player data for this pull" : "No peer data for this pull") : "";
+    if (why) g += `<text x="${W - R - 6}" y="${hpTop + fs + 4}" text-anchor="end" style="font-style:italic">${esc(why)}</text>`;
+  }
   (isOn("uncovered") ? t.uncovered_hits || [] : []).filter((s) => s >= s0 && s <= s1).forEach((s) =>
     g += `<rect x="${x(s) - 2}" y="${hpTop}" width="4" height="${hpH}" fill="var(--critical)" opacity=".25"/>`);
   [0, 0.5, 1].forEach((v) => g += `<line x1="${L}" x2="${W - R}" y1="${yHp(v)}" y2="${yHp(v)}" stroke="var(--grid)"/>`);
   shown.filter((q) => curveOf(q) && isOn("top")).forEach((q) => {
     const xs = (f) => x(q.start_s + f * (q.end_s - q.start_s));
-    const inV = curveOf(q).filter(([f]) => { const s = q.start_s + f * (q.end_s - q.start_s); return s >= s0 - 1 && s <= s1 + 1; });
+    const cv = curveOf(q), at = (f) => q.start_s + f * (q.end_s - q.start_s);
+    const iA = Math.max(0, cv.findIndex(([f]) => at(f) >= s0) - 1);
+    let iB = cv.findIndex(([f]) => at(f) > s1); iB = iB < 0 ? cv.length - 1 : iB;
+    const inV = cv.slice(iA, iB + 1);  // the points in view plus one beyond each edge
     const upper = inV.map(([f, , , hi]) => `${xs(f).toFixed(1)},${yHp(hi).toFixed(1)}`);
     const lower = inV.slice().reverse().map(([f, lo]) => `${xs(f).toFixed(1)},${yHp(lo).toFixed(1)}`);
     g += `<polygon points="${upper.concat(lower).join(" ")}" fill="var(--ink-muted)" opacity=".16"/>`;
@@ -1778,8 +1786,7 @@ function render(res, url) {
     <div class="runhead"><h3>${esc(r.dungeon)} +${r.level}</h3>
       <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span>
       <span class="iobadge iohov" id="ioBadge" tabindex="0">IO <span class="dim">...</span></span><span class="iocmp iohov" id="ioCmp" tabindex="0" hidden></span>
-      <div class="actions">${(res.encounter || {}).guide ? `<a class="link" href="${esc(res.encounter.guide)}" target="_blank"
-        rel="noopener">Wowhead guide</a>` : ""}<a class="link" href="${esc(url)}" target="_blank" rel="noopener">Open log</a>
+      <div class="actions"><a class="link" href="${esc(url)}" target="_blank" rel="noopener">Open log</a>
       <button class="link" id="fresh">Re-analyze</button></div></div>
     <div class="meta">${esc(r.player)} (${esc(SP.label)}) · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"} ·
       compared with <span title="Peers: the best-ranked ${esc(SP.plural)} at your key level (±1) in this dungeon">${c.count} peer ${esc(SP.label)} logs (${levels})</span>${(c.skipped || []).length
@@ -1809,7 +1816,7 @@ function render(res, url) {
     ${sec("good", res.good_calls.length, `<details class="vsec ok"><summary>✓ ${res.good_calls.length} cooldowns pressed at the right moment</summary>
       <div class="body">${good}</div></details>`, "Good calls: none recorded.", false)}
     <div class="caveat">${(res.encounter || {}).covered
-      ? "Ability notes (ℹ) are our own, written from log evidence across top runs; the Wowhead guide has the full strategy."
+      ? "Ability notes (ℹ) are our own, written from log evidence across top runs."
       : "No ability notes for this dungeon yet: everything here is read from combat logs, not the encounter journal - if a "
         + "mechanic has a side effect the log can't show (e.g. dispelling something is punished), the advice changes."}
       Defensive values in data/defensives.json are approximate.</div>`;
@@ -1874,7 +1881,8 @@ function baseButtons(res) {
   const c = res.compared || {}, levels = (c.levels || []).map((l) => `+${l}`).join("/");
   const study = ((c.model || "").match(/\d+/g) || []).map(Number);
   const studyLabel = study.length ? `+${Math.min(...study)}${Math.max(...study) > Math.min(...study) ? `-${Math.max(...study)}` : ""}` : "";
-  const hasTop = (res.timeline.pulls || []).some((q) => q.study_curve);
+  const pending = !!res.preview;  // the full result (with both bands) is still on its way: clicks still count
+  const hasTop = pending || (res.timeline.pulls || []).some((q) => q.study_curve);
   if (!hasTop && BASE === "top") BASE = "peers";
   return `<button class="tlbtn${BASE === "peers" ? " on" : ""}" data-base="peers" title="The best-ranked ${esc(SP.plural)} at your key level in this dungeon">Peers${levels ? ` (${levels})` : ""}</button>`
     + `<button class="tlbtn${BASE === "top" ? " on" : ""}" data-base="top" ${hasTop ? `title="Top-ranked runs from the season study"` : `disabled title="Top players: not available yet for this dungeon"`}>Top players${studyLabel ? ` (${studyLabel})` : ""}</button>`;

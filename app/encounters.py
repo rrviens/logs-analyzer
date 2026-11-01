@@ -1,5 +1,5 @@
 """Encounter notes (data/encounters.json): our own short note per important enemy ability, written from log
-evidence, plus a Wowhead guide link per dungeon. Notes are matched by spell id, then by name (one ability often
+evidence. Notes are matched by spell id, then by name (one ability often
 has several ids)."""
 import json
 from dataclasses import dataclass, field
@@ -11,7 +11,6 @@ PATH = PROJECT_ROOT / "data" / "encounters.json"
 
 @dataclass
 class Encounter:
-    guide: str | None = None
     by_id: dict = field(default_factory=dict)
     by_name: dict = field(default_factory=dict)
 
@@ -39,4 +38,4 @@ def load_encounter(dungeon: str) -> Encounter:
     if not d:
         return Encounter()
     by_id = d.get("abilities", {})
-    return Encounter(d.get("guide"), by_id, {e["name"]: e for e in by_id.values()})
+    return Encounter(by_id, {e["name"]: e for e in by_id.values()})

@@ -1,8 +1,7 @@
 {
- "_source": "Own notes derived from Warcraft Logs evidence (who an ability hits, how hard, how many players at once, dispels and interrupts across cached top runs), Oct 2026. Wowhead dungeon guides are linked as the reference for full strategy; no text is copied from them. Edit freely.",
+ "_source": "Own notes derived from Warcraft Logs evidence (who an ability hits, how hard, how many players at once, dispels and interrupts across cached top runs), Oct 2026. dungeon guides are linked as the reference for full strategy; no text is copied from them. Edit freely.",
  "dungeons": {
   "The Blinding Vale": {
-   "guide": "https://www.wowhead.com/guide/midnight/the-blinding-vale-dungeon-overview-location-rewards",
    "abilities": {
     "1247644": {
      "name": "Oozing Xylem",
@@ -308,7 +307,6 @@
    }
   },
   "Den of Nalorakk": {
-   "guide": "https://www.wowhead.com/guide/midnight/den-of-nalorakk-dungeon-overview-location-rewards",
    "abilities": {
     "1238439": {
      "name": "Razor Dive",
@@ -553,27 +551,21 @@
    }
   },
   "Murder Row": {
-   "guide": "https://www.wowhead.com/guide/midnight/murder-row-dungeon-overview-location-rewards",
    "abilities": {}
   },
   "Voidscar Arena": {
-   "guide": "https://www.wowhead.com/guide/midnight/voidscar-arena-dungeon-overview-location-rewards",
    "abilities": {}
   },
   "Altar of Fangs": {
-   "guide": "https://www.wowhead.com/guide/midnight/altar-of-fangs-dungeon-overview-location-rewards",
    "abilities": {}
   },
   "Kings' Rest": {
-   "guide": "https://www.wowhead.com/guide/kings-rest-dungeon-strategy-guide",
    "abilities": {}
   },
   "Temple of Sethraliss": {
-   "guide": "https://www.wowhead.com/guide/temple-of-sethraliss-dungeon-strategy-guide",
    "abilities": {}
   },
   "Ruby Life Pools": {
-   "guide": "https://www.wowhead.com/search?q=Ruby+Life+Pools",
    "abilities": {
     "384823": {
      "name": "Inferno",
