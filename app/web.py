@@ -41,7 +41,10 @@ RECENT_FIRST = 5  # reports checked on first load; "Load more" checks all RECENT
 AUTO_ANALYZE = int(os.environ.get("AUTO_ANALYZE", "2"))  # newest unanalyzed keys queued in the background
 FINISHED_REPORT_MS = 24 * 3600 * 1000  # reports older than this are finished: fight lists cached for good
 MIN_RUN_MIN = 5  # shorter "runs" are resets
-MIN_UNTIMED_MIN = 10  # short untimed attempts are bricked keys, not worth reviewing
+UPLOADS_QUERY = "query($uid: Int!, $limit: Int) { reportData { reports(userID: $uid, limit: $limit) { data { code startTime } } } }"
+LOCAL_WCL_USER_ID = int(os.environ.get("WCL_USER_ID", "0") or 0)  # local mode: your WCL user id, to list your own uploads
+MIN_UNTIMED_MIN = 2  # untimed attempts this short are resets; longer ones (even abandoned keys) are listed
+ABANDONED_MIN = 20  # untimed and shorter than this = left before the end (a completed key runs longer)
 SAME_RUN_MS = 120_000
 
 CHARACTER_QUERY = """
@@ -314,7 +317,18 @@ def recent(limit: int = RECENT_FIRST, w: Who = Depends(who)):
         raise HTTPException(404, "Character not found on Warcraft Logs.")
     if not s.get("class") and CLASS_NAMES.get(char.get("classID")):  # saved before the class was kept: fill it in
         w.settings_path.write_text(json.dumps({**s, "class": CLASS_NAMES[char["classID"]]}))
-    reports = sorted(char["recentReports"]["data"], key=lambda r: -r["startTime"])
+    # Warcraft Logs links reports to a character through rankings, so a session of only untimed keys never shows up
+    # there. Reports you uploaded yourself are added too (hosted: your sign-in; locally: WCL_USER_ID).
+    reports = {r["code"]: r for r in char["recentReports"]["data"]}
+    uploader = w.user_id or LOCAL_WCL_USER_ID
+    if uploader:
+        try:
+            mine = client.query(UPLOADS_QUERY, {"uid": uploader, "limit": RECENT_REPORTS}, ttl=RECENT_TTL_S)
+            for r in mine["reportData"]["reports"]["data"]:
+                reports.setdefault(r["code"], r)
+        except (WCLError, httpx.HTTPError, KeyError, TypeError) as e:
+            log.warning("own uploads unavailable (user %s): %s", uploader, e)
+    reports = sorted(reports.values(), key=lambda r: -r["startTime"])
     runs, seen, partial = [], [], None
     now_ms = datetime.now(timezone.utc).timestamp() * 1000
     for rep in reports[:max(1, limit)]:
@@ -337,7 +351,8 @@ def _auto_analyze(w: Who, runs: list[dict], s: dict) -> None:
     """Queue your newest keys that aren't analyzed yet (up to AUTO_ANALYZE), so they're ready when you click.
     Marks each queued run, so the list can say so."""
     for r in runs[:AUTO_ANALYZE]:
-        if r["analyzable"] and not r["analyzed"] and not queue.pending(w.user_id, "analyze", r["url"]):
+        abandoned = not r["timed"] and r["duration_min"] < ABANDONED_MIN  # not worth API points unless you click it
+        if r["analyzable"] and not r["analyzed"] and not abandoned and not queue.pending(w.user_id, "analyze", r["url"]):
             queue.submit(w.user_id, "analyze", {"url": r["url"], "name": s["name"], "fresh": False, "auto": True})
     for r in runs:
         r["queued"] = not r["analyzed"] and bool(queue.pending(w.user_id, "analyze", r["url"]))
