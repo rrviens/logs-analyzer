@@ -4,6 +4,7 @@ it (damage casts, other casts, idle) and what you could have dealt there: your o
 or Lava Burst / Lightning Bolt on one (the spec's damage spells, average hits from this log) times the enemies
 alive. Top healers' damage in their own calm moments is shown alongside (calm time to calm time, not pull to
 pull, because groups pull differently)."""
+import bisect
 import statistics
 from dataclasses import dataclass
 
@@ -31,6 +32,7 @@ class Window:
     other_casts: int  # everything else (heals into a healthy group, buffs, movement)
     enemies: int | None = None  # enemies alive around the window (a floor)
     potential: float | None = None  # damage you could have dealt here with your own hit sizes
+    mix: list | None = None  # [(spell, share)] peers' damage in calm moments with this many enemies
 
     @property
     def missed(self) -> float | None:
@@ -138,11 +140,98 @@ def find_windows(run: RunData, tl: Timeline, calm: list[bool], damage: list[list
         casts = [a for t, a, _ in run.casts if t0 <= t < t1]
         w = Window(t0, t1, sum(d[1] for d in damage if t0 <= d[0] < t1),
                    sum(1 for a in casts if a in damage_ids), sum(1 for a in casts if a not in damage_ids))
-        if model and enemy_casts is not None:
+        if enemy_casts is not None:
             w.enemies = enemies_alive(enemy_casts, t0, t1)
-            w.potential = model.dps(w.enemies) * w.seconds
+            if model:
+                w.potential = model.dps(w.enemies) * w.seconds
         out.append(w)
     return out
+
+
+# ---------- what peers deal in calm moments, by enemies alive ----------
+# Learned from top healers' own calm windows: their damage per second with 1, 2, 3-4 and 5+ enemies around, and
+# which spells it came from. Being real casts, it already includes DoTs ticking, cooldowns, target caps and damage
+# falloff on big packs - no per-spell rules needed.
+MIN_BUCKET_S = 10  # a top run needs this much calm time in a bucket to count
+MIX_MIN_SHARE = 0.08
+GEAR_MIN_HITS = 5
+GEAR_CLAMP = (0.5, 1.5)
+
+
+def bucket(enemies: int | None) -> int:
+    n = enemies or 1
+    return 5 if n >= 5 else 3 if n >= 3 else n
+
+
+BUCKET_LABEL = {1: "1 enemy", 2: "2 enemies", 3: "3-4 enemies", 5: "5+ enemies"}
+
+
+@dataclass
+class PeerRates:
+    rate: dict[int, float]  # bucket -> median calm damage per second across top runs
+    mix: dict[int, list]  # bucket -> [(spell, share of their damage)]
+    hit: dict[str, float]  # spell -> top players' average hit, for gear scaling
+    runs: dict[int, int]  # bucket -> top runs that had enough calm time in it
+
+
+def learn_peer_rates(tops: list[tuple]) -> PeerRates:
+    """tops: [(RunData, windows with enemies set, damage rows)] of top healers of the spec."""
+    per_run: dict[int, list[float]] = {}
+    by_spell: dict[int, dict[str, float]] = {}
+    hits: dict[str, list[float]] = {}
+    for run, windows, damage in tops:
+        names = {a: n for a, n in run.abilities}
+        for _, amount, aid in damage:
+            hits.setdefault(names.get(aid, ""), []).append(amount)
+        rows = sorted(damage)
+        times = [r[0] for r in rows]
+        acc: dict[int, list[float]] = {}
+        for w in windows:
+            k = bucket(w.enemies)
+            a = acc.setdefault(k, [0.0, 0.0])
+            a[0] += w.damage
+            a[1] += w.seconds
+            spells = by_spell.setdefault(k, {})
+            for _, amount, aid in rows[bisect.bisect_left(times, w.start):bisect.bisect_left(times, w.end)]:
+                n = names.get(aid, "")
+                spells[n] = spells.get(n, 0) + amount
+        for k, (dmg, secs) in acc.items():
+            if secs >= MIN_BUCKET_S:
+                per_run.setdefault(k, []).append(dmg / secs)
+    mix = {}
+    for k, spells in by_spell.items():
+        total = sum(spells.values()) or 1
+        mix[k] = [(n, round(v / total, 2)) for n, v in sorted(spells.items(), key=lambda x: -x[1]) if v / total >= MIX_MIN_SHARE][:3]
+    return PeerRates({k: statistics.median(v) for k, v in per_run.items()}, mix,
+                     {n: statistics.mean(v) for n, v in hits.items() if len(v) >= GEAR_MIN_HITS},
+                     {k: len(v) for k, v in per_run.items()})
+
+
+def gear_factor(run: RunData, damage: list[list], peers: PeerRates) -> float:
+    """Your hit sizes vs the top players' on the same spells (weighted by how often you use each) - gear, key level
+    and crit in one number, so their rates are scaled to what you can do."""
+    names = {a: n for a, n in run.abilities}
+    mine: dict[str, list[float]] = {}
+    for _, amount, aid in damage:
+        mine.setdefault(names.get(aid, ""), []).append(amount)
+    num = den = 0.0
+    for n, v in mine.items():
+        if len(v) >= GEAR_MIN_HITS and n in peers.hit:
+            num += sum(v)
+            den += peers.hit[n] * len(v)
+    return min(GEAR_CLAMP[1], max(GEAR_CLAMP[0], num / den)) if den else 1.0
+
+
+def apply_peer_rates(windows: list[Window], peers: PeerRates, gear: float) -> None:
+    """Your potential per window = what peers deal with that many enemies, at your gear. Falls back to the
+    nearest smaller bucket peers have data for."""
+    for w in windows:
+        k = bucket(w.enemies)
+        while k not in peers.rate and k > 1:
+            k = {5: 3, 3: 2, 2: 1}[k]
+        if k in peers.rate:
+            w.potential = peers.rate[k] * gear * w.seconds
+            w.mix = peers.mix.get(k)
 
 
 def calm_dps(windows: list[Window]) -> float | None:

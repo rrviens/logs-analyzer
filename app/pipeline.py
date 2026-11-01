@@ -16,7 +16,8 @@ from app.composition import describe, intake_modifiers, load_effects
 from app.context import build_context
 from app.context_model import load_dungeon
 from app.chains import OUTCOME_S, Chain, find_chains
-from app.dps_windows import calm_bins, calm_dps, damage_model, fetch_damage_done, find_windows, median_rate, summarize
+from app.dps_windows import (BUCKET_LABEL, apply_peer_rates, bucket, calm_bins, calm_dps, damage_model, fetch_damage_done,
+                             find_windows, gear_factor, learn_peer_rates, median_rate, summarize)
 from app.encounters import Encounter, load_encounter
 from app.findings import Analysis, Finding, TopRun, analyze
 from app.metrics import hot_refreshes, hots_active
@@ -39,7 +40,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 59
+RULES_VERSION = 60
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -475,15 +476,21 @@ def _dps_windows(client, fight, run, tl, segs, profiles, tops, candidates, spec)
     calm = calm_bins(run, tl, [h.t for s in segs for h in s.hits],
                      {i: p.target_ehp for i, p in enumerate(profiles) if p})
     damage = fetch_damage_done(client, fight, run)
-    model = damage_model(run, damage, spec)
-    windows = find_windows(run, tl, calm, damage, model,
-                           fetch_kicks(client, fight, run.player_ids)["casts"] if model else None)
-    rates, pub = [], client.public()
+    model = damage_model(run, damage, spec)  # fallback when peers have no calm data for this many enemies
+    windows = find_windows(run, tl, calm, damage, model, fetch_kicks(client, fight, run.player_ids)["casts"])
+    rates, pub, peer_data = [], client.public(), []
     for (tr, otl), (f, _) in zip(tops, candidates):
         top_segs = all_segments(tr.run, otl, spec)
         top_calm = calm_bins(tr.run, otl, [h.t for s in top_segs for h in s.hits])
-        rates.append(calm_dps(find_windows(tr.run, otl, top_calm, fetch_damage_done(pub, f, tr.run))))
+        top_damage = fetch_damage_done(pub, f, tr.run)
+        top_windows = find_windows(tr.run, otl, top_calm, top_damage, None,
+                                   fetch_kicks(pub, f, tr.run.player_ids)["casts"])
+        rates.append(calm_dps(top_windows))
+        peer_data.append((tr.run, top_windows, top_damage))
     top_rate = median_rate(rates)
+    if peer_data:  # what peers really deal with this many enemies (DoTs, cooldowns, target caps included)
+        peers = learn_peer_rates(peer_data)
+        apply_peer_rates(windows, peers, gear_factor(run, damage, peers))
     rel = lambda t: round((t - run.start) / 1000, 1)
     rows = []
     for w in windows:
@@ -494,8 +501,14 @@ def _dps_windows(client, fight, run, tl, segs, profiles, tops, candidates, spec)
         else:  # no spell model: vs top healers' calm-time rate
             use = min(1.0, mine / top_rate) if top_rate else None
             missed = max(0.0, top_rate * w.seconds - w.damage) if top_rate else None
-        could = (f"Could have dealt ~{w.potential / 1e6:.1f}M with your own {_could_spell(spec, w.enemies)} "
-                 f"({w.enemies} enem{'ies' if w.enemies != 1 else 'y'} casting nearby)") if w.potential else ""
+        enemies = f"{w.enemies} enem{'ies' if w.enemies != 1 else 'y'} casting nearby"
+        if w.potential and w.mix:
+            could = (f"Could have dealt ~{w.potential / 1e6:.1f}M: peer {spec.plural} with {BUCKET_LABEL[bucket(w.enemies)]} "
+                     f"deal that at your gear, mostly " + ", ".join(f"{n} {s:.0%}" for n, s in w.mix) + f" ({enemies})")
+        elif w.potential:
+            could = f"Could have dealt ~{w.potential / 1e6:.1f}M with your own {_could_spell(spec, w.enemies)} ({enemies})"
+        else:
+            could = ""
         s = max(0, (w.start - run.start) // 1000)
         rows.append({"start_s": rel(w.start), "end_s": rel(w.end), "use": round(use, 2) if use is not None else None,
                      "missed": round(missed or 0), "clock": f"{s // 60}:{s % 60:02d}", "seconds": round(w.seconds),
