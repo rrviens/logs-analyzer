@@ -499,13 +499,13 @@
 <script>const whTooltips = {colorLinks: false, iconizeLinks: false, renameLinks: false};</script>
 <script src="https://wow.zamimg.com/js/tooltips.js" async></script>
 <script>
-  // Visitor counts (GoatCounter: no cookies, path only - report codes after # are never sent). Hosted site only.
-  if (location.hostname === "healer-review.onrender.com") {
-    const gc = document.createElement("script");
-    gc.async = true; gc.src = "https://gc.zgo.at/count.js";
-    gc.dataset.goatcounter = "https://rviens.goatcounter.com/count";
-    document.head.appendChild(gc);
-  }
+  // Visitor count: one ping per page load to our own server, which passes it to GoatCounter (ad blockers block
+  // GoatCounter's script). Path only - report codes after # are never sent. Off unless the host has a token.
+  try {
+    fetch("/api/pv", {method: "POST", headers: {"Content-Type": "application/json"}, keepalive: true,
+      body: JSON.stringify({path: location.pathname, title: document.title,
+                            ref: document.referrer && !document.referrer.startsWith(location.origin) ? document.referrer : ""})});
+  } catch (e) {}
 </script>
 </head>
 <body>

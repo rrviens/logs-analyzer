@@ -393,6 +393,40 @@ def budget(w: Who = Depends(who)):
     return {"used": round(r["pointsSpentThisHour"]), "limit": r["limitPerHour"], "reset_in_s": r["pointsResetIn"]}
 
 
+# ---------- visitor counts ----------
+# Page views go to GoatCounter from the server, so ad blockers (which block GoatCounter's own script) don't hide
+# visitors. The token lives only in the host's environment; without it nothing is sent (local runs).
+GOATCOUNTER_TOKEN = os.environ.get("GOATCOUNTER_TOKEN", "")
+GOATCOUNTER_URL = os.environ.get("GOATCOUNTER_URL", "https://rviens.goatcounter.com") + "/api/v0/count"
+
+
+class PageView(BaseModel):
+    path: str = "/"
+    title: str = ""
+    ref: str = ""
+
+
+def _send_view(hit: dict) -> None:
+    try:
+        r = httpx.post(GOATCOUNTER_URL, json={"no_sessions": False, "hits": [hit]}, timeout=10,
+                       headers={"Authorization": f"Bearer {GOATCOUNTER_TOKEN}"})
+        if r.status_code >= 400:
+            log.warning("goatcounter: %s %s", r.status_code, r.text[:200])
+    except httpx.HTTPError as e:
+        log.warning("goatcounter: %s", e)
+
+
+@app.post("/api/pv", status_code=204)
+def page_view(pv: PageView, request: Request):
+    ua = request.headers.get("user-agent", "")
+    if not GOATCOUNTER_TOKEN or not ua or "bot" in ua.lower():
+        return
+    ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+          or (request.client.host if request.client else ""))
+    hit = {"path": pv.path[:200] or "/", "title": pv.title[:200], "ref": pv.ref[:500], "ip": ip, "user_agent": ua}
+    threading.Thread(target=_send_view, args=(hit,), daemon=True).start()
+
+
 # ---------- analysis and comparison (background jobs, visible only to their owner) ----------
 
 # Analyses run as queued jobs (app/jobs.py): they survive restarts and wait out Warcraft Logs rate limits.

@@ -22,6 +22,8 @@ services:
         value: "3"  # event streams of one log fetched at once (each trims page by page); lower to 2 on memory errors
       - key: ADMIN_USER_IDS
         sync: false  # your Warcraft Logs user id (hover your name / Sign out after signing in); comma-separated
+      - key: GOATCOUNTER_TOKEN
+        sync: false  # GoatCounter API token with "Record pageviews" - visitor counts sent from the server
       - key: WCL_CLIENT_ID
         sync: false
       - key: WCL_CLIENT_SECRET
