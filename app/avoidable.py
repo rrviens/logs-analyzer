@@ -26,6 +26,17 @@ DEFAULT_INTERRUPT_CD_S = 15
 INTERRUPTS = {"Wind Shear", "Pummel", "Kick", "Mind Freeze", "Counterspell", "Quell", "Skull Bash", "Solar Beam",
               "Spear Hand Strike", "Rebuke", "Avenger's Shield", "Silence", "Muzzle", "Counter Shot", "Disrupt",
               "Spell Lock", "Optical Blast", "Axe Toss"}
+# Stuns, knockbacks and CC that stop an enemy cast (they show up in the log as interrupts too). Only ones a player
+# used in the run count as theirs (never cast = not talented).
+STUNS_CC = {"Leg Sweep", "Capacitor Totem", "Shockwave", "Storm Bolt", "Intimidating Shout", "Hammer of Justice",
+            "Blinding Light", "Chaos Nova", "Fel Eruption", "Sigil of Misery", "Sigil of Silence", "Sigil of Chains",
+            "Mighty Bash", "Incapacitating Roar", "Typhoon", "Ursol's Vortex", "Mass Entanglement", "Shadowfury",
+            "Mortal Coil", "Fear", "Howl of Terror", "Intimidation", "Binding Shot", "Psychic Scream", "Psychic Horror",
+            "Thunderstorm", "Sundering", "Dragon's Breath", "Blast Wave", "Ring of Frost", "Polymorph", "Hex",
+            "Gorefiend's Grasp", "Asphyxiate", "Death Grip", "Remorseless Winter", "Kidney Shot", "Cheap Shot", "Blind",
+            "Gouge", "Paralysis", "Ring of Peace", "Tail Swipe", "Wing Buffet", "Landslide", "Imprison", "Repentance",
+            "Holy Word: Chastise", "Shining Force", "Static Charge", "Earthquake"}
+DEFAULT_CC_CD_S = 45
 IGNORE = {"Stagger", "Spirit Link Totem", "Burning Rush", "Lifebloom", "Phantom Singularity", "Unstable Affliction"}
 
 
@@ -231,7 +242,7 @@ def went_through(run: RunData, mine: dict, kickable_spells: dict, group_casts: l
     (players who used that interrupt at least once; cooldown learned from their shortest gap)."""
     uses: dict[tuple[int, int], list[int]] = {}
     for t, src, aid, _ in group_casts:
-        if run.ability_name(aid) in INTERRUPTS:
+        if run.ability_name(aid) in INTERRUPTS | STUNS_CC:
             uses.setdefault((src, aid), []).append(t)
     cd_ms: dict[int, int] = {}
     for (src, aid), ts in uses.items():
@@ -244,13 +255,20 @@ def went_through(run: RunData, mine: dict, kickable_spells: dict, group_casts: l
         if aid not in kickable_spells:
             continue
         rate, seen, cc = kickable_spells[aid]
-        ready = sorted({run.player_name(src) for (src, iid), ts in uses.items()
-                        if not any(0 <= t - x < cd_ms.get(iid, DEFAULT_INTERRUPT_CD_S * 1000) for x in ts)})
+        def ready_at(kinds, default_s):
+            out_r: dict[str, list[str]] = {}
+            for (src, iid), ts in uses.items():
+                if run.ability_name(iid) in kinds and not any(0 <= t - x < cd_ms.get(iid, default_s * 1000) for x in ts):
+                    out_r.setdefault(run.player_name(src), []).append(run.ability_name(iid))
+            return out_r
+        ready_kicks, ready_cc = ready_at(INTERRUPTS, DEFAULT_INTERRUPT_CD_S), ready_at(STUNS_CC, DEFAULT_CC_CD_S)
+        ready = sorted(ready_kicks)
         ev = f"stopped in {rate:.0%} of top casts ({seen} seen)"
         ev += f" · {len(ready)} interrupt{'s' if len(ready) != 1 else ''} ready: {', '.join(ready)}" if ready else \
             " · no interrupt was ready"
         if cc:
             ev += f" · peer groups also stop it with {', '.join(cc)}"
-        out.append({"t": t, "ability": run.ability_name(aid), "ability_id": aid, "ready": ready,
+        out.append({"t": t, "ability": run.ability_name(aid), "ability_id": aid, "ready": ready, "rate": rate, "seen": seen,
+                    "ready_kicks": ready_kicks, "ready_cc": ready_cc,
                     "tag": Tag("went_through", run.ability_name(aid), ev)})
     return out

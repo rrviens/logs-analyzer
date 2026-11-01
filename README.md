@@ -18,6 +18,8 @@ Discipline Priest.
 - Review strictness follows the key: farm keys show only what hurt, push keys get the full review (based on your
   best timed key; override in Display).
 - Death recaps: what killed the player, what was ready (group / victim / you) and whether it would have saved them.
+- Stoppable casts: flags deaths where an enemy cast that peer groups usually stop (interrupt, stun or CC) did most of
+  the damage, and who had a kick or stun ready.
 - Damage spikes judged on **your** cooldowns: held cooldowns, healing overlaps that left the next spike uncovered,
   big hits with a cooldown ready but unused.
 - Avoidable damage and missed interrupts, learned from peer logs.

@@ -39,7 +39,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 54
+RULES_VERSION = 55
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -123,6 +123,53 @@ def _spell_ids(run, out: dict) -> dict[str, int]:
         if aid > 0 and len(name) >= 4 and name not in SPELL_LINK_SKIP and name not in ids and name in text:
             ids[name] = aid
     return ids
+
+
+STOP_SHARE = 0.25  # a stoppable cast must have done at least this share of the damage in the last 10s
+STOP_WINDOW_MS = 12000  # ...and completed this close before the death
+
+
+def _stoppable(r: dict, avoid: Avoidance, run) -> dict | None:
+    """A death mostly caused by an enemy cast peer groups usually stop (interrupt, stun or CC) - and who in the group
+    had something ready to stop it (the healer first)."""
+    hits: dict[str, float] = {}
+    for e in r.get("events", []):
+        if e.get("kind") == "hit" and e.get("ability"):
+            hits[e["ability"]] = hits.get(e["ability"], 0.0) + (e.get("amount") or 0)
+    total = sum(hits.values())
+    best = None
+    for w in avoid.went_through:
+        share = hits.get(w["ability"], 0.0) / total if total else 0.0
+        if r["t"] - STOP_WINDOW_MS <= w["t"] <= r["t"] and share >= STOP_SHARE and (not best or share > best[1]):
+            best = (w, share)
+    if not best:
+        return None
+    w, share = best
+    healer = run.player_name(run.healer_id)
+    ready = {}
+    for who, names in list(w.get("ready_kicks", {}).items()) + list(w.get("ready_cc", {}).items()):
+        ready.setdefault(who, []).extend(n for n in names if n not in ready.get(who, []))
+    order = sorted(ready, key=lambda who: (who != healer, who))  # your own tools first
+    return {"ability": w["ability"], "share": round(share, 2), "rate": round(w.get("rate", 0), 2), "seen": w.get("seen"),
+            "ready": [{"player": who, "you": who == healer, "tools": ready[who]} for who in order]}
+
+
+def _stoppable_finding(recaps: list[dict], clock) -> Finding | None:
+    """Two or more deaths after casts the group could have stopped: one finding, each death as evidence."""
+    hits = [r for r in recaps if r.get("stoppable")]
+    if len(hits) < 2:
+        return None
+    lines = []
+    for r in hits:
+        s = r["stoppable"]
+        who = "; ".join(f"{'you' if x['you'] else x['player']}: {', '.join(x['tools'])}" for x in s["ready"][:4]) or "nothing was ready"
+        lines.append(f"{clock(r['t'])} {r['victim']} - {s['ability']} did {s['share']:.0%} of the damage; peer groups stop it "
+                     f"{s['rate']:.0%} of the time. Ready: {who}.")
+    return Finding(hits[0]["t"], hits[0].get("pull") or "Whole run", 55,
+                   f"{len(hits)} deaths after casts your group could have stopped", lines,
+                   [["Peers", "Peer groups interrupt, stun or CC these casts most of the time."]], rule="stoppable",
+                   short=f"{len(hits)} deaths after stoppable casts",
+                   fix="Stun / interrupt that cast")
 
 
 def _own_run_sections(client, fight, run, tl, segs, players, state, spec) -> dict:
@@ -278,6 +325,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         tag = avoid.tag_by_name(run, r["cause"]["name"], r["t"])
         r["avoid"] = {"label": tag.label, "line": tag.line()} if tag else None
         r["note"] = encounter.note(name=r["cause"]["name"])
+        r["stoppable"] = _stoppable(r, avoid, run)
     spans = fetch_defense_spans(client, fight, run, my_players, load_defensives())
     group_defs, seen = [], []
     for s in sorted(spans, key=lambda s: s["start"]):  # one entry per press (a group span is logged per player)
@@ -289,6 +337,8 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
                      my_heals, phases, phase_rows, my_state, death_recaps, spec=spec, group_defs=group_defs)
     chains = find_chains(run, tl, fetch_auras(client, fight, run.player_ids), my_state, tops, group_casts, spec)
     result.findings += _chain_findings(run, chains, clock)
+    if (stop := _stoppable_finding(death_recaps, clock)):
+        result.findings.append(stop)
     _soften(result.findings, run, avoid, death_recaps, clock)
     comp_notes = [
         f"{mod}: in your group; {sum(1 for tr, _ in tops if mod in tr.intake_modifiers)} of {len(tops)} "

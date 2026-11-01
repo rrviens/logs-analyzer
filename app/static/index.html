@@ -1613,12 +1613,17 @@ function renderDeaths(res) {
       <summary><span class="when">${T(d.clock)}</span><span class="sub">${esc(pullShort(d.pull))}</span>
         <strong>${esc(d.victim)}</strong> ${esc(d.short || `died to ${d.killing}`)}
         ${d.avoid ? `<span class="chip avoid" title="${esc(d.avoid.line)}">${esc(d.avoid.label)}</span>` : ""}
+        ${d.stoppable ? `<span class="chip save" title="A cast peer groups usually stop did most of the damage">Stoppable</span>` : ""}
         ${d.fix ? `<span class="fix">→ ${esc(d.fix)}</span>` : ""}</summary>
       <div class="body">
         ${d.story && d.story.advice.length ? `<div class="advice"><strong>What to do:</strong><ul style="margin:4px 0 0;padding-left:18px">
           ${d.story.advice.map((a) => `<li>${T(a)}</li>`).join("")}</ul></div>` : ""}
         ${d.note ? `<div class="story note"><strong>ℹ About ${esc(d.cause ? d.cause.name : d.killing)}:</strong> ${esc(d.note)}</div>` : ""}
         ${d.avoid ? `<div class="story"><strong>⚠ ${esc(d.avoid.label)}:</strong> ${T(d.avoid.line.split(" - ").slice(1).join(" - "))}</div>` : ""}
+        ${d.stoppable ? `<div class="story note"><strong>⛔ Could likely have been stopped:</strong> ${esc(d.stoppable.ability)} did
+          ${Math.round(d.stoppable.share * 100)}% of the damage, and peer groups stop that cast ${Math.round(d.stoppable.rate * 100)}% of the
+          time (interrupt, stun or CC). Ready then: ${d.stoppable.ready.length ? d.stoppable.ready.map((x) =>
+            `<b>${x.you ? "you" : esc(x.player)}</b> - ${esc(x.tools.join(", "))}`).join("; ") : "nothing - every interrupt and stun was on cooldown"}.</div>` : ""}
         ${d.cause ? `<div class="story"><strong>Cause:</strong> ${T(d.cause.lines.join(" · "))}
           ${d.cause.name !== d.killing ? ` · killing blow ${esc(d.killing)}` : ""}</div>` : ""}
         ${d.story ? `<ul class="storylines">${d.story.lines.map((l) => `<li>${T(l)}</li>`).join("")}</ul>` : ""}
