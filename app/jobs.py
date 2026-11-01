@@ -123,7 +123,9 @@ class Jobs:
                     log.warning("job %s (%s, owner %s) rate limited, attempt %d - retrying in %ds", job_id[:8], kind,
                                 owner, attempts + 1, wait)
                     self._set(job_id, status="waiting", attempts=attempts + 1, next_at=time.time() + wait,
-                              note=f"Waiting for Warcraft Logs (it's limiting requests) - retrying in "
+                              note=f"Warcraft Logs is still processing the end of this key - retrying in {_dur(wait)} "
+                                   f"(at {at} UTC)." if e.uploading else
+                                   f"Waiting for Warcraft Logs (it's limiting requests) - retrying in "
                                    f"{_dur(wait)} (at {at} UTC). Everything fetched so far is saved.")
                 else:
                     log.warning("job %s (%s, owner %s) failed: %s", job_id[:8], kind, owner, e)

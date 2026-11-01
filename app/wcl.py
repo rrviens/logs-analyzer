@@ -33,9 +33,10 @@ AUX_WORKERS = 4  # small per-log / per-death fetches run this many at a time
 
 
 class WCLError(RuntimeError):
-    def __init__(self, message, rate_limited: bool = False, retry_after: float | None = None):
+    def __init__(self, message, rate_limited: bool = False, retry_after: float | None = None, uploading: bool = False):
         super().__init__(message)
         self.rate_limited, self.retry_after = rate_limited, retry_after
+        self.uploading = uploading  # the log isn't fully processed yet: retried like a rate limit, own wording
 
 
 def _retry_after(r: httpx.Response) -> float | None:
@@ -128,6 +129,15 @@ class WCLClient:
 
     def set_cached(self, key: str, value) -> None:
         self._write(key, json.dumps(value))
+
+    def forget_fight(self, code: str, fight_id: int) -> int:
+        """Drops everything cached for one fight (run data, casts, auras, stored analyses) - for a copy fetched
+        while the log was still uploading."""
+        with self._lock:
+            n = self._db.execute("DELETE FROM cache WHERE key LIKE ? OR key LIKE ?",
+                                 (f"{self._ns}%:{code}:{fight_id}:%", f"{self._ns}%:{code}:{fight_id}")).rowcount
+            self._db.commit()
+        return n
 
     def _post(self, query: str, variables: dict | None) -> httpx.Response:
         """POST with backoff on 429 / 5xx. A 429 with the hourly points used up is not worth waiting out:

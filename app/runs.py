@@ -9,9 +9,11 @@ from dataclasses import asdict, dataclass
 
 from app.reports import Fight, get_players
 from app.specs.base import Spec
-from app.wcl import WCLClient
+from app.wcl import WCLClient, WCLError
 
 CACHE_VERSION = 2
+UPLOAD_GAP_MS = 60_000  # events ending this long before the last pull does = the log is still uploading
+UPLOAD_RETRY_S = 120
 FETCH_STREAMS = int(os.environ.get("FETCH_STREAMS", "3"))  # event streams of one run fetched at once
 # Events per request (WCL allows up to 10000). Smaller pages keep less in memory at once - a small host can then
 # fetch more logs in parallel - at the cost of more round trips.
@@ -89,9 +91,19 @@ class RunData:
         return next((a[1] for a in self.abilities if a[0] == aid), f"spell {aid}")
 
 
+def _uploading(pulls: list[dict], *streams: list[list]) -> bool:
+    """A live-logged key analyzed too soon: Warcraft Logs already lists every pull, but the events stop well before
+    the last pull ends (there is always damage, healing and casting in a pull)."""
+    last = max((rows[-1][0] for rows in streams if rows), default=0)
+    return bool(pulls) and last < pulls[-1]["end"] - UPLOAD_GAP_MS
+
+
 def fetch_run(client: WCLClient, fight: Fight, healer_id: int, spec: Spec) -> RunData:
     key = f"run:v{CACHE_VERSION}:{fight.report_code}:{fight.id}:{healer_id}"
     cached = client.get_cached(key)
+    if cached and _uploading(cached["pulls"], cached["damage"], cached["heals"], cached["casts"]):
+        client.forget_fight(fight.report_code, fight.id)  # saved mid-upload: fetch it all again
+        cached = None
     if cached:
         cached["pulls"] = [Pull(**p) for p in cached["pulls"]]
         if "riptide" in cached:  # cached before specs: the field held Resto Shaman's Riptide
@@ -149,6 +161,9 @@ def fetch_run(client: WCLClient, fight: Fight, healer_id: int, spec: Spec) -> Ru
         damage, heals, deaths, casts, hots = [f.result() for f in [pool.submit(fn) for fn in
                                                                    (damage, heals, deaths, casts, hots)]]
 
+    if _uploading([asdict(p) for p in pulls], damage, heals, casts):
+        raise WCLError("Warcraft Logs is still processing the end of this key", rate_limited=True,
+                       retry_after=UPLOAD_RETRY_S, uploading=True)
     run = RunData(
         code=fight.report_code,
         fight_id=fight.id,
