@@ -23,4 +23,6 @@ SPEC = Spec(
     tracked_buffs=("Weal and Woe", "Borrowed Time", "Power of the Dark Side"),
     mana_spells="Power Word: Radiance and Power Word: Shield",
     personal_habit="press Desperate Prayer about every 3 minutes",
+    # Ramps are pressed on a plan, not into every dip: a trial on a top +23 log flagged Ultimate Penitence three times.
+    ramp_cooldowns=("Evangelism", "Ultimate Penitence"),
 )

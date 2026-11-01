@@ -574,6 +574,8 @@ def _held_cooldowns(c: _Ctx) -> list[Finding]:
         for a in c.cds.casts:
             if not c.cds.ready(a, t0):
                 continue
+            if c.cds.name(a) in c.spec.ramp_cooldowns and not c.planned_near(a, t0):
+                continue  # a planned ramp: only top players' timings judge it (planned-cooldown and rate rules)
             if any(s <= w.end and w.start <= e for s, e in c.covered.get(a, [])):
                 continue  # already reported as a missed planned use
             nxt = c.cds.next_after(a, t1)

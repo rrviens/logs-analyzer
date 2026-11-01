@@ -9,7 +9,7 @@ your key level) and **top players** (a season study of top-ranked runs), and onl
 ![A run in the dark theme](docs/screenshots/run-dark.png)
 
 Specs: Restoration Shaman, Restoration Druid, Mistweaver Monk, Holy Priest, Preservation Evoker, Holy Paladin,
-Discipline Priest (beta).
+Discipline Priest.
 
 ## Features
 
@@ -77,7 +77,6 @@ It pauses for the hourly API reset when the budget runs low (~520 points per spe
 - Cooldowns never cast in a run are treated as not talented.
 - Raider.io scores are players' current-season scores, not their scores at the time of the run.
 - The top-player band uses HP after each hit (the study skips healing events), so it runs slightly low.
-- Discipline Priest is beta: its spec module hasn't had a full trial on a top log yet.
 
 ## License
 
