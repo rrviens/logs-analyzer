@@ -1682,8 +1682,8 @@ function renderDeaths(res) {
           ${d.story.advice.map((a) => `<li>${T(a)}</li>`).join("")}</ul></div>` : ""}
         ${d.note ? `<div class="story note"><strong>ℹ About ${esc(d.cause ? d.cause.name : d.killing)}:</strong> ${esc(d.note)}</div>` : ""}
         ${d.avoid ? `<div class="story"><strong>⚠ ${esc(d.avoid.label)}:</strong> ${T(d.avoid.line.split(" - ").slice(1).join(" - "))}</div>` : ""}
-        ${d.dodge ? `<div class="story"><strong>Dodge it:</strong> ${esc(d.dodge.ability)} is damage to walk out of
-          (${T(d.dodge.why)}). No defensive is the answer here.</div>` : ""}
+        ${d.dodge && d.dodge.why !== d.note ? `<div class="story"><strong>Dodge it:</strong> ${T(d.dodge.why)} - no defensive
+          is the answer.</div>` : ""}
         ${(d.after_tank || []).length ? `<div class="story"><strong>Wipe:</strong> after the tank died -
           ${d.after_tank.map((a) => `${esc(a.victim)} (${esc(a.clock)})`).join(", ")}. The pull was lost from here, so these
           deaths aren't analyzed.</div>` : ""}
