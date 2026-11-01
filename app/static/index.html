@@ -187,8 +187,15 @@
          color: var(--text); cursor: pointer; font: inherit; }
   .run:hover:not([disabled]), .run.active { border-color: var(--accent); }
   .run[disabled] { opacity: .5; cursor: default; }
-  .run .top { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
-  .run .sub { color: var(--muted); font-size: 0.8667rem; display: flex; gap: 8px; flex-wrap: wrap; }
+  /* key card: text on the left, a fixed badge column on the right (result on top, analysis status under it) */
+  .run { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "top top" "sub st";
+         column-gap: 8px; row-gap: 4px; align-items: center; }
+  .run .top { grid-area: top; display: grid; grid-template-columns: minmax(0, 1fr) 5.4rem; gap: 8px; font-weight: 600;
+              align-items: start; }
+  .run .top .nm { overflow-wrap: anywhere; }  /* long names wrap; the badge column keeps its place */
+  .run .top .tag, .run .st .tag { justify-self: end; white-space: nowrap; }
+  .run .sub { grid-area: sub; color: var(--muted); font-size: 0.8667rem; display: flex; gap: 8px; flex-wrap: wrap; }
+  .run .st { grid-area: st; display: grid; width: 5.4rem; min-height: 1.4em; }
   .tag { font-size: 0.8667rem; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
   .tag.timed { background: var(--good-bg); color: var(--good); }
   .tag.depleted { background: var(--low-bg); color: var(--low); }
@@ -573,11 +580,12 @@ async function loadRuns(limit = RUNS_LIMIT) {
     $("runs").innerHTML = quiet + data.runs.map((r) => `
       <button class="run${current === r.url ? " active" : ""}" data-url="${esc(r.url)}" ${r.analyzable ? "" :
         `disabled title="You played ${esc(r.spec || "another character")} - only supported healer specs can be analyzed"`}>
-        <div class="top"><span>${esc(r.dungeon)} +${r.level}</span>
+        <div class="top"><span class="nm">${esc(r.dungeon)} +${r.level}</span>
           <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span></div>
         <div class="sub"><span>${ago(r.started)}</span><span>${r.duration_min} min</span>
-          ${r.analyzable ? "" : `<span>${esc(r.spec || "not in group")}</span>`}
-          ${r.analyzed ? `<span class="tag done">Analyzed</span>` : r.queued ? `<span class="tag prep" title="Being analyzed in the background - ready soon">Preparing...</span>` : ""}</div>
+          ${r.analyzable ? "" : `<span>${esc(r.spec || "not in group")}</span>`}</div>
+        <div class="st">${r.analyzed ? `<span class="tag done">Analyzed</span>` : r.queued
+          ? `<span class="tag prep" title="Being analyzed in the background - ready soon">Preparing...</span>` : ""}</div>
       </button>`).join("") + note + (more ? `<div class="empty">${more}</div>` : "");
     document.querySelectorAll(".run:not([disabled])").forEach((el) => el.onclick = () => analyze(el.dataset.url));
     // Keys being prepared in the background: refresh the list until they're done.
