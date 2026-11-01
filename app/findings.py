@@ -473,14 +473,24 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
             f"{x['ability']} on {'yourself' if x['target'] == 'self' and victim == c.run.healer_id else x['target']}"
             + (f" at {x['hp']:.0%} HP" if x["hp"] is not None else "") + f" ({x['dt']:.1f}s)" for x in casts) + ".")
 
-    every = [i for k in ("victim", "healer", "group") for i in r["ready"][k] if not i.get("escape")]
+    # A boss or mob ability is the victim's to survive: others' externals and group cooldowns are context, never
+    # "would have saved them" or the fix.
+    others = [i for k in ("healer", "group") for i in r["ready"][k]
+              if not i.get("escape") and i["status"] == "ready" and i.get("verdict") == "lived"]
+    every = [i for i in r["ready"]["victim"] if not i.get("escape")]
     # Personals with no time to react are context only: never a miss, never weight.
     no_window = [i for i in every if i.get("no_window") and i["status"] == "ready"]
     every = [i for i in every if not i.get("no_window")]
+    dodge = r.get("dodge")
+    if dodge:  # damage to walk out of: no defensive is the answer, so none counts as missed
+        every, no_window = [], []
     savers = [i for i in every if i["status"] == "ready" and i.get("verdict") == "lived"]
     hard_savers = [i for i in savers if not i.get("gcd")]  # GCD defensives: holding them is often right
     ready_any = [i for i in every if i["status"] == "ready"]
-    if savers:
+    if dodge:
+        ready_line = (f"Not a defensive problem: {dodge['ability']} is damage to dodge ({dodge['why']}). "
+                      f"Standing in it was the mistake.")
+    elif savers:
         ready_line = "Ready and would likely have saved them: " + ", ".join(
             f"{i['name']} ({i['owner']}, ~{i['lowest']:.0%}" + (", costs a GCD - holding it can be right" if i.get("gcd")
                                                                 else "") + ")" for i in savers) + "."
@@ -502,10 +512,14 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
         context.append(["No reaction window", f"{' and '.join(i['name'] for i in no_window)} "
                         f"{'was' if len(no_window) == 1 else 'were'} ready, but no reaction window "
                         f"({r.get('reaction', {}).get('why', '')}) - not a mistake."])
+    if others and not dodge:
+        context.append(["Group tools", "Also up, not expected to be spent on this: "
+                        + ", ".join(f"{i['name']} ({i['owner']})" for i in others) + "."])
     if advice:
         context.append(["What to do", " ".join(advice)])
-    fix = (r["story"] or {}).get("fix") or (f"Use {hard_savers[0]['name']}" if hard_savers
-                                            and r["cause"]["name"] not in ENVIRONMENTAL else "")
+    fix = (f"Dodge {dodge['ability']}" if dodge else
+           (r["story"] or {}).get("fix") or (f"Use {hard_savers[0]['name']}" if hard_savers
+                                             and r["cause"]["name"] not in ENVIRONMENTAL else ""))
     return Finding(t, c.pull_label(pull), min(100, severity), title, detail, context, fix=fix)
 
 

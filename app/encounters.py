@@ -26,6 +26,11 @@ class Encounter:
         e = self.entry(ability_id, name)
         return e["note"] if e else None
 
+    def avoidable(self, ability_id: int | None, name: str) -> bool:
+        """Marked as dodgeable in the notes (ground effects, things to walk out of)."""
+        e = self.entry(ability_id, name)
+        return bool(e) and e.get("avoidable") is True
+
     def not_avoidable(self, ability_id: int, name: str) -> bool:
         e = self.entry(ability_id, name)
         return bool(e) and e.get("avoidable") is False

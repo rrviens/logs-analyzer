@@ -567,6 +567,16 @@
   },
   "Ruby Life Pools": {
    "abilities": {
+    "384024": {
+     "name": "Hailbombs",
+     "kinds": [
+      "ground"
+     ],
+     "note": "Ground effect: dodge it. Standing in it can one-shot, and no defensive is the answer.",
+     "boss": "",
+     "evidence": "User report Nov 2026: a dodgeable ground one-shot",
+     "avoidable": true
+    },
     "384823": {
      "name": "Inferno",
      "kinds": [

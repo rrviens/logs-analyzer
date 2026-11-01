@@ -40,7 +40,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 61
+RULES_VERSION = 62
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -328,6 +328,10 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         r["avoid"] = {"label": tag.label, "line": tag.line()} if tag else None
         r["note"] = encounter.note(name=r["cause"]["name"])
         r["stoppable"] = _stoppable(r, avoid, run)
+        r["dodge"] = _dodgeable(r, avoid, encounter, run, [tr.run for tr, _ in tops])
+        if r["dodge"]:  # no "would have lived" on the card for damage you walk out of
+            for i in (i for items in r["ready"].values() for i in items):
+                i.pop("verdict", None)
         _judge(r, encounter)
     spans = fetch_defense_spans(client, fight, run, my_players, load_defensives())
     group_defs, seen = [], []
@@ -657,6 +661,33 @@ def _with_brings(group: list[dict], players, run, segs, group_casts) -> list[dic
     return group
 
 
+DODGE_TOP_PP = 0.3  # peers take this ability at most this many times per player per run = they dodge it
+DODGE_MIN_TOPS = 3
+
+
+def _dodgeable(r: dict, avoid: Avoidance, encounter, run, top_runs: list) -> dict | None:
+    """{ability, why} when the death's cause (or killing blow) was damage to dodge, not to survive. A death to
+    ground effects or things to walk out of gets no defensive advice: standing in it was the mistake."""
+    for name in dict.fromkeys([r["cause"]["name"], r.get("killing", "")]):
+        if not name:
+            continue
+        tag = avoid.tag_by_name(run, name, r["t"])
+        if tag and tag.kind in ("avoidable", "extra"):
+            return {"ability": name, "why": tag.evidence}
+        aid = next((a for a, n in run.abilities if n == name), None)
+        if encounter.avoidable(aid, name):
+            return {"ability": name, "why": encounter.note(aid, name) or "a ground effect to dodge"}
+        # Across peers' whole runs (not pull by pull): rarely hit at all means they walk out of it.
+        # Seen in some of their logs (so it happens on their route too), yet barely hits them.
+        hits = [sum(1 for d in t.damage if d[2] in {a for a, n in t.abilities if n == name}) / max(1, len(t.players))
+                for t in top_runs]
+        seen = any(any(n == name for _, n in t.abilities) for t in top_runs)
+        if len(top_runs) >= DODGE_MIN_TOPS and seen and statistics.mean(hits) <= DODGE_TOP_PP:
+            return {"ability": name, "why": f"peer groups get hit {statistics.mean(hits):.1f} times per player a run - "
+                                            f"they dodge it"}
+    return None
+
+
 KNOWN_KINDS = {"group", "tank", "interrupt"}  # encounter kinds that are predictable (a targeted DoT is not)
 
 
@@ -677,10 +708,12 @@ def _death_short(r: dict) -> tuple[str, str]:
     story, cause = r.get("story"), r["cause"]["name"]
     short = (f"Died in {cause} ({story['on_for']:.1f}s)" if story and story["debuff"] == cause
              else f"Died to {cause}")
-    every = [i for k in ("victim", "healer", "group") for i in r["ready"][k]
+    every = [i for i in r["ready"]["victim"]  # only the victim's own tools are a fix
              if not i.get("escape") and not i.get("no_window") and not i.get("gcd")]
     savers = [i for i in every if i["status"] == "ready" and i.get("verdict") == "lived"]
-    if story and story.get("fix"):
+    if r.get("dodge"):  # standing in it was the mistake, not a missing defensive
+        fix = f"Dodge {r['dodge']['ability']}"
+    elif story and story.get("fix"):
         fix = story["fix"]
     elif savers and cause not in ENVIRONMENTAL:
         fix = f"Use {savers[0]['name']}"
