@@ -29,7 +29,7 @@ MAX_RECAPS = 10
 DISPEL_SPELLS = {"Purify Spirit", "Purify", "Detox", "Cleanse", "Nature's Cure", "Naturalize", "Remove Corruption",
                  "Mass Dispel", "Cauterizing Flame", "Expunge", "Cleanse Toxins", "Cleanse Spirit"}
 # Group cleanse totems: dispel name in the log -> (cast name, base cooldown s).
-CLEANSE_TOTEMS = {"Poison Cleansing": ("Poison Cleansing Totem", 45)}
+CLEANSE_TOTEMS = {"Poison Cleansing": ("Poison Cleansing Totem", 120)}  # cd checked on Wowhead, Nov 2026
 LOW_HP, LOW_FOR_S = 0.5, 2.0  # under this HP for this long before dying = time to react with a personal
 ENVIRONMENTAL = {"Falling", "Drowning", "Lava", "Fatigue", "Slime"}  # no defensive saves these: no "Use X" advice
 
