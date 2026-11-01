@@ -1103,7 +1103,8 @@ function drawTimeline() {
   });
   if (isOn("top")) {  // say why there's no band, instead of silently drawing nothing
     const why = res.preview ? "Peer and top-player bands appear when the comparison is done"
-      : !whole && !curveOf(p) ? (BASE === "top" ? "No top-player data for this pull" : "No peer data for this pull") : "";
+      : !whole && !curveOf(p) ? (BASE === "top" ? "No top-player data for this pull" : "No peer data for this pull")
+      : !whole && BASE === "top" && p.study_approx ? "Top players: band from the most similar pack (approximate)" : "";
     if (why) g += `<text x="${W - R - 6}" y="${hpTop + fs + 4}" text-anchor="end" style="font-style:italic">${esc(why)}</text>`;
   }
   (isOn("uncovered") ? t.uncovered_hits || [] : []).filter((s) => s >= s0 && s <= s1).forEach((s) =>

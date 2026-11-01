@@ -39,7 +39,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 52
+RULES_VERSION = 53
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -344,7 +344,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
                               my_players, spans,
                               group_casts, avoid, chains, spec, ability_icons(client, code), encounter,
                               get_trinkets(client, fight),
-                              [((model.segment(s.pull) or {}).get("hp_curve") if model else None) for s in segs]),
+                              [model.band_segment(s.pull) if model else (None, False) for s in segs]),
     }
     progress("Finding DPS windows...")
     out["dps"], out["timeline"]["dps_windows"] = _dps_windows(client, fight, run, tl, segs, profiles, tops,
@@ -795,7 +795,9 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
                       "target": round(prof.target_ehp, 3) if prof else None,
                       "floor": round(prof.floor_ehp, 3) if prof else None,
                       "top_curve": _top_curve(seg, tops),  # peers (comparable logs at your key level)
-                      "study_curve": study_curves[i] if study_curves else None,  # top players (season study)
+                      # top players (season study); approx = borrowed from the most similar studied pack
+                      "study_curve": (study_curves[i][0] or {}).get("hp_curve") if study_curves else None,
+                      "study_approx": bool(study_curves and study_curves[i][1]),
                       "phases": [{"name": ph.name, "start_s": rel(ph.start), "end_s": rel(ph.end)} for ph in phases.get(i, [])]})
     mana = [state.mana_at(tl.start + b * tl.bin_ms) for b in range(len(tl.group_ehp))] if state and state.mana else []
     # For "Analyze selection" on the page: damage taken, avoidable hits and your casts, per second.

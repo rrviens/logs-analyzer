@@ -37,6 +37,9 @@ def doc_path(spec: Spec) -> Path:
     return (_hosted_dir().parent / "docs" if _hosted_dir() else PROJECT_ROOT / "docs" / "context_models") / f"{spec.key}.md"
 
 
+LOOSE_OVERLAP = 0.34  # enemies shared (Jaccard) for a pack to lend its top-player band to an unmatched pull
+
+
 class DungeonModel:
     def __init__(self, data: dict):
         self.data = data
@@ -55,6 +58,20 @@ class DungeonModel:
             a, b = set(pull.npc_ids), set(s["npc_ids"])
             return len(a & b) / len(a | b) if a and b else 0.0
         return max(same_name, key=overlap)
+
+    def band_segment(self, pull: Pull) -> tuple[dict | None, bool]:
+        """(segment, approximate) for the Top players HP band. Exact match first; trash without one borrows the band of
+        the studied pack sharing the most enemies (LOOSE_OVERLAP+). Findings keep using segment() (exact only)."""
+        seg = self.segment(pull)
+        if seg and seg.get("hp_curve"):
+            return seg, False
+        if pull.is_boss or not pull.npc_ids:
+            return None, False
+        mine = set(pull.npc_ids)
+        scored = [(len(mine & set(s["npc_ids"])) / len(mine | set(s["npc_ids"])), s) for s in self.data["segments"]
+                  if not s["encounter_id"] and s.get("hp_curve") and s["npc_ids"]]
+        best = max(scored, key=lambda x: x[0], default=(0, None))
+        return (best[1], True) if best[0] >= LOOSE_OVERLAP else (None, False)
 
     def runs_label(self) -> str:
         return ", ".join(f"+{r['key']}" for r in self.data["runs"])
