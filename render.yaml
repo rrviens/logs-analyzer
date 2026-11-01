@@ -20,6 +20,8 @@ services:
         value: "1"  # one top log at a time keeps memory within the Starter plan's 512 MB (2 gave 502s, 2026-11-01)
       - key: FETCH_STREAMS
         value: "3"  # event streams of one log fetched at once (each trims page by page); lower to 2 on memory errors
+      - key: ADMIN_USER_IDS
+        sync: false  # your Warcraft Logs user id (hover your name / Sign out after signing in); comma-separated
       - key: WCL_CLIENT_ID
         sync: false
       - key: WCL_CLIENT_SECRET

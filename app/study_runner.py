@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timezone
 from typing import Callable
 
-from app.context_model import doc_path, model_path
+from app.context_model import doc_path, model_path, write_model_path
 from app.specs.base import Spec
 from app.reports import get_fights, get_players
 from app.study import TRASH_MATCH_MIN, build_model, cluster_segments, discover_cooldowns, fetch_light, hp_curve, top_runs
@@ -36,8 +36,9 @@ def run_study(client: WCLClient, spec: Spec, runs: int = DEFAULT_RUNS, dungeon: 
                  f"{wait // 60} min until the hourly reset.")
         time.sleep(wait)
 
-    path, doc = model_path(spec), doc_path(spec)
-    model = json.loads(path.read_text()) if path.exists() and dungeon else {"dungeons": {}}
+    path, doc = write_model_path(spec), doc_path(spec)
+    read = model_path(spec)
+    model = json.loads(read.read_text()) if read.exists() and dungeon else {"dungeons": {}}
     model["zone"] = zone["name"]
     all_runs, skipped = {}, {}
     for n, d in enumerate(dungeons, 1):

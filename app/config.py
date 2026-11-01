@@ -21,6 +21,8 @@ DATA_DIR = Path(os.getenv("DATA_DIR") or PROJECT_ROOT)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_PATH = DATA_DIR / "cache.sqlite3"
 AUTH_MODE = os.getenv("AUTH_MODE", "local").lower()
+# Warcraft Logs user ids (comma-separated) of the site admins: they can refresh the top-player study from the page.
+ADMIN_USER_IDS = {int(x) for x in os.getenv("ADMIN_USER_IDS", "").replace(" ", "").split(",") if x.isdigit()}
 REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:8000/callback")
 SECURE_COOKIES = os.getenv("SECURE_COOKIES", "1" if AUTH_MODE == "wcl" else "0") == "1"
 

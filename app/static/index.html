@@ -351,6 +351,9 @@
                border: 1px solid color-mix(in srgb, var(--critical) 55%, transparent); border-left: 4px solid var(--critical);
                background: color-mix(in srgb, var(--critical) 12%, var(--panel)); border-radius: var(--radius-sm); }
   .errbanner[hidden] { display: none; }
+  .errlisthead { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .errlisthead strong { margin-right: auto; }
+  #studyDialog { width: min(480px, calc(100vw - 32px)); }
   .tierline { color: var(--muted); font-size: 0.8667rem; margin: 0 0 8px; }
   details.vsec.minor { border-left-color: var(--line-strong); margin-top: 6px; }
   details.vsec.minor > summary { font-weight: 500; color: var(--muted); }
@@ -527,6 +530,8 @@
   </div>
 </header>
 <div class="errbanner" id="errBanner" role="alert" hidden></div>
+<dialog id="studyDialog"><div class="errlisthead"><strong>Top-player study</strong>
+  <button type="button" class="pill" onclick="$('studyDialog').close()">Close</button></div><div id="studyBody"></div></dialog>
 
 <div class="layout">
   <aside class="panel">
@@ -2091,14 +2096,33 @@ async function loadStudy() {
     $("studyBtn").classList.toggle("stale", days == null || days >= 7);
   } catch { $("studyBtn").textContent = "Top-player study"; }
 }
+// Study dialog: admins pick a spec and runs per dungeon and start it (or export a file to commit); everyone else
+// sees when it was refreshed and which specs it covers.
 $("studyBtn").onclick = async () => {
-  const s = await api("/api/study").catch(() => ({}));
-  if (s.job && s.job.status === "running") { alert((s.job.progress || []).join("\n") || "Running..."); return; }
-  if (s.can_run === false) { alert("The top-player study is maintained by the site owner."); return; }
-  if (!confirm("Refresh the top-player study (10 top runs per dungeon)?\n\nIt pauses whenever the hourly WCL budget gets low, "
-    + "so it can take a few hours. You can keep analyzing keys meanwhile; closing the app stops it (cached runs are kept).")) return;
-  try { await api("/api/study", {method: "POST", body: JSON.stringify({runs: 10})}); } catch (e) { reportError("study", "Starting the top-player study", e.message, null, e.ref); }
-  loadStudy();
+  const s = await api(`/api/study${SP.key ? `?spec=${SP.key}` : ""}`).catch(() => ({}));
+  const ago = (iso) => { if (!iso) return "never"; const d = Math.floor((Date.now() - new Date(iso)) / 86400000);
+    return d === 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`; };
+  const covered = (s.covered || []).map((c) => `${esc(c.label)} (${ago(c.generated)})`).join(", ") || "none yet";
+  const running = s.job && s.job.status === "running";
+  $("studyBody").innerHTML = `<p class="secempty">The top-player study is the season's top-ranked runs per dungeon
+      (timings, habits and the Top players band). ${s.can_run ? "" : "It's refreshed by the site admin."}</p>
+    <p><b>Specs covered:</b> ${covered}</p>
+    ${running ? `<div class="progress">${(s.job.progress || []).slice(-6).map((x) => `<div>${esc(x)}</div>`).join("")}</div>` : ""}
+    ${s.can_run && !running ? `<label for="studySpec">Spec</label><select id="studySpec">${(s.specs || []).map((sp) =>
+        `<option value="${sp.key}" ${sp.key === (SP.key || "resto_shaman") ? "selected" : ""}>${esc(sp.label)}</option>`).join("")}</select>
+      <label for="studyRuns">Top runs per dungeon</label><input id="studyRuns" type="number" min="3" max="20" value="5">
+      <p class="secempty">It pauses for the hourly Warcraft Logs reset when the budget runs low (keeping some for
+        everyone's analyses), so it can take hours. Cached runs make a rerun cheap.</p>
+      <div class="row"><button type="button" class="pill" id="studyExport">Export file</button>
+        <button type="button" class="primary" id="studyStart">Start study</button></div>` : ""}`;
+  $("studyDialog").showModal();
+  if ($("studyStart")) $("studyStart").onclick = async () => {
+    try {
+      await api("/api/study", {method: "POST", body: JSON.stringify({spec: $("studySpec").value, runs: +$("studyRuns").value || 5})});
+      $("studyDialog").close(); loadStudy();
+    } catch (e) { reportError("study", "Starting the top-player study", e.message, null, e.ref); $("studyDialog").close(); }
+  };
+  if ($("studyExport")) $("studyExport").onclick = () => { location.href = `/api/study/export?spec=${$("studySpec").value}`; };
 };
 
 // Text size: Normal (15px root) / Large (17px); everything is in rem, the timeline re-measures.
@@ -2155,6 +2179,12 @@ async function startApp() {
   if (me.user) {
     const out = document.createElement("button");
     out.className = "pill"; out.textContent = `${me.user} · Sign out`;
+    out.title = `Your Warcraft Logs user id: ${me.user_id}`;  // what goes in ADMIN_USER_IDS
+    if (me.admin) {
+      const adm = document.createElement("span");
+      adm.className = "tag prep"; adm.textContent = "Admin"; adm.title = `Site admin (Warcraft Logs user id ${me.user_id})`;
+      $("charBtn").closest(".charpick").after(adm);
+    }
     out.onclick = async () => { await fetch("/logout", {method: "POST"}); location.href = "/"; };
     $("charBtn").closest(".charpick").after(out);
   }

@@ -2,17 +2,39 @@
 import json
 from pathlib import Path
 
-from app.config import PROJECT_ROOT
+from app.config import DATA_DIR, PROJECT_ROOT
 from app.runs import Pull
 from app.specs.base import Spec
 
 
+def _hosted_dir() -> Path | None:
+    """Where a study refreshed on the hosted site is written (the persistent disk), or None when running locally."""
+    return None if DATA_DIR.resolve() == PROJECT_ROOT.resolve() else DATA_DIR / "context_models"
+
+
 def model_path(spec: Spec) -> Path:
-    return PROJECT_ROOT / "data" / "context_models" / f"{spec.key}.json"
+    """The study to read: the data-disk copy when it is newer than the one in the repo."""
+    repo = PROJECT_ROOT / "data" / "context_models" / f"{spec.key}.json"
+    disk = _hosted_dir() / f"{spec.key}.json" if _hosted_dir() else None
+    if disk and disk.exists() and (not repo.exists() or _generated(disk) >= _generated(repo)):
+        return disk
+    return repo
+
+
+def write_model_path(spec: Spec) -> Path:
+    """Where a fresh study goes: the data disk when hosted (survives deploys), else the repo."""
+    return (_hosted_dir() or PROJECT_ROOT / "data" / "context_models") / f"{spec.key}.json"
+
+
+def _generated(path: Path) -> str:
+    try:
+        return json.loads(path.read_text()).get("generated", "")
+    except (OSError, ValueError):
+        return ""
 
 
 def doc_path(spec: Spec) -> Path:
-    return PROJECT_ROOT / "docs" / "context_models" / f"{spec.key}.md"
+    return (_hosted_dir().parent / "docs" if _hosted_dir() else PROJECT_ROOT / "docs" / "context_models") / f"{spec.key}.md"
 
 
 class DungeonModel:

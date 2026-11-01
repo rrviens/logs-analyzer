@@ -22,14 +22,15 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from app import auth
-from app.config import AUTH_MODE, CACHE_PATH, DATA_DIR, PROJECT_ROOT, SECURE_COOKIES, wcl_credentials
+from app.config import ADMIN_USER_IDS, AUTH_MODE, CACHE_PATH, DATA_DIR, PROJECT_ROOT, SECURE_COOKIES, wcl_credentials
 from app.context_model import load_dungeon
 from app.jobs import Jobs
 from app.pipeline import RULES_VERSION, AnalysisError, cache_key, run_analysis, stored_analysis
 from app import raiderio
 from app.reports import get_fights, get_players, parse_report_url, pick_fight, player_realms
 from app.specs import SPECS, spec_for
-from app.study_runner import DEFAULT_RUNS, run_study, study_info
+from app.context_model import model_path
+from app.study_runner import DEFAULT_RUNS, add_curves, run_study, study_info
 from app.wcl import WCLClient, WCLError
 
 STATIC = PROJECT_ROOT / "app" / "static"
@@ -70,6 +71,11 @@ class Who:
     client: WCLClient
     user_id: int  # 0 = local mode
     user_name: str | None
+
+    @property
+    def is_admin(self) -> bool:
+        """Local mode: you run the app, so you're the admin. Hosted: your WCL user id is in ADMIN_USER_IDS."""
+        return not self.user_id or self.user_id in ADMIN_USER_IDS
 
     @property
     def settings_path(self):
@@ -205,7 +211,8 @@ def me(request: Request):
     if AUTH_MODE != "wcl":
         return {"mode": "local", "user": None}
     s = auth.get_session(app_client, request.cookies.get(auth.SESSION_COOKIE))
-    return {"mode": "wcl", "user": s.user_name if s else None}
+    return {"mode": "wcl", "user": s.user_name if s else None, "user_id": s.user_id if s else None,
+            "admin": bool(s and s.user_id in ADMIN_USER_IDS)}
 
 
 @app.get("/login")
@@ -547,14 +554,20 @@ def _spec(key: str):
 
 @app.get("/api/study")
 def get_study(spec: str = SPECS[0].key, w: Who = Depends(who)):
-    return {**study_info(_spec(spec)), "job": study_job, "can_run": AUTH_MODE != "wcl"}
+    """Study status for the button; can_run only for admins (checked again on every admin endpoint)."""
+    covered = [{"key": sp.key, "label": sp.label, "generated": i.get("generated")}
+               for sp in SPECS if (i := study_info(sp))["exists"]]
+    return {**study_info(_spec(spec)), "job": study_job, "can_run": w.is_admin, "covered": covered,
+            "specs": [{"key": sp.key, "label": sp.label} for sp in SPECS]}
 
 
 @app.post("/api/study")
 def start_study(req: StudyRequest, w: Who = Depends(who)):
-    if AUTH_MODE == "wcl":  # one shared study per spec; the owner runs `python study.py` and deploys the result
-        raise HTTPException(403, "The top-player study is maintained by the site owner.")
+    if not w.is_admin:  # one shared study per spec: only the site admins refresh it
+        log.warning("study refresh refused: user %s is not an admin", w.user_id)
+        raise HTTPException(403, "Only the site admin can refresh the top-player study.")
     spec = _spec(req.spec)
+    log.info("admin action: user %s started the %s study (%d runs/dungeon)", w.user_id, spec.key, req.runs)
     if study_job.get("status") == "running":
         raise HTTPException(409, "A study is already running.")
     study_job.clear()
@@ -563,10 +576,24 @@ def start_study(req: StudyRequest, w: Who = Depends(who)):
     def work():
         try:
             run_study(app_client, spec, max(3, min(req.runs, 20)), progress=study_job["progress"].append)
+            add_curves(app_client, spec, progress=study_job["progress"].append)  # top-player HP bands (cached runs)
             study_job["status"] = "done"
+            log.info("study done: %s", spec.key)
         except Exception as e:  # report to the page; cached runs make a retry cheap
             log.exception("study failed (%s)", spec.key)
             study_job["status"], study_job["error"] = "error", f"{type(e).__name__}: {e}"
 
     threading.Thread(target=work, daemon=True).start()
     return study_job
+
+
+@app.get("/api/study/export")
+def export_study(spec: str, w: Who = Depends(who)):
+    """Admins: download a study file, to commit it to the repo (data/context_models/<spec>.json)."""
+    if not w.is_admin:
+        raise HTTPException(403, "Only the site admin can export the study.")
+    path = model_path(_spec(spec))
+    if not path.exists():
+        raise HTTPException(404, "No study for that spec yet.")
+    log.info("admin action: user %s exported the %s study", w.user_id, spec)
+    return FileResponse(path, filename=f"{spec}.json", media_type="application/json")
