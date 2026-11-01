@@ -1583,8 +1583,10 @@ function verdictBlock(v, dataHtml) {
 const VERDICT = {lived: "Likely lived", close: "Too close to call", died: "Would still die"};
 
 function renderDeathItem(i, showOwner) {
-  const chip = i.verdict ? ` <span class="chip ${i.verdict}">${VERDICT[i.verdict]}${i.verdict !== "died" && i.lowest != null
-    ? ` ~${Math.round(i.lowest * 100)}%` : ""}</span>` : "";
+  const chip = (i.verdict ? ` <span class="chip ${i.no_window ? "" : i.verdict}">${VERDICT[i.verdict]}${i.verdict !== "died" && i.lowest != null
+    ? ` ~${Math.round(i.lowest * 100)}%` : ""}</span>` : "")
+    + (i.no_window ? ` <span class="chip" title="No time to react: not telegraphed and they weren't low for 2s+ - not a mistake">No reaction window</span>` : "")
+    + (i.gcd ? ` <span class="chip" title="Costs a global cooldown - holding it is often right">GCD</span>` : "");
   return `<div class="item"><strong>${esc(i.name)}</strong>${showOwner ? ` <span class="sub">(${esc(i.owner)})</span>` : ""}${chip}
     <div class="sub">${T(i.text)}</div></div>`;
 }

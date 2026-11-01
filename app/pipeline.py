@@ -26,7 +26,7 @@ from app.segments import all_segments, build_profile, match_pull, segment_metric
 from app.avoidable import Avoidance, build as build_avoidance, fetch_kicks
 from app.auras import dispellable, fetch_auras, learn_self_clears, top_debuff_handling
 from app.deaths import (ENVIRONMENTAL, MAX_RECAPS, _applies, ability_schools, clear_tools, fetch_death_events, fetch_group_casts,
-                        load_defensives, recap_death)
+                        judge_reaction, load_defensives, recap_death)
 from app.context import CooldownTracker
 from app.defense_spans import active_at, fetch_defense_spans
 from app.healer_state import fetch_healer_state
@@ -39,7 +39,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 55
+RULES_VERSION = 56
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -180,6 +180,7 @@ def _own_run_sections(client, fight, run, tl, segs, players, state, spec) -> dic
     encounter = load_encounter(run.dungeon)
     for r in deaths:
         r["note"] = encounter.note(name=r["cause"]["name"])
+        _judge(r, encounter)
     dps, windows = _dps_windows(client, fight, run, tl, segs, [None] * len(segs), [], [], spec)
     return {"deaths": deaths, "dps": dps, "dps_windows": windows}
 
@@ -326,6 +327,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         r["avoid"] = {"label": tag.label, "line": tag.line()} if tag else None
         r["note"] = encounter.note(name=r["cause"]["name"])
         r["stoppable"] = _stoppable(r, avoid, run)
+        _judge(r, encounter)
     spans = fetch_defense_spans(client, fight, run, my_players, load_defensives())
     group_defs, seen = [], []
     for s in sorted(spans, key=lambda s: s["start"]):  # one entry per press (a group span is logged per player)
@@ -616,12 +618,28 @@ def _with_brings(group: list[dict], players, run, segs, group_casts) -> list[dic
     return group
 
 
+KNOWN_KINDS = {"group", "tank", "interrupt"}  # encounter kinds that are predictable (a targeted DoT is not)
+
+
+def _judge(r: dict, encounter) -> None:
+    """Reaction window for the victim's personals: telegraphed (a cast peers stop, so it has a cast time) or a
+    known encounter mechanic counts; a random targeted DoT doesn't."""
+    e = encounter.entry(r["cause"]["ability"], r["cause"]["name"])
+    kinds = set((e or {}).get("kinds", []))
+    known = kinds & KNOWN_KINDS or (kinds and "dot" not in kinds and "targeted" in kinds)
+    telegraphed = (f"{r['stoppable']['ability']} has a cast time" if r.get("stoppable")
+                   else f"{r['cause']['name']} is a known mechanic" if known else "")
+    judge_reaction(r, telegraphed)
+    r["short"], r["fix"] = _death_short(r)
+
+
 def _death_short(r: dict) -> tuple[str, str]:
     """Collapsed death card: 'Died in Bloodthorn Roots (9.5s)' and one fix."""
     story, cause = r.get("story"), r["cause"]["name"]
     short = (f"Died in {cause} ({story['on_for']:.1f}s)" if story and story["debuff"] == cause
              else f"Died to {cause}")
-    every = [i for k in ("victim", "healer", "group") for i in r["ready"][k] if not i.get("escape")]
+    every = [i for k in ("victim", "healer", "group") for i in r["ready"][k]
+             if not i.get("escape") and not i.get("no_window") and not i.get("gcd")]
     savers = [i for i in every if i["status"] == "ready" and i.get("verdict") == "lived"]
     if story and story.get("fix"):
         fix = story["fix"]

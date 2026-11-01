@@ -24,6 +24,7 @@ CAUSE_MIN_SHARE = 0.25
 SELF_DISPEL_LATE_S = 2.0  # sitting in your own dispellable debuff longer than this is worth calling out
 LIVED_MIN = 0.10  # replay bottoming out above this = likely lived; between 0 and this = too close to call
 MAX_RECAPS = 10
+LOW_HP, LOW_FOR_S = 0.5, 2.0  # under this HP for this long before dying = time to react with a personal
 ENVIRONMENTAL = {"Falling", "Drowning", "Lava", "Fatigue", "Slime"}  # no defensive saves these: no "Use X" advice
 
 DEATH_EVENTS_QUERY = """
@@ -109,11 +110,12 @@ class Replay:
 
 
 def replay(ev: dict, t_death: int, effect: dict | None, duration_s: float,
-           schools: dict[int, int] | None = None) -> Replay:
+           schools: dict[int, int] | None = None, dots: dict[int, int] | None = None) -> Replay:
     """What-if on the victim's last seconds. It follows the real HP after every hit and heal
     and only tracks the *extra* HP the defensive would have given (damage prevented, shield,
     heal, max HP), applied as if pressed just in time: active for `duration_s` ending at the
-    death. With no effect it reproduces the real death exactly."""
+    death. With no effect it reproduces the real death exactly. `dots`: debuff id -> when it
+    landed, so a deflect doesn't stop ticks of a DoT that was already on the player."""
     stream = [(d[0], 0, "dmg", d) for d in ev["damage"]] + [(h[0], 1, "heal", h) for h in ev["heals"] if not h[7]]
     stream.sort(key=lambda x: (x[0], x[1]))
     if not stream:
@@ -139,7 +141,8 @@ def replay(ev: dict, t_death: int, effect: dict | None, duration_s: float,
             lost = amount + overkill
             prevented = 0.0
             covers = active and _school_ok(effect, (schools or {}).get(aid, 0))
-            if covers and effect.get("immune"):
+            ticking = aid in (dots or {}) and dots[aid] < t_on  # applied before the deflect went up
+            if covers and (effect.get("immune") or (effect.get("deflect") and not ticking)):
                 prevented = lost
             elif covers and effect.get("dr"):
                 prevented = min(lost, (lost + absorbed) * effect["dr"])
@@ -231,6 +234,10 @@ def recap_death(run: RunData, players: list[Player], group_casts: list[list], de
     casts_by: dict[tuple[int, str], list[int]] = {}
     for c in group_casts:
         casts_by.setdefault((c[1], name_of(c[2])), []).append(c[0])
+    dots: dict[int, int] = {}
+    for d in (auras.debuffs if auras else []):
+        if d[0] == victim_id and d[2] <= t and d[3] >= t - WINDOW_MS:
+            dots[d[1]] = min(dots.get(d[1], d[2]), d[2])
 
     ready: dict[str, list[dict]] = {"group": [], "victim": [], "healer": []}
     for p in players:
@@ -245,7 +252,7 @@ def recap_death(run: RunData, players: list[Player], group_casts: list[list], de
             bucket = "victim" if scope == "personal" else "healer" if p.id == run.healer_id else "group"
             times = sorted(casts_by.get((p.id, name), []))
             cd_ms = learned_cd_ms(times, d["cd"])
-            item = {"name": name, "owner": p.name, "scope": scope}
+            item = {"name": name, "owner": p.name, "scope": scope, "gcd": bool(d.get("gcd"))}
             used = [x for x in times if t - d["duration"] * 1000 <= x <= t]
             last = max((x for x in times if x <= t), default=None)
             if used:
@@ -263,7 +270,7 @@ def recap_death(run: RunData, players: list[Player], group_casts: list[list], de
             if d["effect"].get("escape"):
                 item["escape"] = True
             elif item["status"] in ("ready", "unknown"):
-                r = replay(ev, t, d["effect"], d["duration"], schools)
+                r = replay(ev, t, d["effect"], d["duration"], schools, dots)
                 item["verdict"] = "died" if r.died else "close" if r.lowest < LIVED_MIN else "lived"
                 item["lowest"] = round(r.lowest, 2)
             ready[bucket].append(item)
@@ -320,6 +327,31 @@ def recap_death(run: RunData, players: list[Player], group_casts: list[list], de
         "replay_ok": baseline.died, "ready": ready, "events": rows,
         "cause": cause, "story": story, "last_casts": last_casts,
     }
+
+
+def low_for_s(events: list[dict]) -> float:
+    """How long the victim had been under LOW_HP right before dying (0 if the drop came out of nowhere)."""
+    marks = sorted((e["dt"], e["hp"]) for e in events if e["kind"] in ("hit", "heal") and e.get("hp") is not None)
+    start = None
+    for dt, hp in marks:
+        if hp >= LOW_HP:
+            start = None
+        elif start is None:
+            start = dt
+    return -start if start is not None else 0.0
+
+
+def judge_reaction(r: dict, telegraphed: str = "") -> None:
+    """A ready personal only counts as missed when the victim could react: a telegraphed or known mechanic,
+    or a stretch under 50%. Without that window the items get `no_window` (one context line, no weight)."""
+    low = low_for_s(r["events"])
+    why = telegraphed or (f"under 50% for {low:.1f}s" if low >= LOW_FOR_S else "")
+    r["reaction"] = {"window": bool(why), "why": why or f"{r['cause']['name']} wasn't telegraphed and they went "
+                     + (f"under 50% only {low:.1f}s before dying" if low else "from above 50% straight to dead")}
+    for i in r["ready"]["victim"]:
+        i.pop("no_window", None)
+        if not why and i["status"] in ("ready", "unknown") and i.get("verdict"):
+            i["no_window"] = True
 
 
 def learned_cd_ms(times: list[int], base_s: float) -> float:

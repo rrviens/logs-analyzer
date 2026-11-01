@@ -469,11 +469,16 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
             + (f" at {x['hp']:.0%} HP" if x["hp"] is not None else "") + f" ({x['dt']:.1f}s)" for x in casts) + ".")
 
     every = [i for k in ("victim", "healer", "group") for i in r["ready"][k] if not i.get("escape")]
+    # Personals with no time to react are context only: never a miss, never weight.
+    no_window = [i for i in every if i.get("no_window") and i["status"] == "ready"]
+    every = [i for i in every if not i.get("no_window")]
     savers = [i for i in every if i["status"] == "ready" and i.get("verdict") == "lived"]
+    hard_savers = [i for i in savers if not i.get("gcd")]  # GCD defensives: holding them is often right
     ready_any = [i for i in every if i["status"] == "ready"]
     if savers:
         ready_line = "Ready and would likely have saved them: " + ", ".join(
-            f"{i['name']} ({i['owner']}, ~{i['lowest']:.0%})" for i in savers) + "."
+            f"{i['name']} ({i['owner']}, ~{i['lowest']:.0%}" + (", costs a GCD - holding it can be right" if i.get("gcd")
+                                                                else "") + ")" for i in savers) + "."
     elif ready_any:
         ready_line = "Ready but not enough on its own: " + ", ".join(f"{i['name']} ({i['owner']})" for i in ready_any) + "."
     else:
@@ -484,13 +489,18 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
     expected = sm is not None and sm["deaths_per_run"] >= EXPECTED_DEATHS
     if expected:
         detail.append(f"Even top players' groups average {sm['deaths_per_run']:g} deaths on this pull.")
-    severity = (50 + (30 if savers and not burst else 0) + (15 if low_secs >= 3 else 0) + (10 if advice else 0)
+    saver_weight = 30 if hard_savers else 10 if savers else 0
+    severity = (50 + (saver_weight if not burst else 0) + (15 if low_secs >= 3 else 0) + (10 if advice else 0)
                 - (20 if burst and not savers else 0) - (15 if expected else 0))
     context = [["Ready?", ready_line]]
+    if no_window:
+        context.append(["No reaction window", f"{' and '.join(i['name'] for i in no_window)} "
+                        f"{'was' if len(no_window) == 1 else 'were'} ready, but no reaction window "
+                        f"({r.get('reaction', {}).get('why', '')}) - not a mistake."])
     if advice:
         context.append(["What to do", " ".join(advice)])
-    fix = (r["story"] or {}).get("fix") or (f"Use {savers[0]['name']}" if savers and r["cause"]["name"] not in ENVIRONMENTAL
-                                            else "")
+    fix = (r["story"] or {}).get("fix") or (f"Use {hard_savers[0]['name']}" if hard_savers
+                                            and r["cause"]["name"] not in ENVIRONMENTAL else "")
     return Finding(t, c.pull_label(pull), min(100, severity), title, detail, context, fix=fix)
 
 
