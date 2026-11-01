@@ -40,7 +40,8 @@ class WCLError(RuntimeError):
 
 def _retry_after(r: httpx.Response) -> float | None:
     try:
-        return float(r.headers.get("Retry-After") or 0) or None
+        value = float(r.headers.get("Retry-After") or 0)
+        return value if value > 0 else None  # WCL sometimes sends 0 or a negative value
     except ValueError:  # an HTTP date instead of seconds
         return None
 
@@ -139,7 +140,7 @@ class WCLClient:
             except httpx.TransportError:
                 if attempt == retries:
                     raise
-                time.sleep(min(2 ** attempt, self._max_wait))
+                time.sleep(max(0.5, min(2 ** attempt, self._max_wait)))
                 continue
             if r.status_code != 429 and r.status_code < 500:
                 return r
@@ -160,7 +161,7 @@ class WCLClient:
                                    rate_limited=True, retry_after=retry_after)
                 return r
             wait = retry_after or min(30.0, 2.0 * 2 ** attempt)
-            time.sleep(min(wait, self._max_wait))
+            time.sleep(max(0.5, min(wait, self._max_wait)))
         return r
 
     def _rate_limit(self) -> dict | None:
