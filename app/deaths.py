@@ -24,6 +24,12 @@ CAUSE_MIN_SHARE = 0.25
 SELF_DISPEL_LATE_S = 2.0  # sitting in your own dispellable debuff longer than this is worth calling out
 LIVED_MIN = 0.10  # replay bottoming out above this = likely lived; between 0 and this = too close to call
 MAX_RECAPS = 10
+# Healer dispel spells (a dispel event from one of these = the healer's own dispel can remove that debuff). Movement
+# tools and shapeshifts also log as dispels, so they don't count.
+DISPEL_SPELLS = {"Purify Spirit", "Purify", "Detox", "Cleanse", "Nature's Cure", "Naturalize", "Remove Corruption",
+                 "Mass Dispel", "Cauterizing Flame", "Expunge", "Cleanse Toxins", "Cleanse Spirit"}
+# Group cleanse totems: dispel name in the log -> (cast name, base cooldown s).
+CLEANSE_TOTEMS = {"Poison Cleansing": ("Poison Cleansing Totem", 45)}
 LOW_HP, LOW_FOR_S = 0.5, 2.0  # under this HP for this long before dying = time to react with a personal
 ENVIRONMENTAL = {"Falling", "Drowning", "Lava", "Fatigue", "Slime"}  # no defensive saves these: no "Use X" advice
 
@@ -220,7 +226,8 @@ def recap_death(run: RunData, players: list[Player], group_casts: list[list], de
                 ev: dict, t: int, victim_id: int, killing: int, schools: dict[int, int] | None = None,
                 auras: Auras | None = None, can_dispel: set[int] | None = None,
                 self_clears: dict[int, set[str]] | None = None, top_handling: dict[str, str] | None = None,
-                procs: dict[str, list[list]] | None = None) -> dict:
+                procs: dict[str, list[list]] | None = None, own_dispel: set[int] | None = None,
+                totems: dict[int, str] | None = None) -> dict:
     by_id = {p.id: p for p in players}
     victim = by_id.get(victim_id)
     rel = lambda ts: round((ts - t) / 1000, 1)
@@ -319,7 +326,7 @@ def recap_death(run: RunData, players: list[Player], group_casts: list[list], de
                                "hp": round(hp, 2) if hp is not None else None})
 
     story = _debuff_story(run, players, group_casts, defensives, auras, can_dispel or set(), self_clears or {},
-                          top_handling or {}, t, victim_id, cause, clock, pname) if auras else None
+                          top_handling or {}, t, victim_id, cause, clock, pname, own_dispel, totems or {}) if auras else None
     return {
         "t": t, "victim": victim.name if victim else run.player_name(victim_id),
         "victim_spec": victim.label if victim else None, "killing": name_of(killing),
@@ -360,6 +367,43 @@ def learned_cd_ms(times: list[int], base_s: float) -> float:
     return min([base_s * 1000] + [b - a for a, b in zip(times, times[1:])])
 
 
+def learn_dispels(sources: list[tuple]) -> tuple[set[int], dict[int, str]]:
+    """From (Auras, healer id, name_of) of your run and peer healers' runs: debuffs the healer's own dispel removes,
+    and debuffs a cleanse totem removes (debuff -> totem cast name)."""
+    own, totems = set(), {}
+    for auras, healer, name_of in sources:
+        for _, src, _, removed, tool in auras.dispels:
+            n = name_of(tool)
+            if n in CLEANSE_TOTEMS:
+                totems[removed] = CLEANSE_TOTEMS[n][0]
+            elif src == healer and n in DISPEL_SPELLS:
+                own.add(removed)
+    return own, totems
+
+
+def _totem_story(run, group_casts, totem: str, healer: int, start: int, until: int, debuff: str, clock,
+                 used_on) -> tuple[str, str, str]:
+    """A cleanse totem that clears this debuff: (line, advice, fix)."""
+    cd_s = next(cd for n, cd in CLEANSE_TOTEMS.values() if n == totem)
+    times = sorted(c[0] for c in group_casts if c[1] == healer and run.ability_name(c[2]) == totem)
+    if not times:
+        return f"{totem} clears it - not pressed all run (may not be talented).", "", ""
+    used_in = [x for x in times if start - 1000 <= x <= until + 500]
+    if used_in:
+        return f"{totem} (clears it): dropped at {clock(used_in[0])}.", "", ""
+    last = max((x for x in times if x < start), default=None)
+    cd_ms = learned_cd_ms(times, cd_s)
+    if last is not None and start - last < cd_ms:
+        back = last + cd_ms
+        line = f"{totem} (clears it): used at {clock(last)}{used_on(last)}, back {(back - start) / 1000:.0f}s after {debuff} landed."
+        if back < until - 1000:
+            return line, (f"{totem} came back at {clock(back)} and wasn't dropped - {(until - back) / 1000:.0f}s more "
+                          f"in {debuff}."), f"Drop {totem}"
+        return line, "", ""
+    return (f"{totem} (clears it): ready when {debuff} landed.",
+            f"{totem} was ready and clears {debuff} - drop it as it lands.", f"Drop {totem}")
+
+
 def clear_tools(defensives: dict) -> set[str]:
     """Abilities that can end a debuff on their user: escapes and immunities (not plain damage reduction)."""
     return {n for n, d in defensives.items() if d["effect"].get("escape") or d["effect"].get("immune")}
@@ -380,7 +424,8 @@ def _spent_tools(run, group_casts, defensives, known: set[str], victim_id: int, 
 
 
 def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispel, self_clears, top_handling,
-                  t, victim_id, cause, clock, pname) -> dict | None:
+                  t, victim_id, cause, clock, pname, own_dispel: set[int] | None = None,
+                  totems: dict[int, str] | None = None) -> dict | None:
     """The debuff behind the death: how long it sat on the victim, who it hit, how each of
     them got rid of it, where the dispels went, and which escape tools were still up."""
     name_of = run.ability_name
@@ -389,12 +434,18 @@ def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispe
     if not spans:
         return None
     # The cause's debuff if there is one, else the longest dispellable debuff they had.
-    spans = sorted({tuple(s) for s in spans}, key=lambda s: (name_of(s[1]) != cause["name"], s[1] not in can_dispel, s[2] - s[3]))
+    clearable = can_dispel | set(totems or {})
+    spans = sorted({tuple(s) for s in spans}, key=lambda s: (name_of(s[1]) != cause["name"], s[1] not in clearable, s[2] - s[3]))
     tgt, aid, start, end = spans[0]
-    if name_of(aid) != cause["name"] and aid not in can_dispel:
+    if name_of(aid) != cause["name"] and aid not in clearable:
         return None
     debuff = name_of(aid)
     dispellable = aid in can_dispel
+    # Your own dispel only removes some types (a Resto Shaman's doesn't touch poison): learned from your and peer
+    # healers' dispels. Unknown (no data passed) = trust "somebody dispelled it".
+    mine = dispellable if own_dispel is None else aid in own_dispel
+    healer_class = next((p.class_name for p in players if p.id == run.healer_id), "")
+    totem = (totems or {}).get(aid) if healer_class == "Shaman" else None  # only Shamans have cleanse totems
     tools = clear_tools(defensives)
     lines, advice, fixes = [], [], []
     on_for = (min(end, t) - start) / 1000
@@ -420,7 +471,17 @@ def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispe
     gaps = sorted(b[0] - a[0] for a, b in zip(healer_dispels, healer_dispels[1:]))
     dispel_cd = gaps[0] if gaps else 8000
     in_window = [x for x in healer_dispels if start <= x[0] <= t + 200]
-    if dispellable:
+    if dispellable and not mine:
+        lines.append(f"{debuff} can be dispelled, but not with your dispel"
+                     + (f" - {totem} clears it." if totem else "."))
+    if totem:
+        t_line, t_advice, t_fix = _totem_story(run, group_casts, totem, healer, start, min(end, t), debuff, clock,
+                                               lambda ts: _used_on(run, healer, ts, auras))
+        lines.append(t_line)
+        if t_advice:
+            advice.append(t_advice)
+            fixes.append(t_fix)
+    if mine:
         if in_window:
             lines.append("Your dispels while it was up: " + "; ".join(
                 f"{clock(x[0])} on {'yourself' if x[2] == healer else pname(x[2])} ({name_of(x[3])})" for x in in_window) + ".")
@@ -477,7 +538,7 @@ def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispe
                 options.append(f"{n} (clears it): ready when {debuff} landed")
                 advice.append(f"{n} was ready when {debuff} landed and clears it - use it straight away.")
                 fixes.append(f"{n} out of it")
-    if dispellable and victim_id == healer:
+    if mine and victim_id == healer:
         options.append("your own dispel")
     if options:
         lines.append("Your ways out: " + "; ".join(options) + "." if victim_id == healer
@@ -489,7 +550,7 @@ def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispe
         p_how = removed_by(auras, prev[-1], group_casts, name_of, tools)
         if p_how not in ("expired", "self-dispel") and not p_how.startswith("dispel:"):
             lines.append(f"The previous {debuff} (at {clock(prev[-1][2])}) was cleared with {p_how}.")
-            if dispellable and victim_id == healer and p_how in _spent_tools(
+            if mine and victim_id == healer and p_how in _spent_tools(
                     run, group_casts, defensives, {p_how}, victim_id, start, min(end, t)):
                 advice.append(f"On the previous {debuff} you used {p_how}; dispelling yourself there would have kept "
                               f"{p_how} for this one.")
@@ -499,7 +560,7 @@ def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispe
             how = removed_by(auras, other, group_casts, name_of, tools)
             if how == "expired" or how.startswith("dispel:") or other[2] >= start:
                 continue
-            if dispellable:
+            if mine:
                 if d[0] == healer:
                     advice.append(f"You can clear it yourself with {'your dispel' if how == 'self-dispel' else how} "
                                   f"(did at {clock(other[3])}).")

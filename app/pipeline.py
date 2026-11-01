@@ -26,7 +26,7 @@ from app.segments import all_segments, build_profile, match_pull, segment_metric
 from app.avoidable import Avoidance, build as build_avoidance, fetch_kicks
 from app.auras import dispellable, fetch_auras, learn_self_clears, top_debuff_handling
 from app.deaths import (ENVIRONMENTAL, MAX_RECAPS, _applies, ability_schools, clear_tools, fetch_death_events, fetch_group_casts,
-                        judge_reaction, load_defensives, recap_death)
+                        judge_reaction, learn_dispels, load_defensives, recap_death)
 from app.context import CooldownTracker
 from app.defense_spans import active_at, fetch_defense_spans
 from app.healer_state import fetch_healer_state
@@ -39,7 +39,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 57
+RULES_VERSION = 58
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -454,11 +454,14 @@ def _death_recaps(client, fight, run, players, state, top_runs, candidates, cloc
     debuff_names = {run.ability_name(d[1]) for t, victim, _ in deaths for d in auras.debuffs
                     if d[0] == victim and t - 10_000 <= d[3] and d[2] <= t}
     handling = top_debuff_handling(top_auras, debuff_names, tools, spec.plural)
+    own_dispel, totems = learn_dispels([(auras, run.healer_id, run.ability_name)]
+                                       + [(a, tr.healer_id, tr.ability_name) for tr, a in top_auras])
     out = []
     events = parallel_map(lambda d: fetch_death_events(client, fight, d[1], d[0]), deaths)
     for (t, victim, killing), ev in zip(deaths, events):
         r = recap_death(run, players, group_casts, defensives, ev, t, victim, killing, schools,
-                        auras, can_dispel, self_clears, handling, state.procs() if state else None)
+                        auras, can_dispel, self_clears, handling, state.procs() if state else None,
+                        own_dispel, totems)
         r["clock"] = clock(t)
         r["pull"] = next((f"Pull {i + 1}: {p.name}" for i, p in enumerate(run.pulls) if p.start <= t <= p.end), "")
         r["short"], r["fix"] = _death_short(r)
