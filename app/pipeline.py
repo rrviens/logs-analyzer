@@ -38,7 +38,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 48
+RULES_VERSION = 50
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -261,7 +261,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     _soften(result.findings, run, avoid, death_recaps, clock)
     comp_notes = [
         f"{mod}: in your group; {sum(1 for tr, _ in tops if mod in tr.intake_modifiers)} of {len(tops)} "
-        f"top groups had one too." for mod in sorted(my_mods)
+        f"peer groups had one too." for mod in sorted(my_mods)
     ]
 
     def as_dict(f):
@@ -328,7 +328,8 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         "timeline": _timeline(run, tl, segs, profiles, phases, my_state, my_trinkets, result, tops, death_recaps,
                               my_players, spans,
                               group_casts, avoid, chains, spec, ability_icons(client, code), encounter,
-                              get_trinkets(client, fight)),
+                              get_trinkets(client, fight),
+                              [((model.segment(s.pull) or {}).get("hp_curve") if model else None) for s in segs]),
     }
     progress("Finding DPS windows...")
     out["dps"], out["timeline"]["dps_windows"] = _dps_windows(client, fight, run, tl, segs, profiles, tops,
@@ -418,10 +419,10 @@ def _dps_windows(client, fight, run, tl, segs, profiles, tops, candidates, spec)
                              f"healed, no big hit coming)", could,
                              f"You: {w.dps_casts} damage cast{'s' if w.dps_casts != 1 else ''}, {w.other_casts} other "
                              f"(heals into a healthy group, buffs), ~{w.idle_s:.0f}s idle",
-                             f"Your damage here: {mine / 1000:.0f}k/s" + (f" vs ~{top_rate / 1000:.0f}k/s for top "
+                             f"Your damage here: {mine / 1000:.0f}k/s" + (f" vs ~{top_rate / 1000:.0f}k/s for peer "
                                                                         f"{spec.plural} in their calm moments" if top_rate else ""),
                              f"~{missed / 1e6:.1f}M damage left on the table" if missed and missed >= 1e5 else
-                             ("Used it about as well as top players" if top_rate else ""),
+                             ("Used it about as well as your peers" if top_rate else ""),
                              "Idle time can also mean moving or out of range" if w.idle_s >= 3 else ""]})
     return summarize(windows, top_rate), rows
 
@@ -440,7 +441,7 @@ def _chain_text(c: Chain) -> list[str]:
     lines = [f"Chain pull: {c.spill[0]} still hitting" if c.spill else "Chain pull: no break after the last pack"]
     lines += [f"⚠ {r}" for r in c.risks] if c.risky else (["Nothing risky going in"] + c.risks)
     if c.top_chained:
-        lines.append(f"Top groups chained here in {c.top_chained[0]} of {c.top_chained[1]} runs")
+        lines.append(f"Peer groups chained here in {c.top_chained[0]} of {c.top_chained[1]} runs")
     lines.append(f"Next {OUTCOME_S}s: {c.deaths} death{'s' if c.deaths != 1 else ''}, lowest player {c.min_lowest:.0%}, "
                  f"group down to {c.min_group:.0%}")
     return lines
@@ -451,7 +452,7 @@ def _chain_line(run, c: Chain) -> str:
     parts = [f"Pull {c.prev_idx + 1} → {c.idx + 1} ({run.pulls[c.idx].name})", "chained",
              "; ".join(c.risks) if c.risky else "nothing risky going in"]
     if c.top_chained:
-        parts.append(f"top groups chain here {c.top_chained[0]}/{c.top_chained[1]}")
+        parts.append(f"peer groups chain here {c.top_chained[0]}/{c.top_chained[1]}")
     if c.hurt:
         parts.append(f"{c.deaths} death(s), lowest {c.min_lowest:.0%} in the next {OUTCOME_S}s" if c.deaths
                      else f"lowest player {c.min_lowest:.0%} in the next {OUTCOME_S}s")
@@ -478,7 +479,7 @@ def _chain_findings(run, chains: list[Chain], clock) -> list[Finding]:
         if c.cds_down:
             context.append(["Ready?", f"{' and '.join(c.cds_down)} on cooldown when the pack came in"])
         if c.top_chained:
-            context.append(["Top runs", f"chained here in {c.top_chained[0]} of {c.top_chained[1]} runs"
+            context.append(["Peers", f"chained here in {c.top_chained[0]} of {c.top_chained[1]} runs"
                             + (f"; their group at {c.top_hp:.0%} starting this pull" if c.top_hp is not None else "")])
         sev = 45 + (20 if c.deaths else 0) + (10 if rare else 0) + (5 if c.dots else 0)
         out.append(Finding(c.t, _pull_label(run, c.idx), sev, f"Risky chain pull into {b.name}", detail, context,
@@ -572,7 +573,8 @@ def _top_curve(seg, tops) -> list[list[float]] | None:
 
 def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(), recaps=(), players=(),
               spans=(), group_casts=(), avoid: Avoidance | None = None, chains=(), spec=None,
-              icons=({}, {}), encounter: Encounter | None = None, all_trinkets: dict | None = None) -> dict:
+              icons=({}, {}), encounter: Encounter | None = None, all_trinkets: dict | None = None,
+              study_curves: list | None = None) -> dict:
     """Everything the page needs to draw HP over time: cooldowns, deaths, hits, findings - each
     with hover details - plus each party member's active defensives."""
     rel = lambda t: round((t - run.start) / 1000, 1)
@@ -670,7 +672,7 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
                    f"of max HP each", where(h.t),
                    f"Group {pct(h.pre_ehp)} before → {pct(after)} after"
                    + (f"; back up in {h.recovery_s:.0f}s" if h.recovery_s else "; not back up within 30s"),
-                   f"Top groups held {pct(top_pre)} before this hit" if top_pre is not None else "",
+                   f"Peers held {pct(top_pre)} before this hit" if top_pre is not None else "",
                    own_text,
                    ("Also up (others): " + up_text) if up else "Others: no defensives up"]
             tag = avoid.tag_at(run, h.ability, h.t) if avoid else None
@@ -776,7 +778,8 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
                       "start_s": rel(p.start), "end_s": rel(p.end),
                       "target": round(prof.target_ehp, 3) if prof else None,
                       "floor": round(prof.floor_ehp, 3) if prof else None,
-                      "top_curve": _top_curve(seg, tops),
+                      "top_curve": _top_curve(seg, tops),  # peers (comparable logs at your key level)
+                      "study_curve": study_curves[i] if study_curves else None,  # top players (season study)
                       "phases": [{"name": ph.name, "start_s": rel(ph.start), "end_s": rel(ph.end)} for ph in phases.get(i, [])]})
     mana = [state.mana_at(tl.start + b * tl.bin_ms) for b in range(len(tl.group_ehp))] if state and state.mana else []
     # For "Analyze selection" on the page: damage taken, avoidable hits and your casts, per second.

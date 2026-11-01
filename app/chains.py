@@ -95,7 +95,7 @@ def find_chains(run: RunData, tl, auras: Auras, state, tops: list[tuple], group_
             c.risks.append(f"{len(dots)} damage-over-time debuff{'s' if len(dots) > 1 else ''} still ticking: "
                            + ", ".join(dots[:3]) + ("..." if len(dots) > 3 else ""))
         if c.top_hp is not None and c.top_hp - group_hp >= RISK_HP_GAP:
-            c.risks.append(f"group at {group_hp:.0%} vs {c.top_hp:.0%} for top groups starting this pull")
+            c.risks.append(f"group at {group_hp:.0%} vs {c.top_hp:.0%} for peer groups starting this pull")
         if c.mana is not None and c.mana < LOW_MANA:
             c.risks.append(f"your mana {c.mana:.0%}")
         if c.cds_down:

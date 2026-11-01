@@ -108,6 +108,18 @@ start, or your mana under 35%; cooldowns on cooldown are listed as context). The
 at the same spot and what happened in the next 20s. A finding only fires when a risky chain then hurt (a death,
 someone under 25% or the group under 50%).
 
+## Peers and top players
+
+- **Peers (+21)**: the per-run baseline - the best-ranked healers of your spec at your key level (±1) in this dungeon.
+  Bands, "held X%", group-HP verdicts, damage taken, spell choice and trinket comparisons are against peers.
+- **Top players (+23-24)**: the season study (top-ranked runs). Planned cooldown timings, cooldown rate and HoT prep
+  come from it, and its per-pull HP bands (from the study's cached runs) can replace the peer band with the timeline's
+  Peers / Top players switch. Not available yet for a dungeon the study hasn't covered.
+- **Review strictness**: Auto compares the run's key with your best timed key this season (Raider.io): 5+ below =
+  farm (only what hurt), 2-4 below = normal (what hurt + clear patterns), else push (everything). Top players' timings
+  only count within ~2 levels of the study's keys. Display > Review overrides it; folded findings stay in a
+  "N minor notes" line.
+
 ## Raider.io scores
 
 The run header shows your group's average Raider.io score and the compared top groups' average (hover: each

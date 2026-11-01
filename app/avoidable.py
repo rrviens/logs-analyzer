@@ -147,7 +147,7 @@ def learn_avoidable(run: RunData, tops: list[RunData], player_cast_ids: set[int]
             # Rarely hit, and lightly when it happens (a mechanic some top groups tank on purpose stays untagged).
             if hit_runs <= AVOID_TOP_SHARE * len(counts) and top_pp <= AVOID_TOP_PP:
                 tags[a] = Tag("avoidable", run.ability_name(a),
-                              f"top groups: hit in {hit_runs} of {len(counts)} runs ({top_pp:.1f} hits/player) · "
+                              f"peer groups: hit in {hit_runs} of {len(counts)} runs ({top_pp:.1f} hits/player) · "
                               f"your group: {mine_pp:.1f} hits/player", who)
                 continue
             if hit_runs <= AVOID_TOP_SHARE * len(counts):
@@ -156,7 +156,7 @@ def learn_avoidable(run: RunData, tops: list[RunData], player_cast_ids: set[int]
             expected = statistics.median(rates) * minutes
             if total >= EXTRA_RATIO * expected and total - expected >= EXTRA_MIN and max(per.values()) >= 3:
                 tags[a] = Tag("extra", run.ability_name(a),
-                              f"top groups: {expected / n_players:.1f} hits/player for a pull this long · "
+                              f"peer groups: {expected / n_players:.1f} hits/player for a pull this long · "
                               f"your group: {mine_pp:.1f}", who)
         if tags:
             out[i] = tags
@@ -250,7 +250,7 @@ def went_through(run: RunData, mine: dict, kickable_spells: dict, group_casts: l
         ev += f" · {len(ready)} interrupt{'s' if len(ready) != 1 else ''} ready: {', '.join(ready)}" if ready else \
             " · no interrupt was ready"
         if cc:
-            ev += f" · top groups also stop it with {', '.join(cc)}"
+            ev += f" · peer groups also stop it with {', '.join(cc)}"
         out.append({"t": t, "ability": run.ability_name(aid), "ability_id": aid, "ready": ready,
                     "tag": Tag("went_through", run.ability_name(aid), ev)})
     return out

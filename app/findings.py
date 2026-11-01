@@ -107,7 +107,8 @@ class _Ctx:
                  tops: list[TopRun], my_trinkets: list[str], my_modifiers: frozenset, spec: Spec):
         self.run, self.tl, self.segs, self.profiles, self.ctx = run, tl, segs, profiles, ctx
         self.spec = spec
-        self.top_label = f"Top {spec.plural}"
+        self.top_label = f"Top {spec.plural}"  # the season study (top-ranked runs, usually higher keys)
+        self.peer_label = f"Peer {spec.plural}"  # the comparable logs at your key level
         self.cds = CooldownTracker(run, spec.healing_cooldowns)
         self.model = model
         self.seg_models = [model.segment(s.pull) if model else None for s in segs]
@@ -270,7 +271,7 @@ def _shorthand(f: Finding, spec: Spec) -> tuple[str, str]:
         fix = (f"Pair with {spec.major_pair_text.replace(' or ', ' / ')}" if "not lined up" in title
                else "Press it on cooldown")
     elif f.rule == "phase_gap":
-        title = title.replace("Group lower than top groups in ", "Low group HP in ")
+        title = title.replace("Group lower than peer groups in ", "Low group HP in ")
         fix = "Group: less damage taken" if any("more damage" in d for d in f.detail) else "More healing / cooldowns"
     words = title.split()
     return (" ".join(words[:12]) + ("..." if len(words) > 12 else "")), fix
@@ -295,20 +296,20 @@ def _phase_gaps(c: _Ctx) -> list[Finding]:
         if gap < PHASE_HP_GAP:
             continue
         damage_ratio = row["intake"] / row["top_intake"] if row["top_intake"] else None
-        detail = [f"Group HP through the phase: {row['group_hp']:.0%} vs {row['top_group_hp']:.0%} in top groups "
+        detail = [f"Group HP through the phase: {row['group_hp']:.0%} vs {row['top_group_hp']:.0%} in peer groups "
                   f"({row['top_n']} runs)."]
         if damage_ratio and damage_ratio >= PHASE_DAMAGE_RATIO:
             detail.append(f"Your group took {damage_ratio - 1:.0%} more damage here - partly avoidable or unmitigated damage.")
         elif damage_ratio:
-            detail.append("Damage taken was similar to top groups - the gap is healing throughput or cooldown timing.")
+            detail.append("Damage taken was similar to peer groups - the gap is healing throughput or cooldown timing.")
         for name, cd in row["cooldowns"].items():
-            detail.append(f"{name}: top players pressed it in this phase in {cd['top']} of {row['top_n']} runs; "
+            detail.append(f"{name}: peer healers pressed it in this phase in {cd['top']} of {row['top_n']} runs; "
                           f"you {'did' if cd['you'] else 'did not'}.")
         if row["deaths"]:
             detail.append(f"{row['deaths']} death(s) in this phase.")
         pull = c.pull_label(row["pull_idx"])
         f = Finding(row["start"], pull, 40 + min(20, int(gap * 100)) + (10 if row["deaths"] else 0),
-                    f"Group lower than top groups in {row['phase']}", detail)
+                    f"Group lower than peer groups in {row['phase']}", detail)
         out.append(f)
     return out
 
@@ -482,7 +483,7 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
     sm = c.seg_models[pull] if pull is not None else None
     expected = sm is not None and sm["deaths_per_run"] >= EXPECTED_DEATHS
     if expected:
-        detail.append(f"Even top groups average {sm['deaths_per_run']:g} deaths on this pull.")
+        detail.append(f"Even top players' groups average {sm['deaths_per_run']:g} deaths on this pull.")
     severity = (50 + (30 if savers and not burst else 0) + (15 if low_secs >= 3 else 0) + (10 if advice else 0)
                 - (20 if burst and not savers else 0) - (15 if expected else 0))
     context = [["Ready?", ready_line]]
@@ -520,7 +521,7 @@ def _death_basic(c: _Ctx, group: list[list]) -> Finding:
             prof = c.profiles[pull]
             top = prof.hit_pre.get(hit.ability) if prof else None
             line = f"Group was at {hit.pre_ehp:.0%} before {c.ability(hit.ability)}"
-            detail.append(line + (f"; top groups hold {top:.0%} before it." if top else "."))
+            detail.append(line + (f"; peer groups hold {top:.0%} before it." if top else "."))
 
     # A healer dying alone is a personal-defensive question, not a group-cooldown one.
     if victims == [c.run.healer_id]:
@@ -545,7 +546,7 @@ def _death_basic(c: _Ctx, group: list[list]) -> Finding:
     sm = c.seg_models[pull] if pull is not None else None
     expected = sm is not None and sm["deaths_per_run"] >= EXPECTED_DEATHS
     if expected:
-        detail.append(f"Even top groups average {sm['deaths_per_run']:g} deaths on this pull.")
+        detail.append(f"Even top players' groups average {sm['deaths_per_run']:g} deaths on this pull.")
 
     severity = (50 + (30 if ready and not burst else 0) + (15 if low_secs >= 3 else 0)
                 - (20 if burst else 0) - (15 if expected else 0))
@@ -581,7 +582,7 @@ def _held_cooldowns(c: _Ctx) -> list[Finding]:
                                    f"Late {c.cds.name(a)}", [
                     f"{c.cds.name(a)} came {(nxt - t1) / 1000:.0f}s after the danger had passed."],
                     context=[["Ready?", c.ready_text(a, t0)], ["Needed?", c.need_text(w.start, w.end)],
-                             ["Top runs", c.top_text(c.cds.name(a), w.pull_idx)]]))
+                             ["Top players", c.top_text(c.cds.name(a), w.pull_idx)]]))
             else:
                 held_by.setdefault((a, nxt), []).append(w)
 
@@ -620,7 +621,7 @@ def _held_cooldowns(c: _Ctx) -> list[Finding]:
         first = windows[0]
         context = [["Ready?", c.ready_text(a, c.t_of(first.start))],
                    ["Needed?", c.need_text(first.start, first.end)],
-                   ["Top runs", c.top_text(name, first.pull_idx)]]
+                   ["Top players", c.top_text(name, first.pull_idx)]]
         out.append(Finding(c.t_of(first.start), c.pull_label(first.pull_idx), severity,
                            f"{name} held through {len(windows)} dangerous moment{plural}", detail, context))
     return out
@@ -659,7 +660,7 @@ def _planned_cooldowns(c: _Ctx) -> list[Finding]:
                 severity = 55 + (20 if deaths else 10 if c.tl.min_ehp[low] < LETHAL_EHP else 0)
                 context = [["Ready?", c.ready_text(a, t)],
                            ["Needed?", c.need_text(after.start, after.stop - 1) + f" (in the {PLAN_LOOKAHEAD_S}s after)"],
-                           ["Top runs", c.top_text(name, i)]]
+                           ["Top players", c.top_text(name, i)]]
                 out.append(Finding(t, c.pull_label(i), severity, f"Missed planned {name}", detail, context))
     return out
 
@@ -718,7 +719,7 @@ def _cooldown_rate(c: _Ctx) -> list[Finding]:
                           if longest else ".")],
             ["Needed?", f"{ready_pressure / 60:.1f} min of pressure while it was ready, "
                         f"{len(danger_windows)} group-wide dangerous moment(s)."],
-            ["Top runs", f"{c.top_label} in this dungeon press it ~{top_rate * minutes:.0f} times in a run this "
+            ["Top players", f"{c.top_label} in this dungeon press it ~{top_rate * minutes:.0f} times in a run this "
                          f"long (about every {60 / top_rate:.0f}s); you pressed it {len(casts)} times."],
         ]
         out.append(Finding(c.run.start, "Whole run", 45 + (15 if len(danger_windows) >= 2 else 0),
@@ -818,7 +819,7 @@ def _cooldown_uses(c: _Ctx) -> tuple[list[Finding], list[Finding]]:
                               f"({c.pull_label(worst.pull_idx)}): {what}.")
             severity = 55 if worst and worst.deaths else 35 if worst else 15
             context = [["Needed?", c.need_text(b, ahead.stop - 1) + f" (at the cast and {LOW_VALUE_LOOKAHEAD_S}s after)"],
-                       ["Top runs", c.top_text(name, pull)]]
+                       ["Top players", c.top_text(name, pull)]]
             low_value.append(Finding(t, c.pull_label(pull), severity, f"{name} used with no pressure", detail, context))
     return low_value, good
 
@@ -890,7 +891,7 @@ def _overlaps(c: _Ctx) -> list[Finding]:
         title = ("Healing overlap left the next spike uncovered" if own_overlap
                  else f"{c.cds.name(mine[0][1])} spent on a covered spike - the next one went short")
         severity = (65 if died else 50) if own_overlap else (45 if died else 35)
-        context = [["Top runs", c.top_text(c.cds.name(mine[0][1]), pull)]]
+        context = [["Top players", c.top_text(c.cds.name(mine[0][1]), pull)]]
         out.append(Finding(h.t, c.pull_label(pull), severity, title, detail, context))
     if len(safe) >= OVERLAP_SAFE_MIN:
         # Timed at the first overlap: whole-run findings at the run start would merge into each other.
@@ -917,7 +918,7 @@ def _not_topped(c: _Ctx) -> list[Finding]:
             if mine >= top - NOT_TOPPED_MARGIN:
                 continue
             near = sum(1 for h in hits if h.min_after < LETHAL_EHP)
-            detail = [f"Your group averaged {mine:.0%} before it; top groups hold {top:.0%}."]
+            detail = [f"Your group averaged {mine:.0%} before it; peer groups hold {top:.0%}."]
             if near:
                 detail.append(f"{near} of {len(hits)} left someone below {LETHAL_EHP:.0%}.")
             mh = model_hits.get(ability)
@@ -953,7 +954,7 @@ def _slow_recovery(c: _Ctx) -> list[Finding]:
             mine = statistics.median(h.recovery_s if h.recovery_s is not None else RECOVERY_CAP_S for h in hits)
             if mine >= top + SLOW_RECOVERY_EXTRA_S and mine >= top * SLOW_RECOVERY_RATIO:
                 out.append(Finding(hits[0].t, c.pull_label(i), 30, f"Slow recovery after {c.ability(ability)}", [
-                    f"Group took {mine:.0f}s to recover vs {top:.0f}s for top groups."]))
+                    f"Group took {mine:.0f}s to recover vs {top:.0f}s for peer groups."]))
     return out
 
 
@@ -972,7 +973,7 @@ def _damage_intake(c: _Ctx) -> list[Finding]:
             ((a, v - ref["abilities"].get(a, 0.0)) for a, v in seg.ability_intake.items() if a != MELEE_ID),
             key=lambda x: -x[1],
         )[:3]
-        detail = ["Healing pressure here is partly damage top groups avoid or mitigate. Biggest differences:"]
+        detail = ["Healing pressure here is partly damage peer groups avoid or mitigate. Biggest differences:"]
         detail += [
             f"  {c.ability(a)}: {seg.ability_intake[a] * 100:.1f}% group HP/s vs {ref['abilities'].get(a, 0.0) * 100:.1f}%"
             for a, diff in extra if diff > 0
@@ -981,12 +982,12 @@ def _damage_intake(c: _Ctx) -> list[Finding]:
             detail.append(note)
         ratio = seg.intake_frac_ps / ref["intake"] - 1
         out.append(Finding(seg.pull.start, c.pull_label(i), 40,
-                           f"Group took {ratio:.0%} more damage than top groups", detail))
+                           f"Group took {ratio:.0%} more damage than peer groups", detail))
         out[-1].ratio = ratio
     if len(out) > INTAKE_MERGE:  # a group that takes more damage everywhere: one finding, not one per pull
         worst = max(out, key=lambda f: f.ratio)
         lines = [f"{f.pull} ({c.clock(f.t)}): {f.ratio:.0%} more" for f in sorted(out, key=lambda f: f.t)]
-        out = [Finding(c.run.start, "Whole run", 45, f"Group took more damage than top groups on {len(lines)} pulls",
+        out = [Finding(c.run.start, "Whole run", 45, f"Group took more damage than peer groups on {len(lines)} pulls",
                        [f"Worst: {worst.pull}, {worst.ratio:.0%} more."] + worst.detail[1:] + ["All pulls:"]
                        + [f"  {l}" for l in lines])]
     return out
@@ -1004,9 +1005,9 @@ def _intake_reference(c: _Ctx, prof: Profile) -> tuple[dict, str | None]:
         ref = {"intake": statistics.median(s.intake_frac_ps for s in same),
                "abilities": {a: statistics.median(s.ability_intake.get(a, 0.0) for s in same) for a in abilities}}
         who = f"also had {label}" if label else "had no damage-reducing comp effect"
-        return ref, f"Compared with the {len(same)} top groups that {who}."
+        return ref, f"Compared with the {len(same)} peer groups that {who}."
     if label and not same:
-        return everyone, f"No top group here had {label}; your group should take less than this."
+        return everyone, f"No peer group here had {label}; your group should take less than this."
     return everyone, None
 
 
@@ -1076,16 +1077,16 @@ def _items(c: _Ctx) -> tuple[list[dict], list[Finding]]:
         if top_paired is not None:
             top_line += f"; {top_paired:.0%} of their uses line up with {majors_text}"
         if top_uses and len(mine) < top_uses * ITEM_RATE_RATIO and (ready_pressure or 0) >= ITEM_MIN_READY_PRESSURE_S:
-            out.append(Finding(c.run.start, "Whole run", 40, f"{name} used less than top players", [
-                f"You used it {len(mine)} times; top players who run it use it ~{top_uses:.0f} times in a run this long."],
+            out.append(Finding(c.run.start, "Whole run", 40, f"{name} used less than your peers", [
+                f"You used it {len(mine)} times; peer healers who run it use it ~{top_uses:.0f} times in a run this long."],
                 [["Ready?", f"Sat ready through {ready_pressure}s of pressure (cooldown ~{cd_ms // 1000}s)."],
                  ["Needed?", f"{dangers} group-wide dangerous moment(s) while it was available."],
-                 ["Top runs", top_line + "."]]))
+                 ["Peers", top_line + "."]]))
         elif (top_paired is not None and paired is not None and len(mine) >= 3
               and top_paired >= 0.5 and paired <= top_paired - 0.3):
             out.append(Finding(c.run.start, "Whole run", 30, f"{name} not lined up with your cooldowns", [
                 f"{paired:.0%} of your uses were within {PAIR_WINDOW_MS // 1000}s of {majors_text}."],
-                [["Top runs", top_line + "."]]))
+                [["Peers", top_line + "."]]))
     return rows, out
 
 
@@ -1121,7 +1122,7 @@ def _spell_choice(c: _Ctx) -> tuple[dict, list[Finding]]:
             f"Your mana averaged {you['mana']:.0%} during those heals - {grp} costs more, so this is the trade-off."
             if you.get("mana") is not None else f"{grp} costs more mana - that is the trade-off."],
             [["Situation", f"{you['casts']} heals cast with {label} below 80%."],
-             ["Top runs", f"{c.top_label} use {grp} {them['ch_share']:.0%} of the time here "
+             ["Peers", f"{c.peer_label} use {grp} {them['ch_share']:.0%} of the time here "
                           f"(you: {you['ch_share']:.0%})."]]))
 
     # Under a healing buff: top players switch spells (e.g. Chain Heal during Ascendance) and you don't.
@@ -1139,10 +1140,10 @@ def _spell_choice(c: _Ctx) -> tuple[dict, list[Finding]]:
             continue
         out.append(Finding(c.run.start, "Whole run", 40, f"{grp} underused during {name}", [
             f"During {name}, {grp} healed more per cast than {one} - yours "
-            f"{_k(you['ch_effective'])} vs {_k(you['hw_effective'])}, top players' "
+            f"{_k(you['ch_effective'])} vs {_k(you['hw_effective'])}, peer healers' "
             f"{_k(them['ch_effective'])} vs {_k(them['hw_effective'])}."],
             [["Situation", f"{you['casts']} heals cast with {name} up."],
-             ["Top runs", f"{c.top_label} use {grp} {them['ch_share']:.0%} of the time during {name} "
+             ["Peers", f"{c.peer_label} use {grp} {them['ch_share']:.0%} of the time during {name} "
                           f"(you: {you['ch_share']:.0%})."]], rule="buff_choice"))
 
     # Group heals while a single player was in danger (top players mostly single-heal here).
@@ -1160,7 +1161,7 @@ def _spell_choice(c: _Ctx) -> tuple[dict, list[Finding]]:
                 f"{statistics.mean(h.overheal_share for h in stretch):.0%} of those {grp}s overhealed; "
                 f"{c.player(c.tl.lowest_player[low])} dropped to {c.tl.min_ehp[low]:.0%} meanwhile."],
                 [["Situation", f"One player injured, the rest topped ({c.clock(t0)}-{c.clock(t1)})."],
-                 ["Top runs", f"With one player injured, {c.top_label.lower()} use {grp} {top_one:.0%} of the time "
+                 ["Peers", f"With one player injured, {c.peer_label.lower()} use {grp} {top_one:.0%} of the time "
                               f"(you: {table['you']['one']['ch_share']:.0%}) - {one} lands the big single heal."]]))
 
     # Single heals through a group spike (top players mostly group-heal here).
@@ -1180,7 +1181,7 @@ def _spell_choice(c: _Ctx) -> tuple[dict, list[Finding]]:
                 f"{min(h.injured for h in stretch)}+ players were injured at every cast and 2+ sat under 50% for "
                 f"{sustained}s; no {grp} in between."],
                 [["Situation", f"Group-wide damage ({c.clock(t0)}-{c.clock(t1)})."],
-                 ["Top runs", f"With 3+ players injured, {c.top_label.lower()} use {grp} {top_group:.0%} of the time "
+                 ["Peers", f"With 3+ players injured, {c.peer_label.lower()} use {grp} {top_group:.0%} of the time "
                               f"(you: {table['you']['group']['ch_share']:.0%})."]]))
     return table, out
 

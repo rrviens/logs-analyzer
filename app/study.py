@@ -28,6 +28,7 @@ TRASH_MATCH_MIN = 0.5
 MIN_SEGMENT_S = 10
 PLAN_CLUSTER_S = 12  # casts this close across runs count as the same planned timing
 PLAN_MIN_SHARE = 0.6
+CURVE_POINTS = 40  # steps of the top-player HP band through a pull
 
 
 @dataclass
@@ -302,6 +303,7 @@ def build_model(runs: list[LightRun], cooldowns: dict[int, dict]) -> dict:
                                for ab, per, l in lift[:4] if per >= 0.3 and l >= 1.5],
             })
         seg["group_hits"].sort(key=lambda h: -h["avg_hit_pct"])
+        seg["hp_curve"] = hp_curve(runs, members)
         segments.append(seg)
     casts_per_min = {}
     for a in cd_ids:
@@ -310,6 +312,34 @@ def build_model(runs: list[LightRun], cooldowns: dict[int, dict]) -> dict:
     return {"runs": [{"player": r.player, "key": r.keystone_level, "code": r.code, "fight": r.fight_id} for r in runs],
             "casts_per_min": casts_per_min,
             "segments": segments}
+
+
+def hp_curve(runs: list[LightRun], members: list) -> list[list[float]] | None:
+    """Top groups' HP through this pull: [position 0..1, p25, median, p75] at CURVE_POINTS steps. Light runs have no
+    heal events, so each player's HP is the value after their last hit (healing shows at the next hit) - a slightly
+    pessimistic band, fine for 'where top groups sit'."""
+    series = []
+    for ri, p in members:
+        rows = [d for d in runs[ri].damage if p.start <= d[0] <= p.end and d[5] is not None and d[6]]
+        if len(rows) < 10:
+            continue
+        last: dict[int, float] = {}
+        i, pts = 0, []
+        for k in range(CURVE_POINTS):
+            t = p.start + k / (CURVE_POINTS - 1) * (p.end - p.start)
+            while i < len(rows) and rows[i][0] <= t:
+                last[rows[i][1]] = rows[i][5] / rows[i][6]
+                i += 1
+            pts.append(sum(last.values()) / len(last) if last else 1.0)
+        series.append(pts)
+    if len(series) < 2:
+        return None
+    out = []
+    for k in range(CURVE_POINTS):
+        vals = sorted(sr[k] for sr in series)
+        q = lambda f: vals[min(len(vals) - 1, int(f * len(vals)))]
+        out.append([round(k / (CURVE_POINTS - 1), 3), round(q(0.25), 3), round(statistics.median(vals), 3), round(q(0.75), 3)])
+    return out
 
 
 def _planned_timings(run_times: list[tuple[int, float]], n_runs: int) -> list[dict]:

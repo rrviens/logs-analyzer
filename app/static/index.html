@@ -351,6 +351,9 @@
                border: 1px solid color-mix(in srgb, var(--critical) 55%, transparent); border-left: 4px solid var(--critical);
                background: color-mix(in srgb, var(--critical) 12%, var(--panel)); border-radius: var(--radius-sm); }
   .errbanner[hidden] { display: none; }
+  .tierline { color: var(--muted); font-size: 0.8667rem; margin: 0 0 8px; }
+  details.vsec.minor { border-left-color: var(--line-strong); margin-top: 6px; }
+  details.vsec.minor > summary { font-weight: 500; color: var(--muted); }
   .updnote { color: var(--muted); font-size: 0.8667rem; background: var(--panel-2); border: 1px solid var(--line);
              border-radius: var(--radius-sm); padding: 6px 10px; margin: 0 0 10px; }
   .errbanner .ei { color: var(--critical); flex: none; margin-top: 2px; }
@@ -502,6 +505,10 @@
       <div class="seg" role="group" aria-label="Theme">
         <button class="tlbtn" data-theme-pick="system">System</button><button class="tlbtn" data-theme-pick="dark">Dark</button><button class="tlbtn" data-theme-pick="light">Light</button>
       </div>
+      <div class="dm-label">Review</div>
+      <div class="seg" role="group" aria-label="How strict the review is">
+        <button class="tlbtn" data-strict-pick="auto" title="By key level vs your best timed key">Auto</button><button class="tlbtn" data-strict-pick="relaxed" title="Only what hurt">Relaxed</button><button class="tlbtn" data-strict-pick="normal">Normal</button><button class="tlbtn" data-strict-pick="strict" title="Everything">Strict</button>
+      </div>
       <div class="dm-label">Text size</div>
       <div class="seg" role="group" aria-label="Text size">
         <button class="tlbtn" data-size-pick="normal">Normal</button><button class="tlbtn" data-size-pick="large">Large</button>
@@ -645,12 +652,13 @@ async function analyze(url, fresh = false) {
 
 // Your run alone (header, group, timeline) while the top logs download; the full analysis replaces it.
 function renderPreview(res, url) {
+  SP = {...SP, ...res.spec};
   const r = res.run;
   $("main").innerHTML = `<div class="card"><div class="runhead"><h3>${esc(r.dungeon)} +${r.level}</h3>
       <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span></div>
       <div class="meta">${esc(r.player)} (${esc(res.spec.label)}) · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"}</div>
       ${renderGroup(res)}</div>
-    <div class="card"><h2>Comparing with top players</h2><p class="secempty">Your timeline is below; findings, top-group
+    <div class="card"><h2>Comparing with your peers</h2><p class="secempty">Your timeline is below; findings, peer
       bands and death recaps appear when the comparison is done.</p><div class="progress" id="progress"></div></div>
     ${renderTimelineShell(res)}`;
   initTimeline(res, url);
@@ -710,7 +718,7 @@ function renderItems(res) {
   return `<details><summary>Show data</summary><div class="tablewrap"><table>
     <tr><th>Item</th><th>Type</th><th>Your uses</th><th>Top uses*</th><th>Top players using it</th>
     <th>Ready during pressure</th><th>With big cooldowns</th><th>Top with big cooldowns</th></tr>${rows}</table></div>
-    <div class="compnote">* median among the comparable top players who used it, scaled to your run length.
+    <div class="compnote">* median among the peer healers who used it, scaled to your run length.
     "With big cooldowns" = share of uses within 10s of ${esc(SP.majors)}.</div></details>`;
 }
 
@@ -753,7 +761,7 @@ let TL = null;  // {res, pull, view, mark, tips}
 const TOGGLES = [
   ["group", "Healing", `<i style="background:var(--series-1)"></i>`, "Group HP"],
   ["lowest", "Healing", `<i style="background:var(--series-2)"></i>`, "Lowest player"],
-  ["top", "Healing", `<i class="dash"></i>`, "Top groups (band)"],
+  ["top", "Healing", `<i class="dash"></i>`, "Peers / top players (band)"],
   ["uncovered", "Party", `<i class="box" style="background:var(--critical);opacity:.35"></i>`, "Big hit, your cooldown ready but unused"],
   ["l:cooldown", "Healing", `<i class="box" style="background:var(--text)"></i>`, "Your healing cooldowns"],
   ["l:hit", "Healing", `<i class="tick"></i>`, "Big group hits"],
@@ -829,6 +837,7 @@ function renderTimelineShell(res) {
       <button class="tlbtn" id="tlWhole" title="Show the whole key (or double-click the overview)">Show whole run</button>
       <button class="tlbtn" id="tlZoomOut" hidden>Show whole pull</button>
       <span class="sp"></span>
+      <div class="seg" role="group" aria-label="Compare with" id="tlBase">${baseButtons(res)}</div>
       <div class="seg" role="group" aria-label="Timeline preset">${Object.entries(PRESETS).map(([k, p]) =>
         `<button class="tlbtn" data-preset="${k}">${p.label}</button>`).join("")}</div>
       <details class="lanes" id="tlLanes"><summary class="tlbtn">Lanes</summary><div class="lanemenu">${menu}</div></details>
@@ -1074,13 +1083,13 @@ function drawTimeline() {
   (isOn("uncovered") ? t.uncovered_hits || [] : []).filter((s) => s >= s0 && s <= s1).forEach((s) =>
     g += `<rect x="${x(s) - 2}" y="${hpTop}" width="4" height="${hpH}" fill="var(--critical)" opacity=".25"/>`);
   [0, 0.5, 1].forEach((v) => g += `<line x1="${L}" x2="${W - R}" y1="${yHp(v)}" y2="${yHp(v)}" stroke="var(--grid)"/>`);
-  shown.filter((q) => q.top_curve && isOn("top")).forEach((q) => {
+  shown.filter((q) => curveOf(q) && isOn("top")).forEach((q) => {
     const xs = (f) => x(q.start_s + f * (q.end_s - q.start_s));
-    const inV = q.top_curve.filter(([f]) => { const s = q.start_s + f * (q.end_s - q.start_s); return s >= s0 - 1 && s <= s1 + 1; });
+    const inV = curveOf(q).filter(([f]) => { const s = q.start_s + f * (q.end_s - q.start_s); return s >= s0 - 1 && s <= s1 + 1; });
     const upper = inV.map(([f, , , hi]) => `${xs(f).toFixed(1)},${yHp(hi).toFixed(1)}`);
     const lower = inV.slice().reverse().map(([f, lo]) => `${xs(f).toFixed(1)},${yHp(lo).toFixed(1)}`);
     g += `<polygon points="${upper.concat(lower).join(" ")}" fill="var(--ink-muted)" opacity=".16"/>`;
-    g += `<path d="M${q.top_curve.map(([f, , med]) => `${xs(f).toFixed(1)},${yHp(med).toFixed(1)}`).join("L")}"
+    g += `<path d="M${curveOf(q).map(([f, , med]) => `${xs(f).toFixed(1)},${yHp(med).toFixed(1)}`).join("L")}"
       fill="none" stroke="var(--ink-muted)" stroke-dasharray="4 3" stroke-width="1.5"/>`;
   });
   if (isOn("lowest")) g += `<path d="${pts(t.lowest, yHp)}" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linejoin="round"/>`;
@@ -1232,11 +1241,11 @@ function drawTimeline() {
     const q = pullAt(s) || p;
     if (!q) { tip.style.display = "none"; return; }
     const phase = q.phases.find((ph) => s >= ph.start_s && s < ph.end_s);
-    const topAt = q.top_curve ? q.top_curve[Math.max(0, Math.min(q.top_curve.length - 1,
-      Math.round((s - q.start_s) / (q.end_s - q.start_s) * (q.top_curve.length - 1))))] : null;
+    const topAt = curveOf(q) ? curveOf(q)[Math.max(0, Math.min(curveOf(q).length - 1,
+      Math.round((s - q.start_s) / (q.end_s - q.start_s) * (curveOf(q).length - 1))))] : null;
     place(xm, `<b>${fmtClock(s)}</b>${whole ? ` · ${esc(pullShort(q.label))}` : ""}${phase ? ` · ${esc(phase.name)}` : ""}<br>
       Group <b>${pct(t.group[b])}</b> · Lowest <b>${pct(t.lowest[b])}</b> · Mana <b>${pct(t.mana[b])}</b>
-      ${topAt ? `<br>Top groups here: <b>${pct(topAt[2])}</b> (middle half ${pct(topAt[1])}-${pct(topAt[3])})` : ""}`);
+      ${topAt ? `<br>${BASE === "top" ? "Top players" : "Peers"} here: <b>${pct(topAt[2])}</b> (middle half ${pct(topAt[1])}-${pct(topAt[3])})` : ""}`);
   };
   svg.onmouseleave = () => { tip.style.display = "none"; cross.setAttribute("opacity", "0"); };
   // Ctrl+wheel (or a trackpad pinch) zooms around the cursor; a plain wheel keeps scrolling the page.
@@ -1334,10 +1343,10 @@ function renderSelection() {
   // Top groups at the same point of each overlapping pull (their middle line), averaged.
   const topVals = [];
   t.pulls.forEach((q) => {
-    if (!q.top_curve || q.end_s < a || q.start_s > b) return;
+    if (!curveOf(q) || q.end_s < a || q.start_s > b) return;
     for (let s = Math.max(a, q.start_s); s <= Math.min(b, q.end_s); s += t.bin_s) {
-      const i = Math.round((s - q.start_s) / (q.end_s - q.start_s) * (q.top_curve.length - 1));
-      topVals.push(q.top_curve[Math.max(0, Math.min(q.top_curve.length - 1, i))][2]);
+      const i = Math.round((s - q.start_s) / (q.end_s - q.start_s) * (curveOf(q).length - 1));
+      topVals.push(curveOf(q)[Math.max(0, Math.min(curveOf(q).length - 1, i))][2]);
     }
   });
   const top = topVals.length ? topVals.reduce((s, x) => s + x, 0) / topVals.length : null;
@@ -1363,7 +1372,7 @@ function renderSelection() {
       <button class="tlbtn" id="tlSelClose" aria-label="Close selection">✕</button></div>
     <ul>
       <li><strong>Group HP:</strong> ${pct(avg(t.group))} average, lowest player ${pct(lowest)}${top != null
-        ? ` · top groups ${pct(top)} at the same points` : ""}</li>
+        ? ` · ${BASE === "top" ? "top players" : "peers"} ${pct(top)} at the same points` : ""}</li>
       <li><strong>Damage taken:</strong> ${(inFrac * 100).toFixed(1)}% of group HP per second${intake && avoid
         ? ` · ${pct(avoid / intake)} avoidable (${esc(avoidNames.join(", "))})` : " · nothing tagged avoidable"}</li>
       <li><strong>Your casts:</strong> ${casts} (${Math.round(casts / secs * 60)} per minute) · cooldowns:
@@ -1479,6 +1488,7 @@ function initTimeline(res, url) {
   $("tlLegend").ontoggle = () => lsSet("tlLegend", $("tlLegend").open ? "1" : "0");
   syncToggles();
   $("tlZoomOut").onclick = () => { TL.view = null; drawTimeline(); };
+  document.querySelectorAll("#tlBase [data-base]").forEach((b) => b.onclick = () => setBase(b.dataset.base));
   $("tlPin").onclick = () => setPinned(!$("tlSection").classList.contains("pinned"));
   $("tlFold").onclick = () => {
     const c = $("tlSection").classList.toggle("collapsed");
@@ -1497,7 +1507,7 @@ const SECTIONS = {
   items: {title: "Trinkets & consumables", icon: "◆", lucide: "flask-conical", color: "var(--series-3)"},
   spells: {title: "Single-target vs group heal", icon: "≈", lucide: "split", color: "var(--series-1)"},
   dps: {title: "DPS windows", icon: "⚔", lucide: "swords", color: "var(--series-3)"},
-  pulls: {title: "Pulls vs top groups", icon: "▤", lucide: "rows-3", color: "var(--ink-muted)"},
+  pulls: {title: "Pulls vs peers", icon: "▤", lucide: "rows-3", color: "var(--ink-muted)"},
   good: {title: "Good calls", icon: "✓", lucide: "circle-check", color: "var(--good)"},
 };
 
@@ -1623,7 +1633,7 @@ function renderDps(res) {
   const k = (v) => v == null ? "-" : `${Math.round(v / 1000)}k`, m = (v) => `${(v / 1e6).toFixed(1)}M`;
   const head = `${d.windows} calm window${d.windows === 1 ? "" : "s"} (${d.seconds}s in total)`
     + (d.your_dps ? `: you dealt ${k(d.your_dps)}/s in them` : "")
-    + (d.top_dps ? `, top ${SP.plural} ${k(d.top_dps)}/s in their own calm moments` : "")
+    + (d.top_dps ? `, peer ${SP.plural} ${k(d.top_dps)}/s in their own calm moments` : "")
     + (d.missed ? ` · ~${m(d.missed)} damage left on the table (your own hit sizes × enemies alive)` : "");
   const worst = ws.filter((w) => w.missed >= 5e4).sort((a, b) => b.missed - a.missed).slice(0, 6).map((w) =>
     `<li><span class="when">${T(w.clock)}</span><span class="pl">${esc(pullShort(w.pull))}</span>
@@ -1632,7 +1642,7 @@ function renderDps(res) {
   return `<div class="dpshead">${esc(head)}</div>
     <div class="tlwrap" id="dpsWrap"><svg id="dpsSvg" role="img" aria-label="DPS windows across the run"></svg>
       <div class="tip" id="dpsTip"></div></div>
-    <div class="legend-items dpslegend"><span><i class="box" style="background:var(--good)"></i>used like top players</span>
+    <div class="legend-items dpslegend"><span><i class="box" style="background:var(--good)"></i>used like your peers</span>
       <span><i class="box" style="background:var(--warning)"></i>partly used</span>
       <span><i class="box" style="background:var(--critical)"></i>mostly missed</span>
       <span class="hint">A window = 3s+ with the group healthy, nobody low and no big hit coming. Click one to open it on the timeline.</span></div>
@@ -1743,7 +1753,8 @@ function render(res, url) {
       <td class="${q.top_group_hp != null && q.group_hp < q.top_group_hp - 0.03 ? "worse" : ""}">${pp(q.group_hp)}</td><td>${pp(q.top_group_hp)}</td>
       <td>${kk(q.intake)}</td><td>${kk(q.top_intake)}</td><td>${kk(q.healing)}</td><td>${kk(q.top_healing)}</td></tr>`).join("");
   const todo = (x) => x && x.lines ? x.lines.filter((l) => l.action).length : 0;
-  const counts = {look: res.findings.length, deaths: (res.deaths || []).length, phases: todo(v.phases),
+  const tier = reviewTier(res), split = splitFindings(res, tier);
+  const counts = {look: split.shown.length, deaths: (res.deaths || []).length, phases: todo(v.phases),
                   items: todo(v.items), spells: todo(v.spells), pulls: todo(v.pulls), good: res.good_calls.length,
                   dps: ((res.timeline || {}).dps_windows || []).filter((w) => w.use != null && w.use < 0.4).length};
 
@@ -1755,15 +1766,18 @@ function render(res, url) {
         rel="noopener">Wowhead guide</a>` : ""}<a class="link" href="${esc(url)}" target="_blank" rel="noopener">Open log</a>
       <button class="link" id="fresh">Re-analyze</button></div></div>
     <div class="meta">${esc(r.player)} (${esc(SP.label)}) · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"} ·
-      compared with ${c.count} top ${esc(SP.label)} logs (${levels})${(c.skipped || []).length
+      compared with <span title="Peers: the best-ranked ${esc(SP.plural)} at your key level (±1) in this dungeon">${c.count} peer ${esc(SP.label)} logs (${levels})</span>${(c.skipped || []).length
         ? ` <span title="${esc(c.skipped.map((s) => `${s.player} +${s.key}: ${s.reasons.join(", ")}`).join("\n"))}">(${c.skipped.length} skipped: incomplete data)</span>`
-        : ""}${c.model ? ` · context from top runs ${esc(c.model)}` : ""}<span id="ioLine"></span></div>
+        : ""}${c.model ? ` · <span title="Top players: the season study of top-ranked runs - used for timings and habits">top players ${esc(c.model)}</span>` : ""}<span id="ioLine"></span></div>
     ${renderGroup(res)}<div class="compnote" id="ioNote"></div></div>
     ${renderTimelineShell(res)}
     ${nav(counts)}
-    ${sec("look", res.findings.length, `<div class="lookbar" id="lookBar" hidden></div>`
-          + res.findings.map((f, i) => renderFinding(f, i, res)).join(""),
-          "Nothing worth flagging - this run holds up against top players.")}
+    ${sec("look", split.shown.length + split.minor.length, `<div class="lookbar" id="lookBar" hidden></div>`
+          + `<div class="tierline">${esc(tier.line)}</div>`
+          + split.shown.map(([f, i]) => renderFinding(f, i, res)).join("")
+          + (split.minor.length ? `<details class="vsec minor"><summary>${split.minor.length} minor note${split.minor.length > 1 ? "s" : ""}
+              (${esc(tier.minorWhy)})</summary><div class="body">${split.minor.map(([f, i]) => renderFinding(f, i, res)).join("")}</div></details>` : ""),
+          "Nothing worth flagging - this run holds up against your peers.")}
     ${renderDeaths(res)}
     ${sec("phases", res.phases && res.phases.length ? counts.phases || "ok" : 0, verdictBlock(v.phases, renderPhases(res)),
           "Boss phases: none detected on this run.", false)}
@@ -1788,6 +1802,16 @@ function render(res, url) {
   drawDps();
   paintIcons();
   loadIO(url);
+  if (!res._bestAsked) {
+    res._bestAsked = true;
+    api(`/api/best?url=${encodeURIComponent(url)}`).then((d) => {
+      res._best = d.best ?? null;
+      if (current !== url) return;
+      const now = reviewTier(res);
+      if (now.key !== tier.key) render(res, url);
+      else if (document.querySelector(".tierline")) document.querySelector(".tierline").textContent = now.line;
+    }).catch(() => {});
+  }
 }
 
 // ---------- Raider.io: average current-season score of your group and of the compared top groups ----------
@@ -1805,16 +1829,72 @@ async function loadIO(url, tries = 0) {
   const note = "Raider.io current-season scores, not the scores at the time of the run.";
   $("ioLine").innerHTML = (g.avg ? ` · <span class="iohov" tabindex="0">Group avg ${fmt(g.avg)} IO${part(g)}<span class="iotip">${who}
       <div class="ionote">${note}</div></span></span>` : "")
-    + (d.top_avg ? ` · <span class="iohov" tabindex="0">top groups avg ${fmt(d.top_avg)} IO<span class="iotip">${tops}
+    + (d.top_avg ? ` · <span class="iohov" tabindex="0">peers avg ${fmt(d.top_avg)} IO<span class="iotip">${tops}
       <div class="ionote">${note}</div></span></span>` : "");
   if (g.avg && d.top_avg) {
     const gap = d.top_avg - g.avg;
     $("ioNote").textContent = Math.abs(gap) >= 100
-      ? `Top groups averaged ${gap > 0 ? "+" : "-"}${fmt(Math.abs(gap))} IO ${gap > 0 ? "more" : "less"} than yours (current scores).`
-      : "Your group's IO is about the same as the top groups' (current scores).";
+      ? `Peer groups averaged ${gap > 0 ? "+" : "-"}${fmt(Math.abs(gap))} IO ${gap > 0 ? "more" : "less"} than yours (current scores).`
+      : "Your group's IO is about the same as your peers' (current scores).";
   }
   if (d.pending && tries < 12) setTimeout(() => loadIO(url, tries + 1), 5000);
 }
+// ---------- comparison baseline: Peers (best healers at your key level, per run) / Top players (season study) ----------
+let BASE = lsGet("baseline") === "top" ? "top" : "peers";
+const curveOf = (q) => BASE === "top" ? q.study_curve : q.top_curve;
+function baseButtons(res) {
+  const c = res.compared || {}, levels = (c.levels || []).map((l) => `+${l}`).join("/");
+  const study = ((c.model || "").match(/\d+/g) || []).map(Number);
+  const studyLabel = study.length ? `+${Math.min(...study)}${Math.max(...study) > Math.min(...study) ? `-${Math.max(...study)}` : ""}` : "";
+  const hasTop = (res.timeline.pulls || []).some((q) => q.study_curve);
+  if (!hasTop && BASE === "top") BASE = "peers";
+  return `<button class="tlbtn${BASE === "peers" ? " on" : ""}" data-base="peers" title="The best-ranked ${esc(SP.plural)} at your key level in this dungeon">Peers${levels ? ` (${levels})` : ""}</button>`
+    + `<button class="tlbtn${BASE === "top" ? " on" : ""}" data-base="top" ${hasTop ? `title="Top-ranked runs from the season study"` : `disabled title="Top players: not available yet for this dungeon"`}>Top players${studyLabel ? ` (${studyLabel})` : ""}</button>`;
+}
+function setBase(b) {
+  BASE = b; lsSet("baseline", b);
+  document.querySelectorAll("#tlBase [data-base]").forEach((x) => x.classList.toggle("on", x.dataset.base === b));
+  drawTimeline();
+  if (TL.sel) renderSelection();
+}
+
+// ---------- review strictness: farm keys get only what hurt, push keys the full review ----------
+const OUTCOME_RULES = ["death", "self_danger"];  // deaths and near-deaths always show
+const NITPICK_RULES = ["riptide_prep", "spell_choice", "buff_choice", "planned_cooldown"];
+const STUDY_RULES = ["planned_cooldown", "riptide_prep", "cooldown_rate"];  // timings learned from top players
+function reviewTier(res) {
+  const pick = lsGet("strict") || "auto", level = res.run.level, best = res._best;
+  const tiers = {farm: "Farm key - showing only what hurt", normal: "Normal key - what hurt and clear patterns",
+                 push: "Push key - full review"};
+  let key = {relaxed: "farm", normal: "normal", strict: "push"}[pick], why = "set in Display";
+  if (!key) {
+    const gap = best == null ? 0 : best - level;
+    key = gap >= 5 ? "farm" : gap >= 2 ? "normal" : "push";
+    why = best == null ? "your best key isn't known" : `your best timed key is +${best}`;
+  }
+  return {key, line: `${tiers[key]} (${why}).`, minorWhy: key === "farm" ? "farm key" : key === "normal" ? "below your push range" : "top players' timings are from higher keys"};
+}
+// [[finding, index]] shown / folded away. Timings learned from top players only count near the study's key range.
+function splitFindings(res, tier) {
+  const studyMin = Math.min(...((res.compared || {}).model || "").split(",").map((x) => parseInt(x.replace("+", ""))).filter((n) => n > 0));
+  const shown = [], minor = [];
+  res.findings.forEach((f, i) => {
+    const outcome = OUTCOME_RULES.includes(f.rule) || f.severity >= 70;
+    const farFromStudy = STUDY_RULES.includes(f.rule) && isFinite(studyMin) && res.run.level < studyMin - 2;
+    const keep = !farFromStudy && (tier.key === "push" || outcome
+      || (tier.key === "normal" && f.severity >= 45 && !NITPICK_RULES.includes(f.rule)));
+    (keep ? shown : minor).push([f, i]);
+  });
+  return {shown, minor};
+}
+function setStrict(pick, rerender = true) {
+  lsSet("strict", pick);
+  document.querySelectorAll("[data-strict-pick]").forEach((b) => b.classList.toggle("on", b.dataset.strictPick === pick));
+  if (rerender && TL && TL.res && !TL.res.preview) render(TL.res, TL.url);
+}
+document.querySelectorAll("[data-strict-pick]").forEach((b) => b.onclick = () => setStrict(b.dataset.strictPick));
+setStrict(lsGet("strict") || "auto", false);
+
 // Lucide UI icons (pinned CDN build): <i data-lucide="name">fallback glyph</i> becomes an SVG; offline, the glyph stays.
 function paintIcons() { try { if (window.lucide) lucide.createIcons({attrs: {"stroke-width": 2}}); } catch {} }
 

@@ -76,7 +76,7 @@ def top_debuff_handling(tops: list[tuple], names: set[str], tools: set[str], plu
         if n < 3:
             continue
         mix = ", ".join(f"{k} {v}" for k, v in sorted(methods.items(), key=lambda x: -x[1]))
-        line = (f"Top {plural} with {name} on themselves ({n} times in {runs} runs) got rid of it after "
+        line = (f"Peer {plural} with {name} on themselves ({n} times in {runs} runs) got rid of it after "
                 f"{statistics.median(clear_s):.1f}s median - {mix}.")
         if waves:
             line += f" When others had it too, they dispelled themselves first {self_first} of {waves} times."

@@ -11,7 +11,8 @@ from typing import Callable
 
 from app.context_model import doc_path, model_path
 from app.specs.base import Spec
-from app.study import build_model, discover_cooldowns, top_runs
+from app.reports import get_fights, get_players
+from app.study import TRASH_MATCH_MIN, build_model, cluster_segments, discover_cooldowns, fetch_light, hp_curve, top_runs
 from app.wcl import WCLClient
 
 ZONES_QUERY = "{ worldData { zones { id name encounters { id name } } } }"
@@ -60,6 +61,37 @@ def run_study(client: WCLClient, spec: Spec, runs: int = DEFAULT_RUNS, dungeon: 
     progress(f"Done: {sum(len(v) for v in all_runs.values())} top runs studied, "
              f"{sum(len(v) for v in skipped.values())} skipped for incomplete data.")
     return model
+
+
+def add_curves(client: WCLClient, spec: Spec, progress: Callable[[str], None] = print) -> int:
+    """Top-player HP bands for an existing study, rebuilt from its cached runs (no new API calls when cached).
+    Returns how many segments got a band."""
+    path = model_path(spec)
+    if not path.exists():
+        return 0
+    model, done = json.loads(path.read_text()), 0
+    for name, d in model.get("dungeons", {}).items():
+        runs = []
+        for r in d.get("runs", []):
+            try:
+                fight = next(f for f in get_fights(client, r["code"]) if f.id == r["fight"])
+                me = next(p for p in get_players(client, fight) if p.name == r["player"])
+            except StopIteration:
+                continue
+            runs.append(fetch_light(client, fight, me.id, r["player"], spec))
+        clusters = cluster_segments(runs)
+        for seg in d.get("segments", []):
+            def same(c):
+                if seg["encounter_id"]:
+                    return c["encounter_id"] == seg["encounter_id"]
+                a, b = set(c["npc_ids"]), set(seg["npc_ids"])
+                return not c["encounter_id"] and a and b and len(a & b) / len(a | b) >= TRASH_MATCH_MIN
+            c = next((c for c in clusters if same(c)), None)
+            seg["hp_curve"] = hp_curve(runs, c["members"]) if c else None
+            done += seg["hp_curve"] is not None
+        progress(f"{spec.label} {name}: HP bands for {sum(1 for s in d.get('segments', []) if s.get('hp_curve'))} pulls")
+    path.write_text(json.dumps(model, indent=1))
+    return done
 
 
 def study_info(spec: Spec) -> dict:

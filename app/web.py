@@ -469,6 +469,24 @@ def raiderio_scores(url: str, w: Who = Depends(who)):
             "top_avg": round(sum(avgs) / len(avgs)) if avgs else None, "pending": pending}
 
 
+@app.get("/api/best")
+def best_key(url: str, w: Who = Depends(who)):
+    """Your best timed key level this season (Raider.io), for how strict the review is on this run."""
+    try:
+        code, fid = parse_report_url(url)
+        fight = pick_fight(get_fights(w.client, code), fid)
+        name = ((load_settings(w) or {}).get("name") or "").lower()
+        players = player_realms(w.client, fight)
+        me = next((p for p in players if p["name"].lower() == name), None)
+        if not me:  # not your run: the healer it was analyzed for
+            stored = stored_analysis(w.client, code, fight.id, name, TOP_LOGS) or {}
+            me = next((p for p in players if p["name"] == (stored.get("run") or {}).get("player")), None)
+        best = raiderio.best_timed(app_client.public(), me["region"], me["realm"], me["name"]) if me else None
+        return {"best": best, "player": me["name"] if me else None}
+    except (WCLError, httpx.HTTPError, ValueError, KeyError, StopIteration):
+        return {"best": None, "player": None}
+
+
 @app.get("/api/public-analysis")
 def public_analysis(url: str):
     """Signed out: a saved analysis of a public run, from a link. Analyzing new runs needs a sign-in."""

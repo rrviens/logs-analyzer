@@ -90,4 +90,28 @@ def group_scores(pub: WCLClient, players: list[dict], fetch: bool) -> dict:
     return {"avg": round(sum(scores) / len(scores)) if scores else None, "with_score": len(scores), "total": len(rows),
             "pending": sum(1 for r in rows if not r["known"]), "players": rows}
 
-
+def best_timed(pub: WCLClient, region: str, realm: str, name: str) -> int | None:
+    """Highest key level this player has timed this season (Raider.io best runs). Cached a day; never raises."""
+    key = f"rio_best:v1:{region.lower()}:{realm.lower()}:{name.lower()}"
+    hit = pub.get_cached(key)
+    if hit and time.time() - hit["t"] < CACHE_S:
+        return hit["best"]
+    if time.time() < _blocked_until[0]:
+        return None
+    params = {"region": region.lower(), "realm": realm_slug(realm), "name": name, "fields": "mythic_plus_best_runs"}
+    if API_KEY:
+        params["access_key"] = API_KEY
+    with _lock:
+        time.sleep(PAUSE_S)
+        try:
+            r = _http.get(PROFILE_URL, params=params)
+        except httpx.HTTPError:
+            _blocked_until[0] = time.time() + 300
+            return None
+    if r.status_code not in (200, 400):
+        _blocked_until[0] = time.time() + 300
+        return None
+    runs = r.json().get("mythic_plus_best_runs", []) if r.status_code == 200 else []
+    best = max((x["mythic_level"] for x in runs if x.get("num_keystone_upgrades", 0) > 0), default=None)
+    pub.set_cached(key, {"t": time.time(), "best": best})
+    return best
