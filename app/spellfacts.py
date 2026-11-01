@@ -1,16 +1,14 @@
-"""Facts about enemy spells that damage numbers can't show, from outside sources instead of hand-kept notes:
+"""Facts about enemy spells that damage numbers can't show, from the game's own spell tables (Blizzard client DB2
+files as published by wago.tools) instead of hand-kept notes: dispel type (magic, curse, disease, poison), whether a
+cast can be interrupted, cast time, and whether the damage lands on the ground (a point, a puddle, a frontal cone) -
+the kind you dodge rather than survive.
 
-- the game's own spell tables (Blizzard client DB2 files as published by wago.tools): dispel type (magic, curse,
-  disease, poison), whether a cast can be interrupted, and cast time;
-- the community's avoidable-damage list (the ElitismHelper addon): spells you're meant to dodge.
-
-Both are refreshed in the background about once a week into the cache database, so new dungeons and patches come
-in on their own. Until the first download finishes every lookup answers "unknown" and callers fall back to what
-they learn from logs.
+Refreshed in the background about once a week into the cache database, so new dungeons and patches come in on
+their own. Until the first download finishes every lookup answers "unknown" and callers fall back to what they
+learn from logs.
 """
 import csv
 import logging
-import re
 import sqlite3
 import threading
 import time
@@ -20,10 +18,17 @@ import httpx
 from app.config import CACHE_PATH
 
 WAGO = "https://wago.tools/db2/{}/csv"
-ELITISM = "https://raw.githubusercontent.com/amki/ElitismHelper/master/ElitismHelper.lua"
 REFRESH_S = 7 * 86400
 DISPEL_NAMES = {1: "magic", 2: "curse", 3: "disease", 4: "poison"}
 INTERRUPT_FLAG = 0x08  # SpellInterrupts.InterruptFlags: the cast can be interrupted
+# SpellEffect.ImplicitTarget values (the game's targeting rules) that put damage on a spot on the ground rather than
+# on a chosen player or the whole room around the caster: a picked point, random points, a missile's landing spot,
+# a dynamic object (puddle), a circle dropped on a player. Checked against Hailbombs (87) vs Inferno, Hailburst,
+# Oozing Xylem, Spouting Floret, Bedrock Surge, Thornblade (caster- or player-centered).
+GROUND_TARGETS = {28, 53, 63, 72, 73, 86, 87, 88, 89}
+CONE_TARGETS = {24, 54, 104, 110}  # frontal cones: dodgeable for everyone but the tank
+PERSISTENT_AREA = 27  # SpellEffect.Effect: a lasting area (puddle) on the ground
+TRIGGER_EFFECTS = {64, 142}  # effects that cast another spell - which inherits where the first one landed
 log = logging.getLogger("uvicorn.error")
 
 
@@ -33,14 +38,18 @@ class SpellFacts:
         self._lock = threading.Lock()
         self._building = False
         with self._lock:
-            self._db.execute("CREATE TABLE IF NOT EXISTS spellfacts (id INTEGER PRIMARY KEY, dispel INTEGER, "
-                             "interrupt INTEGER, cast_ms INTEGER, avoid INTEGER)")
             self._db.execute("CREATE TABLE IF NOT EXISTS spellfacts_meta (key TEXT PRIMARY KEY, value REAL)")
+            cols = [r[1] for r in self._db.execute("PRAGMA table_info(spellfacts)")]
+            if cols and "ground" not in cols:  # older layout: drop it, the next refresh rebuilds it
+                self._db.execute("DROP TABLE spellfacts")
+                self._db.execute("DELETE FROM spellfacts_meta")
+            self._db.execute("CREATE TABLE IF NOT EXISTS spellfacts (id INTEGER PRIMARY KEY, dispel INTEGER, "
+                             "interrupt INTEGER, cast_ms INTEGER, ground INTEGER)")
             self._db.commit()
 
     def _row(self, spell_id: int):
         with self._lock:
-            return self._db.execute("SELECT dispel, interrupt, cast_ms, avoid FROM spellfacts WHERE id = ?",
+            return self._db.execute("SELECT dispel, interrupt, cast_ms, ground FROM spellfacts WHERE id = ?",
                                     (spell_id,)).fetchone()
 
     def dispel(self, spell_id: int) -> str | None:
@@ -53,9 +62,10 @@ class SpellFacts:
         row = self._row(spell_id)
         return None if not row or row[1] is None else bool(row[1] & INTERRUPT_FLAG)
 
-    def avoidable(self, spell_id: int) -> bool:
+    def ground(self, spell_id: int) -> str | None:
+        """'ground' (a spot on the floor or a puddle), 'cone' (a frontal), or None."""
         row = self._row(spell_id)
-        return bool(row and row[3])
+        return {1: "ground", 2: "cone"}.get(row[3]) if row else None
 
     def refresh_if_stale(self) -> None:
         """Starts a background download when the facts are older than a week (or missing)."""
@@ -68,8 +78,8 @@ class SpellFacts:
 
     def _build(self) -> None:
         try:
-            facts: dict[int, list] = {}  # id -> [dispel, interrupt flags, cast_ms, avoid]
-            row = lambda sid: facts.setdefault(sid, [None, None, None, 0])
+            facts: dict[int, list] = {}  # id -> [dispel, interrupt flags, cast_ms, ground]
+            row = lambda sid: facts.setdefault(sid, [None, None, None, None])
             for r in _stream("SpellCategories"):
                 d = int(r["DispelType"] or 0)
                 if d in DISPEL_NAMES:
@@ -82,8 +92,21 @@ class SpellFacts:
                 ms = cast_ms.get(int(r["CastingTimeIndex"] or 0), 0)
                 if ms:
                     row(int(r["SpellID"]))[2] = ms
-            for sid in _elitism_ids():
-                row(sid)[3] = 1
+            ground, triggers = {}, []  # spell -> 1 ground / 2 cone; (parent, triggered spell)
+            for r in _stream("SpellEffect"):
+                sid, targets = int(r["SpellID"] or 0), {int(r["ImplicitTarget_0"] or 0), int(r["ImplicitTarget_1"] or 0)}
+                effect = int(r["Effect"] or 0)
+                if targets & GROUND_TARGETS or effect == PERSISTENT_AREA:
+                    ground[sid] = 1
+                elif targets & CONE_TARGETS:
+                    ground.setdefault(sid, 2)
+                if effect in TRIGGER_EFFECTS and int(r["EffectTriggerSpell"] or 0):
+                    triggers.append((sid, int(r["EffectTriggerSpell"])))
+            for parent, child in triggers:  # the damage in the log is often the spell the ground effect casts
+                if parent in ground:
+                    ground.setdefault(child, ground[parent])
+            for sid, kind in ground.items():
+                row(sid)[3] = kind
             with self._lock:
                 self._db.execute("DELETE FROM spellfacts")
                 self._db.executemany("INSERT INTO spellfacts VALUES (?, ?, ?, ?, ?)",
@@ -105,10 +128,3 @@ def _stream(table: str):
     with httpx.stream("GET", WAGO.format(table), timeout=120, follow_redirects=True) as r:
         r.raise_for_status()
         yield from csv.DictReader(r.iter_lines())
-
-
-def _elitism_ids() -> set[int]:
-    """Spell ids the addon counts as avoidable (commented-out lines are older seasons and don't count)."""
-    text = httpx.get(ELITISM, timeout=60, follow_redirects=True).text
-    return {int(m.group(1)) for line in text.splitlines()
-            if not line.lstrip().startswith("--") and (m := re.match(r"\s*\[(\d+)\]\s*=\s*\d+", line))}

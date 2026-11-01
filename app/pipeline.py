@@ -41,7 +41,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 63
+RULES_VERSION = 64
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -672,12 +672,17 @@ def _with_brings(group: list[dict], players, run, segs, group_casts) -> list[dic
 
 DODGE_TOP_PP = 0.3  # peers take this ability at most this many times per player per run = they dodge it
 DODGE_MIN_TOPS = 3
+DODGE_ONE_SHOT = 0.5  # a killing blow this big (share of max HP) counts as the cause on its own
+DODGE_PEER_MAX = 1.0  # a ground effect peers still take this often per player a run isn't really avoidable
 
 
 def _dodgeable(r: dict, avoid: Avoidance, encounter, run, top_runs: list) -> dict | None:
     """{ability, why} when the death's cause (or killing blow) was damage to dodge, not to survive. A death to
     ground effects or things to walk out of gets no defensive advice: standing in it was the mistake."""
-    for name in dict.fromkeys([r["cause"]["name"], r.get("killing", "")]):
+    # The killing blow only decides it when it was a big hit on its own (a one-shot), not a tick that finished them.
+    last = next((e for e in reversed(r.get("events", [])) if e["kind"] == "hit" and e["ability"] == r.get("killing")), None)
+    big_kill = bool(last and r.get("max_hp") and (last.get("amount") or 0) >= DODGE_ONE_SHOT * r["max_hp"])
+    for name in dict.fromkeys([r["cause"]["name"]] + ([r["killing"]] if big_kill else [])):
         if not name:
             continue
         tag = avoid.tag_by_name(run, name, r["t"])
@@ -686,16 +691,22 @@ def _dodgeable(r: dict, avoid: Avoidance, encounter, run, top_runs: list) -> dic
         aid = next((a for a, n in run.abilities if n == name), None)
         if encounter.avoidable(aid, name):
             return {"ability": name, "why": encounter.note(aid, name) or "a ground effect to dodge"}
-        if any(FACTS.avoidable(a) for a, n in run.abilities if n == name):
-            return {"ability": name, "why": "on the community's avoidable-damage list (ElitismHelper)"}
-        # Across peers' whole runs (not pull by pull): rarely hit at all means they walk out of it.
-        # Seen in some of their logs (so it happens on their route too), yet barely hits them.
+        # Across peers' whole runs (not pull by pull): how often it hits them per player.
         hits = [sum(1 for d in t.damage if d[2] in {a for a, n in t.abilities if n == name}) / max(1, len(t.players))
                 for t in top_runs]
+        peer_pp = statistics.mean(hits) if len(top_runs) >= DODGE_MIN_TOPS else None
+        # The game data says it lands on a spot on the floor (or a frontal, for anyone but the tank) - unless peers get
+        # hit by it all the time, which means it can't really be avoided.
+        kinds = {FACTS.ground(a) for a, n in run.abilities if n == name} - {None}
+        victim_tank = any(p[1] == r["victim"] and p[2] == "tank" for p in run.players)
+        if ("ground" in kinds or ("cone" in kinds and not victim_tank)) and (peer_pp is None or peer_pp <= DODGE_PEER_MAX):
+            where = "lands on a spot on the ground" if "ground" in kinds else "is a frontal"
+            return {"ability": name, "why": f"it {where} (game data)"
+                    + (f"; peer groups get hit {peer_pp:.1f} times per player a run" if peer_pp is not None else "")}
+        # Seen in some of their logs (so it happens on their route too), yet barely hits them.
         seen = any(any(n == name for _, n in t.abilities) for t in top_runs)
-        if len(top_runs) >= DODGE_MIN_TOPS and seen and statistics.mean(hits) <= DODGE_TOP_PP:
-            return {"ability": name, "why": f"peer groups get hit {statistics.mean(hits):.1f} times per player a run - "
-                                            f"they dodge it"}
+        if peer_pp is not None and seen and peer_pp <= DODGE_TOP_PP:
+            return {"ability": name, "why": f"peer groups get hit {peer_pp:.1f} times per player a run - they dodge it"}
     return None
 
 
