@@ -296,16 +296,17 @@ def save_settings(s: Settings, w: Who = Depends(who)):
 
 
 @app.get("/api/recent")
-def recent(limit: int = RECENT_FIRST, w: Who = Depends(who)):
+def recent(limit: int = RECENT_FIRST, fresh: bool = False, w: Who = Depends(who)):
     """Your recent keys from the newest `limit` reports (the page asks for more with "Load more"). Reports older
     than a day can't change, so their fight lists come from the cache; on a WCL rate limit it returns what it has
-    found so far with a note instead of failing."""
+    found so far with a note instead of failing. fresh: the refresh button - skip the 5-minute cache of new reports."""
     s, client = load_settings(w), w.client.quick()
     if not s:
         return {"runs": []}
+    ttl = 1 if fresh else RECENT_TTL_S
     saved_key = f"recent_saved:{s['name'].lower()}:{server_slug(s['server'])}:{s['region']}"
     try:
-        char = lookup_character(client, s, ttl=RECENT_TTL_S)
+        char = lookup_character(client, s, ttl=ttl)
     except WCLError as e:  # Warcraft Logs busy: the last list we built, with a quiet note, instead of an error
         saved = client.get_cached(saved_key)
         if not saved:
@@ -323,7 +324,7 @@ def recent(limit: int = RECENT_FIRST, w: Who = Depends(who)):
     uploader = w.user_id or LOCAL_WCL_USER_ID
     if uploader:
         try:
-            mine = client.query(UPLOADS_QUERY, {"uid": uploader, "limit": RECENT_REPORTS}, ttl=RECENT_TTL_S)
+            mine = client.query(UPLOADS_QUERY, {"uid": uploader, "limit": RECENT_REPORTS}, ttl=ttl)
             for r in mine["reportData"]["reports"]["data"]:
                 reports.setdefault(r["code"], r)
         except (WCLError, httpx.HTTPError, KeyError, TypeError) as e:
@@ -333,7 +334,7 @@ def recent(limit: int = RECENT_FIRST, w: Who = Depends(who)):
     now_ms = datetime.now(timezone.utc).timestamp() * 1000
     for rep in reports[:max(1, limit)]:
         try:
-            runs += _report_runs(client, rep, s, seen, None if now_ms - rep["startTime"] > FINISHED_REPORT_MS else RECENT_TTL_S)
+            runs += _report_runs(client, rep, s, seen, None if now_ms - rep["startTime"] > FINISHED_REPORT_MS else ttl)
         except WCLError as e:
             log.warning("recent keys partial (user %s, report %s): %s", w.user_id, rep["code"], e)
             partial = str(e)

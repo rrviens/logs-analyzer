@@ -382,6 +382,10 @@
              background: none; color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
   .iconbtn:hover, .iconbtn[aria-expanded="true"] { background: var(--panel-2); color: var(--text); }
   .iconbtn svg { width: 17px; height: 17px; }
+  .keyshead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .keyshead h2 { margin: 0; }
+  .iconbtn.spin svg { animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .dispmenu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 9; background: var(--panel); width: max-content;
               border: 1px solid var(--line-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-pop); padding: 10px 12px; }
   .dm-label { font-size: 0.8rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 2px 0 6px; }
@@ -562,7 +566,9 @@
       <input id="pasteUrl" placeholder="Paste a Warcraft Logs URL" autocomplete="off">
       <button class="primary" type="submit">Go</button>
     </form>
-    <h2>Your recent keys</h2>
+    <div class="keyshead"><h2>Your recent keys</h2>
+      <button class="iconbtn" id="runsRefresh" title="Check Warcraft Logs for new keys" aria-label="Refresh key list"
+              onclick="refreshRuns()"><i data-lucide="refresh-cw">↻</i></button></div>
     <div class="runs" id="runs"><div class="empty">Loading...</div></div>
   </aside>
 
@@ -633,7 +639,14 @@ function sessionState() {
 }
 
 let RUNS_LIMIT = 5;  // reports checked; "Load more" raises it
-async function loadRuns(limit = RUNS_LIMIT) {
+// Refresh button: re-checks Warcraft Logs right away (skips the server's 5-minute cache of new reports).
+async function refreshRuns() {
+  const b = $("runsRefresh");
+  if (b.disabled) return;
+  b.disabled = true; b.classList.add("spin");
+  try { await loadRuns(RUNS_LIMIT, true); } finally { b.disabled = false; b.classList.remove("spin"); }
+}
+async function loadRuns(limit = RUNS_LIMIT, fresh = false) {
   RUNS_LIMIT = limit;
   const s = await loadSettings().catch(() => ({}));
   if (!s.name) {
@@ -642,7 +655,7 @@ async function loadRuns(limit = RUNS_LIMIT) {
   }
   const retry = `<button class="pill" onclick="loadRuns()">Try again</button>`;
   try {
-    const data = await api(`/api/recent?limit=${limit}`);
+    const data = await api(`/api/recent?limit=${limit}${fresh ? "&fresh=true" : ""}`);
     // A WCL rate limit part-way: show what was found plus the reason, with "Try again".
     if (data.partial) reportError("keys", "Loading all your recent keys", data.partial, () => loadRuns()); else clearError("keys");
     const note = data.partial ? `<div class="empty">Some keys couldn't be loaded yet.<br><br>${retry}</div>` : "";
