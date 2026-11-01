@@ -125,6 +125,18 @@ def _spell_ids(run, out: dict) -> dict[str, int]:
     return ids
 
 
+def _own_run_sections(client, fight, run, tl, segs, players, state, spec) -> dict:
+    def clock(t: int) -> str:
+        s = max(0, (t - run.start) // 1000)
+        return f"{s // 60}:{s % 60:02d}"
+    deaths = _death_recaps(client, fight, run, players, state, [], [], clock, lambda msg: None, spec)
+    encounter = load_encounter(run.dungeon)
+    for r in deaths:
+        r["note"] = encounter.note(name=r["cause"]["name"])
+    dps, windows = _dps_windows(client, fight, run, tl, segs, [None] * len(segs), [], [], spec)
+    return {"deaths": deaths, "dps": dps, "dps_windows": windows}
+
+
 def latest_key(code: str, fight_id: int, player: str, top: int) -> str:
     return f"analysis_latest:{code}:{fight_id}:{player.lower()}:{top}"
 
@@ -219,7 +231,11 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     loader.shutdown(wait=False)
     if preview:
         try:
-            preview(_preview(client, fight, run, tl, segs, me, spec, my_players, my_state, effects))
+            part = _preview(client, fight, run, tl, segs, me, spec, my_players, my_state, effects)
+            preview(part)
+            # Stage 2, still without peers: death recaps and DPS windows only need your own run. (Peer extras -
+            # how peers handle a debuff, their DPS rate, avoidable tags - come with the full result.)
+            preview({**part, "stage": 2, **_own_run_sections(client, fight, run, tl, segs, my_players, my_state, spec)})
         except Exception:  # noqa: BLE001 - a preview is a nice-to-have; the full analysis still follows
             log.warning("preview failed for %s fight %s", code, fight.id, exc_info=True)
     tops_done.result()
