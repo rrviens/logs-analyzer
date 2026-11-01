@@ -41,7 +41,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 64
+RULES_VERSION = 65
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -321,7 +321,11 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
                             group_casts)
     # Encounter notes correct the learned tags: an ability the notes call not avoidable loses its tag.
     encounter = load_encounter(run.dungeon)
-    avoid.by_pull = {i: {a: t for a, t in tags.items() if not encounter.not_avoidable(a, run.ability_name(a))}
+    # The game data too: "avoidable" (peers took it less) only stands for damage on the floor or a frontal - peers
+    # also take less of a cast they interrupt (Frostbolt) or an instant they skip the pack for.
+    on_floor = lambda a: not FACTS.ready() or (FACTS.interruptible(a) is not True and FACTS.ground(a) is not None)
+    avoid.by_pull = {i: {a: t for a, t in tags.items() if not encounter.not_avoidable(a, run.ability_name(a))
+                         and (encounter.avoidable(a, run.ability_name(a)) or on_floor(a))}
                      for i, tags in avoid.by_pull.items()}
     death_recaps = _death_recaps(client, fight, run, my_players, my_state, [tr.run for tr, _ in tops],
                                  candidates, clock, progress, spec)
@@ -670,7 +674,6 @@ def _with_brings(group: list[dict], players, run, segs, group_casts) -> list[dic
     return group
 
 
-DODGE_TOP_PP = 0.3  # peers take this ability at most this many times per player per run = they dodge it
 DODGE_MIN_TOPS = 3
 DODGE_ONE_SHOT = 0.5  # a killing blow this big (share of max HP) counts as the cause on its own
 DODGE_PEER_MAX = 1.0  # a ground effect peers still take this often per player a run isn't really avoidable
@@ -685,28 +688,26 @@ def _dodgeable(r: dict, avoid: Avoidance, encounter, run, top_runs: list) -> dic
     for name in dict.fromkeys([r["cause"]["name"]] + ([r["killing"]] if big_kill else [])):
         if not name:
             continue
-        tag = avoid.tag_by_name(run, name, r["t"])
-        if tag and tag.kind in ("avoidable", "extra"):
-            return {"ability": name, "why": tag.evidence}
         aid = next((a for a, n in run.abilities if n == name), None)
         if encounter.avoidable(aid, name):
             return {"ability": name, "why": encounter.note(aid, name) or "a ground effect to dodge"}
-        # Across peers' whole runs (not pull by pull): how often it hits them per player.
+        # Only the game data can say "dodge": peers being hit less also happens when they interrupt the cast (Frostbolt),
+        # stun the caster or skip the pack - so peer numbers can veto, never confirm.
+        ids = [a for a, n in run.abilities if n == name]
+        if any(FACTS.interruptible(a) for a in ids):
+            continue  # a cast you interrupt, not something on the floor
+        kinds = {FACTS.ground(a) for a in ids} - {None}
+        victim_tank = any(p[1] == r["victim"] and p[2] == "tank" for p in run.players)
+        if not ("ground" in kinds or ("cone" in kinds and not victim_tank)):
+            continue
         hits = [sum(1 for d in t.damage if d[2] in {a for a, n in t.abilities if n == name}) / max(1, len(t.players))
                 for t in top_runs]
         peer_pp = statistics.mean(hits) if len(top_runs) >= DODGE_MIN_TOPS else None
-        # The game data says it lands on a spot on the floor (or a frontal, for anyone but the tank) - unless peers get
-        # hit by it all the time, which means it can't really be avoided.
-        kinds = {FACTS.ground(a) for a, n in run.abilities if n == name} - {None}
-        victim_tank = any(p[1] == r["victim"] and p[2] == "tank" for p in run.players)
-        if ("ground" in kinds or ("cone" in kinds and not victim_tank)) and (peer_pp is None or peer_pp <= DODGE_PEER_MAX):
-            where = "lands on a spot on the ground" if "ground" in kinds else "is a frontal"
-            return {"ability": name, "why": f"it {where} (game data)"
-                    + (f"; peer groups get hit {peer_pp:.1f} times per player a run" if peer_pp is not None else "")}
-        # Seen in some of their logs (so it happens on their route too), yet barely hits them.
-        seen = any(any(n == name for _, n in t.abilities) for t in top_runs)
-        if peer_pp is not None and seen and peer_pp <= DODGE_TOP_PP:
-            return {"ability": name, "why": f"peer groups get hit {peer_pp:.1f} times per player a run - they dodge it"}
+        if peer_pp is not None and peer_pp > DODGE_PEER_MAX:
+            continue  # on the floor, but peers get hit by it all the time: not really avoidable
+        where = "lands on a spot on the ground" if "ground" in kinds else "is a frontal"
+        return {"ability": name, "why": f"it {where} (game data)"
+                + (f"; peer groups get hit {peer_pp:.1f} times per player a run" if peer_pp is not None else "")}
     return None
 
 

@@ -67,6 +67,11 @@ class SpellFacts:
         row = self._row(spell_id)
         return {1: "ground", 2: "cone"}.get(row[3]) if row else None
 
+    def ready(self) -> bool:
+        """The game data has been downloaded (until then callers keep their log-only behavior)."""
+        with self._lock:
+            return self._db.execute("SELECT 1 FROM spellfacts LIMIT 1").fetchone() is not None
+
     def refresh_if_stale(self) -> None:
         """Starts a background download when the facts are older than a week (or missing)."""
         with self._lock:
