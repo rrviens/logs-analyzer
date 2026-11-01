@@ -61,8 +61,7 @@ Top players band. To refresh it locally:
 .\.venv\Scripts\python study.py --spec resto_shaman --runs 5
 ```
 
-It pauses for the hourly API reset when the budget runs low (~520 points per spec). Included: Resto Shaman and
-Resto Druid; Mistweaver, Holy Priest, Preservation, Holy Paladin and Discipline are in progress.
+It pauses for the hourly API reset when the budget runs low (~520 points per spec). Included for all seven specs.
 
 ## For developers
 
