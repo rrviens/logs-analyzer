@@ -119,6 +119,8 @@ def get_players(client: WCLClient, fight: Fight) -> list[Player]:
     players = []
     for group, role in (("tanks", "tank"), ("healers", "healer"), ("dps", "dps")):
         for p in details.get(group, []):
+            if p.get("type") == "Unknown":
+                continue  # in the fight's time window without playing it (joined as the key ended): no combat data
             specs = p.get("specs") or []
             players.append(
                 Player(

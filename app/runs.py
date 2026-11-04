@@ -110,6 +110,8 @@ def fetch_run(client: WCLClient, fight: Fight, healer_id: int, spec: Spec) -> Ru
             cached["hots"] = cached.pop("riptide")
         if cached["players"] and len(cached["players"][0]) < 3:  # cached before roles were stored
             cached["players"] = [[p.id, p.name, p.role] for p in get_players(client, fight)]
+        ids = {p.id for p in get_players(client, fight)}  # cached query; drops players who weren't really in the key
+        cached["players"] = [p for p in cached["players"] if p[0] in ids]
         return RunData(**cached)
 
     report = client.query(RUN_QUERY, {"code": fight.report_code})["reportData"]["report"]
