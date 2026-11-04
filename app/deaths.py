@@ -569,7 +569,8 @@ def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispe
                     advice.append(f"{pname(d[0])} can clear it themselves with {method} (did at {clock(other[3])}) - "
                                   f"your dispel can go elsewhere.")
             break
-    if debuff in top_handling:
+    # How peers got rid of it only means something when it can be got rid of (Hearty Bellow can't: it just expires).
+    if debuff in top_handling and (dispellable or totem or known):
         lines.append(top_handling[debuff] + f" ({pname(victim_id)}: {on_for:.1f}s.)")
     return {"debuff": debuff, "dispellable": dispellable, "on_for": round(on_for, 1), "lines": lines, "advice": advice,
             "fix": fixes[0] if fixes else ""}
