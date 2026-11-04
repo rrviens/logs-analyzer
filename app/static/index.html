@@ -262,6 +262,7 @@
   .member .note { font-size: 0.8667rem; color: var(--med); }
   .role { font-size: 0.8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
   .compnote { color: var(--muted); font-size: 0.8667rem; margin-bottom: 16px; }
+  tr.part td { color: var(--muted); font-size: 0.8667rem; } tr.part td:first-child { padding-left: 22px; }
   .ctx { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 8px 0 6px 52px;
          padding: 8px 10px; background: var(--bg); border-radius: 6px; font-size: 0.9333rem; }
   .ctx dt { color: var(--muted); font-weight: 600; }
@@ -891,8 +892,8 @@ document.addEventListener("click", (e) => {
 function pullShort(label) {
   if (!label || label === "Whole run") return "";
   const name = (label.split(": ")[1] || label).split(" (boss)")[0].split(" · ")[0];
-  const phase = (label.match(/· (P\d)/) || [])[1];
-  return name.split(" ")[0] + (phase ? ` ${phase}` : "");
+  const part = label.split(" · ")[1];  // "after Awaken Whelps" on a boss part
+  return name.split(" ")[0] + (part ? ` (${part})` : "");
 }
 
 // ---------- timeline ----------
@@ -1659,7 +1660,6 @@ window.addEventListener("resize", () => { if (TL && $("tlSvg")) { drawTimeline()
 const SECTIONS = {
   look: {title: "What to look at", icon: "!", lucide: "triangle-alert", color: "var(--high)"},
   deaths: {title: "Death recaps", icon: "✕", lucide: "skull", color: "var(--critical)"},
-  phases: {title: "Boss phases", icon: "◐", lucide: "layers", color: "var(--series-7)"},
   items: {title: "Trinkets & consumables", icon: "◆", lucide: "flask-conical", color: "var(--series-3)"},
   spells: {title: "Single-target vs group heal", icon: "≈", lucide: "split", color: "var(--series-1)"},
   dps: {title: "DPS windows", icon: "⚔", lucide: "swords", color: "var(--series-3)"},
@@ -1795,20 +1795,6 @@ function openDeath(clock) {
   el.scrollIntoView({behavior: "smooth", block: "start"});
 }
 
-function renderPhases(res) {
-  if (!res.phases || !res.phases.length) return "";
-  const pct = (v) => v == null ? "-" : `${Math.round(v * 100)}%`;
-  const rows = res.phases.map((p) => `<tr><td>${esc(p.pull)}</td><td>${esc(p.phase)}</td><td>${T(p.clock)}</td>
-    <td>${p.duration_s}s</td><td class="${p.top_group_hp != null && p.group_hp < p.top_group_hp - 0.05 ? "worse" : ""}">${pct(p.group_hp)}</td>
-    <td>${pct(p.top_group_hp)}</td><td>${(p.intake * 100).toFixed(1)}%</td>
-    <td>${p.top_intake == null ? "-" : (p.top_intake * 100).toFixed(1) + "%"}</td><td>${p.top_n}</td></tr>`).join("");
-  return `<details><summary>Show data</summary><div class="tablewrap"><table>
-    <tr><th>Boss</th><th>Phase</th><th>Start</th><th>Length</th><th>Group HP</th><th>Top HP</th>
-    <th>Dmg taken / s</th><th>Top dmg / s</th><th>Top runs</th></tr>${rows}</table></div>
-    <div class="compnote">Phases come from one-off boss casts that start a new part of the fight in most runs.
-    Damage taken = % of group max HP per second.</div></details>`;
-}
-
 // ---------- DPS windows: calm stretches a healer can spend on damage ----------
 const dpsColor = (w) => w.use == null ? "var(--ink-muted)" : w.use >= 0.75 ? "var(--good)" : w.use >= 0.4 ? "var(--warning)" : "var(--critical)";
 
@@ -1934,12 +1920,17 @@ function render(res, url) {
       <span style="color:var(--muted)"> - ${T(g.detail.join(" "))}</span></span></div>`).join("");
   const kk = (x) => x == null ? "-" : `${Math.round(x / 1000)}k`;
   const pp = (x) => x == null ? "-" : `${Math.round(x * 100)}%`;
+  // Boss fights with parts (named after what began them) get a row per part under the boss.
+  const parts = (q) => (res.phases || []).filter((ph) => ph.pull.split(":")[0] === q.pull.split(":")[0]).map((ph) => `
+      <tr class="part"><td>${ph.phase === "Start" ? "start" : `after ${esc(ph.phase)}`} · ${T(ph.clock)}</td><td>${ph.duration_s}s</td>
+      <td class="${ph.top_group_hp != null && ph.group_hp < ph.top_group_hp - 0.05 ? "worse" : ""}">${pp(ph.group_hp)}</td><td>${pp(ph.top_group_hp)}</td>
+      <td colspan="4">damage taken ${(ph.intake * 100).toFixed(1)}%/s${ph.top_intake == null ? "" : ` vs ${(ph.top_intake * 100).toFixed(1)}%/s`} of group HP</td></tr>`).join("");
   const rows = res.requirements.map((q) => `<tr><td>${esc(q.pull)}</td><td>${Math.round(q.duration_s)}s</td>
       <td class="${q.top_group_hp != null && q.group_hp < q.top_group_hp - 0.03 ? "worse" : ""}">${pp(q.group_hp)}</td><td>${pp(q.top_group_hp)}</td>
-      <td>${kk(q.intake)}</td><td>${kk(q.top_intake)}</td><td>${kk(q.healing)}</td><td>${kk(q.top_healing)}</td></tr>`).join("");
+      <td>${kk(q.intake)}</td><td>${kk(q.top_intake)}</td><td>${kk(q.healing)}</td><td>${kk(q.top_healing)}</td></tr>${parts(q)}`).join("");
   const todo = (x) => x && x.lines ? x.lines.filter((l) => l.action).length : 0;
   const tier = reviewTier(res), split = splitFindings(res, tier);
-  const counts = {look: split.shown.length, deaths: (res.deaths || []).length, phases: todo(v.phases),
+  const counts = {look: split.shown.length, deaths: (res.deaths || []).length,
                   items: todo(v.items), spells: todo(v.spells), pulls: todo(v.pulls), good: res.good_calls.length,
                   dps: ((res.timeline || {}).dps_windows || []).filter((w) => w.use != null && w.use < 0.4).length};
 
@@ -1964,8 +1955,6 @@ function render(res, url) {
               (${esc(tier.minorWhy)})</summary><div class="body">${byTime(split.minor).map(([f, i]) => renderFinding(f, i, res)).join("")}</div></details>` : ""),
           "Nothing worth flagging - this run holds up against your peers.")}
     ${renderDeaths(res)}
-    ${sec("phases", res.phases && res.phases.length ? counts.phases || "ok" : 0, verdictBlock(v.phases, renderPhases(res)),
-          "Boss phases: none detected on this run.", false)}
     ${sec("items", (res.items || []).length ? counts.items || "ok" : 0, verdictBlock(v.items, renderItems(res)),
           "Trinkets & consumables: none used.", false)}
     ${sec("spells", res.spell_choice && res.spell_choice.you ? counts.spells || "ok" : 0, verdictBlock(v.spells, renderSpells(res)),

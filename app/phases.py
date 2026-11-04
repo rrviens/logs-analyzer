@@ -120,13 +120,17 @@ def _mean_intake(tl, ph: Phase) -> float:
 
 
 def phases_for(pull: Pull, casts: list[list], markers: list[str]) -> list[Phase]:
-    starts = sorted((min(t for t, n in casts if n == m) + pull.start, m)
-                    for m in markers if any(n == m for _, n in casts))
-    if not starts:
+    """Parts of the fight named after what started them ("Start", "Awaken Whelps", "Awaken Whelps 2"): every cast of
+    a marker (they're cast at most twice) opens a part; casts close together open one part."""
+    duration = max(1, pull.end - pull.start)
+    seen: dict[str, int] = {}
+    bounds = [(pull.start, "Start")]
+    for t, name in sorted((t, n) for t, n in casts if n in markers):
+        if t / duration < MARKER_MIN_FRACTION or (t + pull.start) - bounds[-1][0] < SAME_PHASE_FRACTION * duration:
+            continue
+        seen[name] = seen.get(name, 0) + 1
+        bounds.append((t + pull.start, name if seen[name] == 1 else f"{name} {seen[name]}"))
+    if len(bounds) < 2:
         return []
-    bounds = [(pull.start, None)] + starts
-    phases = []
-    for i, (start, marker) in enumerate(bounds):
-        end = bounds[i + 1][0] if i + 1 < len(bounds) else pull.end
-        phases.append(Phase(f"P{i + 1}" + (f" ({marker})" if marker else ""), start, end))
-    return phases
+    return [Phase(label, start, bounds[i + 1][0] if i + 1 < len(bounds) else pull.end)
+            for i, (start, label) in enumerate(bounds)]

@@ -146,7 +146,8 @@ def phases_verdict(phases: list[dict]) -> dict:
         return {}
     lines = []
     for p in phases:
-        where = f"{p['pull'].split(': ', 1)[-1]} {p['phase']}"
+        part = "start" if p["phase"] == "Start" else f"after {p['phase']}"  # parts are named after what began them
+        where = f"{p['pull'].split(': ', 1)[-1]} ({part})"
         if p["top_group_hp"] is None or p["top_n"] < 2:
             continue
         gap = p["top_group_hp"] - p["group_hp"]
@@ -161,11 +162,13 @@ def phases_verdict(phases: list[dict]) -> dict:
 
 
 def pulls_verdict(requirements: list[dict], phases: dict | None = None) -> dict:
-    """Per pull. Bosses already called out phase by phase are skipped here."""
+    """Per pull. Boss fights with parts (Melidrussa before / after Awaken Whelps) are judged part by part, and those
+    lines lead; the whole-boss line is then skipped."""
     if not requirements:
         return {}
-    covered = {l["text"].split(" P")[0] for l in (phases or {}).get("lines", []) if l["action"]}
-    lines = []
+    part_lines = [l for l in (phases or {}).get("lines", []) if l["action"]]
+    covered = {l["text"].split(" (")[0] for l in part_lines}
+    lines = list(part_lines)
     for r in requirements:
         if r["top_group_hp"] is None:
             continue
@@ -184,5 +187,5 @@ def pulls_verdict(requirements: list[dict], phases: dict | None = None) -> dict:
             lines.append(_line(f"{name}: your group took {r['intake'] / r['top_intake'] - 1:.0%} more damage than top "
                                f"groups, and you still kept them as healthy - nice."))
     ok = ("Pulls: group HP at or above peer groups on every pull." if not covered else
-          f"Other pulls: group HP at or above peer groups ({', '.join(sorted(covered))} covered phase by phase above).")
+          f"Other pulls: group HP at or above peer groups ({', '.join(sorted(covered))} judged part by part).")
     return _section(lines, ok, "pulls")

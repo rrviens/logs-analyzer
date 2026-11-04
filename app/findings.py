@@ -273,7 +273,7 @@ def _shorthand(f: Finding, spec: Spec) -> tuple[str, str]:
         fix = (f"Pair with {spec.major_pair_text.replace(' or ', ' / ')}" if "not lined up" in title
                else "Press it on cooldown")
     elif f.rule == "phase_gap":
-        title = title.replace("Group lower than peer groups in ", "Low group HP in ")
+        title = title.replace("Group lower than peer groups ", "Low group HP ")
         fix = "Group: less damage taken" if any("more damage" in d for d in f.detail) else "More healing / cooldowns"
     words = title.split()
     return (" ".join(words[:12]) + ("..." if len(words) > 12 else "")), fix
@@ -283,7 +283,7 @@ def _phase_suffix(c: _Ctx, t: int) -> str:
     pull = c.ctx.pull_of_bin[c.tl.bin_of(t)]
     for ph in c.phases.get(pull, []):
         if ph.start <= t < ph.end:
-            return f" · {ph.name}"
+            return "" if ph.name == "Start" else f" · after {ph.name}"
     return ""
 
 
@@ -298,20 +298,22 @@ def _phase_gaps(c: _Ctx) -> list[Finding]:
         if gap < PHASE_HP_GAP:
             continue
         damage_ratio = row["intake"] / row["top_intake"] if row["top_intake"] else None
-        detail = [f"Group HP through the phase: {row['group_hp']:.0%} vs {row['top_group_hp']:.0%} in peer groups "
+        part = "the start of the fight" if row["phase"] == "Start" else f"the part after {row['phase']}"
+        detail = [f"Group HP through {part}: {row['group_hp']:.0%} vs {row['top_group_hp']:.0%} in peer groups "
                   f"({row['top_n']} runs)."]
         if damage_ratio and damage_ratio >= PHASE_DAMAGE_RATIO:
             detail.append(f"Your group took {damage_ratio - 1:.0%} more damage here - partly avoidable or unmitigated damage.")
         elif damage_ratio:
             detail.append("Damage taken was similar to peer groups - the gap is healing throughput or cooldown timing.")
         for name, cd in row["cooldowns"].items():
-            detail.append(f"{name}: peer healers pressed it in this phase in {cd['top']} of {row['top_n']} runs; "
+            detail.append(f"{name}: peer healers pressed it in this part in {cd['top']} of {row['top_n']} runs; "
                           f"you {'did' if cd['you'] else 'did not'}.")
         if row["deaths"]:
-            detail.append(f"{row['deaths']} death(s) in this phase.")
+            detail.append(f"{row['deaths']} death(s) in this part.")
         pull = c.pull_label(row["pull_idx"])
         f = Finding(row["start"], pull, 40 + min(20, int(gap * 100)) + (10 if row["deaths"] else 0),
-                    f"Group lower than peer groups in {row['phase']}", detail)
+                    f"Group lower than peer groups {'at the start' if row['phase'] == 'Start' else 'after ' + row['phase']}",
+                    detail)
         out.append(f)
     return out
 

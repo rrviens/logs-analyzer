@@ -42,7 +42,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 72
+RULES_VERSION = 73
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -883,7 +883,7 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
         if i is None:
             return "between pulls"
         ph = next((ph.name for ph in phases.get(i, []) if ph.start <= t < ph.end), None)
-        return f"Pull {i + 1}: {run.pulls[i].name}" + (f" · {ph}" if ph else "")
+        return f"Pull {i + 1}: {run.pulls[i].name}" + (f" · after {ph}" if ph and ph != "Start" else "")
 
     def hp_line(t: int) -> str:
         b = tl.bin_of(t)
