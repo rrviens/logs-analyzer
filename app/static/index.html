@@ -742,7 +742,7 @@ function renderPreview(res, url) {
   SP = {...SP, ...res.spec};
   const r = res.run;
   $("main").innerHTML = `<div class="card"><div class="runhead"><h3>${esc(r.dungeon)} +${r.level}</h3>
-      <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span></div>
+      <span class="tag ${r.timed ? "timed" : r.duration_min < 20 ? "abandoned" : "depleted"}">${r.timed ? "Timed" : r.duration_min < 20 ? "Abandoned" : "Not timed"}</span></div>
       <div class="meta">${esc(r.player)} (${esc(res.spec.label)}) · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"}</div>
       ${renderGroup(res)}</div>
     <div class="card"><h2>Comparing with your peers</h2><p class="secempty">Your timeline${res.deaths ? ", death recaps and DPS windows are" : " is"} below; findings and the peer bands appear when the comparison is done.</p>
@@ -1876,7 +1876,7 @@ function render(res, url) {
   $("main").innerHTML = `
     <div class="card">
     <div class="runhead"><h3>${esc(r.dungeon)} +${r.level}</h3>
-      <span class="tag ${r.timed ? "timed" : "depleted"}">${r.timed ? "Timed" : "Not timed"}</span>
+      <span class="tag ${r.timed ? "timed" : r.duration_min < 20 ? "abandoned" : "depleted"}">${r.timed ? "Timed" : r.duration_min < 20 ? "Abandoned" : "Not timed"}</span>
       <span class="iobadge iohov" id="ioBadge" tabindex="0">IO <span class="dim">...</span></span><span class="iocmp iohov" id="ioCmp" tabindex="0" hidden></span>
       <div class="actions"><a class="link" href="${esc(url)}" target="_blank" rel="noopener">Open log</a>
       <button class="link" id="fresh">Re-analyze</button></div></div>
