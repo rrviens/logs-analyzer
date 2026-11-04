@@ -250,7 +250,7 @@
   .actions { display: flex; gap: 8px; margin-left: auto; }
   .link { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 0; }
   /* five equal cards in one row (wraps to equal columns on narrow screens); equal height per row */
-  .group { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 8px; margin-bottom: 8px; }
+  .group { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
   @media (max-width: 900px) { .group { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 560px) { .group { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .member { display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--line); border-radius: 8px;
@@ -260,12 +260,6 @@
   .member .who { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .member .spec { color: var(--muted); font-size: 0.8667rem; display: block; }
   .member .note { font-size: 0.8667rem; color: var(--med); }
-  .brings { list-style: none; margin: 6px 0 0; padding: 0; font-size: 0.8667rem; color: var(--text); }
-  .brings li { line-height: 1.35; margin-top: 2px; }
-  .brings li span { display: block; padding-left: 10px; }
-  .brings li span { color: var(--muted); }
-  .brings li.warn span { color: var(--warning); font-weight: 600; }
-  .brings i { display: inline-block; width: 6px; height: 6px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
   .role { font-size: 0.8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
   .compnote { color: var(--muted); font-size: 0.8667rem; margin-bottom: 16px; }
   .ctx { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 8px 0 6px 52px;
@@ -429,13 +423,30 @@
   @media (max-width: 600px) {
     .charmenu { position: fixed; left: 12px; right: 12px; top: 12px; width: auto; max-height: calc(100vh - 24px); }
   }  /* Raider.io badges in the run header: your group's IO (Raider.io's own colour), and the baseline's with the gap */
-  .iobadge, .iocmp { display: inline-flex; align-items: baseline; gap: 4px; border-radius: 999px; padding: 2px 10px;
-                     font-size: 0.8667rem; font-weight: 600; font-variant-numeric: tabular-nums; text-decoration: none; }
-  .iobadge { --io: var(--accent); color: var(--io); background: color-mix(in srgb, var(--io) 14%, transparent);
-             border: 1px solid color-mix(in srgb, var(--io) 45%, transparent); }
-  .iobadge b { font-size: 0.9333rem; }
   .iobadge .dim { color: var(--muted); font-weight: 400; }
-  .iocmp { color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); font-weight: 500; }
+  /* Header chips (result, IO, baseline): one shape, a coloured dot carries the meaning */
+  .hchip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border-radius: 999px;
+           border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-size: 0.8667rem;
+           font-weight: 600; font-variant-numeric: tabular-nums; text-decoration: none; align-self: center; }
+  .hchip .k { color: var(--muted); font-weight: 500; }
+  .hchip .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--c, var(--muted)); }
+  .hchip.timed { --c: var(--good); } .hchip.depleted { --c: var(--warn); } .hchip.abandoned { --c: var(--bad); }
+  .iobadge { --c: var(--io, var(--accent)); }
+  .iobadge b, .iocmp b { font-weight: 700; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 13px; border-radius: 8px;
+         border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font: inherit;
+         font-size: 0.9333rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn svg { width: 15px; height: 15px; }
+  .runhead .actions { align-self: center; }
+  .cdrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 10px 0 2px; font-size: 0.8667rem; }
+  .cdrow > .k { color: var(--muted); font-weight: 600; margin-right: 4px; }
+  .cdchip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+            background: var(--panel-2); border: 1px solid var(--line); cursor: help; }
+  .cdchip i { width: 6px; height: 6px; border-radius: 50%; }
+  .cdchip span { color: var(--muted); }
+  .cdchip.warn { border-color: color-mix(in srgb, var(--warning) 50%, transparent); }
+  .cdchip.warn span { color: var(--warning); font-weight: 600; }
   .iocmp .gap { font-weight: 600; }
   .iocmp.behind .gap { color: var(--high); } .iocmp.ahead .gap { color: var(--good); }
   a.spell { color: inherit; text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent);
@@ -784,7 +795,7 @@ function renderPreview(res, url) {
   SP = {...SP, ...res.spec};
   const r = res.run;
   $("main").innerHTML = `<div class="card"><div class="runhead"><h3>${esc(r.dungeon)} +${r.level}</h3>
-      <span class="tag ${r.timed ? "timed" : r.duration_min < 20 ? "abandoned" : "depleted"}">${r.timed ? "Timed" : r.duration_min < 20 ? "Abandoned" : "Not timed"}</span></div>
+      <span class="hchip ${r.timed ? "timed" : r.duration_min < 20 ? "abandoned" : "depleted"}"><i class="dot"></i>${r.timed ? "Timed" : r.duration_min < 20 ? "Abandoned" : "Not timed"}</span></div>
       <div class="meta">${esc(r.player)} (${esc(res.spec.label)}) · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"}</div>
       ${renderGroup(res)}</div>
     <div class="card"><h2>Comparing with your peers</h2><p class="secempty">Your timeline${res.deaths ? ", death recaps and DPS windows are" : " is"} below; findings and the peer bands appear when the comparison is done.</p>
@@ -822,24 +833,26 @@ function renderGroup(res) {
     <div class="member"><span class="bar" style="background:${CLASS_COLORS[m.class] || "var(--line)"}"></span>
       <div><div class="role">${esc(m.role)}</div><span class="who">${esc(m.name)}</span>
       <span class="spec">${esc([m.spec, m.class].filter(Boolean).join(" "))}</span>
-      ${m.note ? `<div class="note">${esc(m.note)}</div>` : ""}${renderBrings(m)}</div></div>`).join("");
+      ${m.note ? `<div class="note">${esc(m.note)}</div>` : ""}</div></div>`).join("");
   const notes = (res.comp_notes || []).map((n) => `<div>${esc(n)}</div>`).join("");
-  return `<div class="group">${members}</div>${notes ? `<div class="compnote">${notes}</div>` : ""}${renderMeters(res)}`;
+  return `<div class="group">${members}</div>${renderCooldowns(res)}${notes ? `<div class="compnote">${notes}</div>` : ""}${renderMeters(res)}`;
 }
 
-// Group / external cooldowns a member brings, flagged when never pressed or never up for a big group hit.
-function renderBrings(m) {
-  if (!m.brings || !m.brings.length) return "";
-  return `<ul class="brings">${m.brings.map((b) => {
+// Group / external cooldowns the group brings, one row of chips under the players (cards stay the same size):
+// flagged when never pressed or never up for a big group hit.
+function renderCooldowns(res) {
+  const all = res.group.flatMap((m) => (m.brings || []).map((b) => [m, b]));
+  if (!all.length) return "";
+  return `<div class="cdrow"><span class="k">Group cooldowns</span>${all.map(([m, b]) => {
     const tip = `${b.scope === "group" ? "Group" : "External"} cooldown · pressed ${b.casts}x · up for ${b.on_big_hits} of ${m.big_hits} big group hits${b.casts ? "" : " · may not be talented"}`;
     // Externals are single-target (tank busters, one dying player): judged only on being pressed, not on group hits.
     const group = b.scope === "group";
     const missed = !b.casts || (group && !b.on_big_hits && m.big_hits);
     const text = !b.casts ? "never pressed" : !group ? `${b.casts}x` : !b.on_big_hits && m.big_hits
       ? `${b.casts}x, never on a big hit` : `${b.casts}x · ${b.on_big_hits} big hit${b.on_big_hits === 1 ? "" : "s"}`;
-    return `<li class="${missed ? "warn" : ""}" title="${esc(tip)}">
-      <i style="background:${SCOPE_COLOR[b.scope]}"></i>${esc(b.name)} <span>${text}</span></li>`;
-  }).join("")}</ul>`;
+    return `<span class="cdchip${missed ? " warn" : ""}" title="${esc(tip)}"><i style="background:${CLASS_COLORS[m.class] || "var(--line)"}"></i>
+      <b>${esc(b.name)}</b> <span>${esc(m.name)} · ${text}</span></span>`;
+  }).join("")}</div>`;
 }
 
 function renderItems(res) {
@@ -1933,10 +1946,10 @@ function render(res, url) {
   $("main").innerHTML = `
     <div class="card">
     <div class="runhead"><h3>${esc(r.dungeon)} +${r.level}</h3>
-      <span class="tag ${r.timed ? "timed" : r.duration_min < 20 ? "abandoned" : "depleted"}">${r.timed ? "Timed" : r.duration_min < 20 ? "Abandoned" : "Not timed"}</span>
-      <span class="iobadge iohov" id="ioBadge" tabindex="0">IO <span class="dim">...</span></span><span class="iocmp iohov" id="ioCmp" tabindex="0" hidden></span>
-      <div class="actions"><a class="link" href="${esc(url)}" target="_blank" rel="noopener">Open log</a>
-      <button class="link" id="fresh">Re-analyze</button></div></div>
+      <span class="hchip ${r.timed ? "timed" : r.duration_min < 20 ? "abandoned" : "depleted"}"><i class="dot"></i>${r.timed ? "Timed" : r.duration_min < 20 ? "Abandoned" : "Not timed"}</span>
+      <span class="hchip iobadge iohov" id="ioBadge" tabindex="0"><span class="k">IO</span> <span class="dim">...</span></span><span class="hchip iocmp iohov" id="ioCmp" tabindex="0" hidden></span>
+      <div class="actions"><a class="btn" href="${esc(url)}" target="_blank" rel="noopener"><i data-lucide="external-link"></i>Open log</a>
+      <button class="btn" id="fresh"><i data-lucide="refresh-cw"></i>Re-analyze</button></div></div>
     <div class="meta">${esc(r.player)} (${esc(SP.label)}) · ${r.duration_min} min · ${r.deaths} death${r.deaths === 1 ? "" : "s"} ·
       compared with <span title="Peers: the best-ranked ${esc(SP.plural)} at your key level (±1) in this dungeon">${c.count} peer ${esc(SP.label)} logs (${levels})</span>${(c.skipped || []).length
         ? ` <span title="${esc(c.skipped.map((s) => `${s.player} +${s.key}: ${s.reasons.join(", ")}`).join("\n"))}">(${c.skipped.length} skipped: incomplete data)</span>`
@@ -2007,19 +2020,19 @@ function paintIO() {
   const d = IO_DATA, b = $("ioBadge"), cmp = $("ioCmp");
   if (!d || !b) return;
   const g = d.group;
-  if (!g.avg) { b.innerHTML = `IO <span class="dim">...</span>`; b.hidden = false; cmp.hidden = true; return; }
+  if (!g.avg) { b.innerHTML = `<span class="k">IO</span> <span class="dim">...</span>`; b.hidden = false; cmp.hidden = true; return; }
   const who = g.players.map((p) => `<div><span style="color:${CLASS_COLORS[p.class] || "inherit"}">${esc(p.name)}</span>
     <b>${p.score ? fmtIO(p.score) : p.known ? "no score" : "..."}</b></div>`).join("");
   b.style.setProperty("--io", g.color || "var(--accent)");
-  b.innerHTML = `IO <b>${fmtIO(g.avg)}</b>${ioPart(g)}<span class="iotip">${who}<div class="ionote">Your group's average. ${IO_NOTE}</div></span>`;
+  b.innerHTML = `<i class="dot"></i><span class="k">IO</span> <b>${fmtIO(g.avg)}</b>${ioPart(g)}<span class="iotip">${who}<div class="ionote">Your group's average. ${IO_NOTE}</div></span>`;
   b.hidden = false;
   const top = BASE === "top", avg = top ? d.study_avg : d.top_avg, rows = top ? d.study : d.tops;
   if (!avg) { cmp.hidden = true; return; }
   const gap = avg - g.avg, cls = Math.abs(gap) < 100 ? "even" : gap > 0 ? "behind" : "ahead";
   const list = rows.filter((t) => t.avg).map((t) => `<div>${esc(t.player)} +${t.key}${t.duration_min ? `, ${t.duration_min} min` : ""}
     <b>${fmtIO(t.avg)}</b>${ioPart(t)}</div>`).join("");
-  cmp.className = `iocmp ${cls}`;
-  cmp.innerHTML = `${top ? "Top players" : "Peers"} ${fmtIO(avg)} <span class="gap">(${gap > 0 ? "+" : ""}${fmtIO(gap)})</span>
+  cmp.className = `hchip iocmp iohov ${cls}`;
+  cmp.innerHTML = `<span class="k">${top ? "Top players" : "Peers"}</span> <b>${fmtIO(avg)}</b> <span class="gap">(${gap > 0 ? "+" : ""}${fmtIO(gap)})</span>
     <span class="iotip">${list}<div class="ionote">${top ? "Season-study runs" : "Peer groups at your key level"}: average per group. ${IO_NOTE}</div></span>`;
   cmp.hidden = false;
 }
