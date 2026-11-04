@@ -345,8 +345,8 @@
   .meter { display: grid; grid-template-columns: max-content 1fr max-content; gap: 3px 8px; align-items: center;
            font-size: 0.8667rem; }
   .meter .mh { grid-column: 1 / -1; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
-  .meter .mb { height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
-  .meter .mb i { display: block; height: 100%; border-radius: 3px; }
+  .meter .mb { height: 8px; border-radius: 1px; background: var(--panel-2); overflow: hidden; }
+  .meter .mb i { display: block; height: 100%; border-radius: 0; }
   .meter .mv { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
   .dpslegend { margin: 6px 0 4px; }
   .dpslegend i.box { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
@@ -668,14 +668,33 @@ async function loadRuns(limit = RUNS_LIMIT, fresh = false) {
     $("runs").innerHTML = `<div class="empty">Set your character to see recent keys.<br><br><button class="primary" onclick="openChar()">Set character</button></div>`;
     return;
   }
-  const retry = `<button class="pill" onclick="loadRuns()">Try again</button>`;
+  // Nothing on screen yet: the last saved list first (no Warcraft Logs call), so keys open even when it's slow or down.
+  if (!document.querySelector("#runs .run")) {
+    const saved = await api("/api/recent?saved=true").catch(() => null);
+    if (saved && saved.runs.length) showRuns({...saved, note: "Saved list - checking Warcraft Logs for new keys..."}, true);
+  }
   try {
-    const data = await api(`/api/recent?limit=${limit}${fresh ? "&fresh=true" : ""}`);
+    showRuns(await api(`/api/recent?limit=${limit}${fresh ? "&fresh=true" : ""}`));
+  } catch (e) {
+    if (document.querySelector("#runs .run")) {  // keep the list we have; say why it may be out of date
+      document.querySelector("#runs .updnote")?.remove();
+      $("runs").insertAdjacentHTML("afterbegin", `<div class="updnote">Couldn't reach Warcraft Logs - showing your saved
+        list. <button class="link" onclick="loadRuns()">Try again</button></div>`);
+      return;
+    }
+    reportError("keys", "Loading your recent keys", e.message, () => loadRuns(), e.ref);
+    $("runs").innerHTML = `<div class="empty">Couldn't load your recent keys.<br><br><button class="pill" onclick="loadRuns()">Try again</button></div>`;
+  }
+}
+
+// interim: the saved list shown while the live one loads - no error handling or retries of its own.
+function showRuns(data, interim = false) {
+    const retry = `<button class="pill" onclick="loadRuns()">Try again</button>`;
     // A WCL rate limit part-way: show what was found plus the reason, with "Try again".
     if (data.partial) reportError("keys", "Loading all your recent keys", data.partial, () => loadRuns()); else clearError("keys");
     const note = data.partial ? `<div class="empty">Some keys couldn't be loaded yet.<br><br>${retry}</div>` : "";
     const quiet = data.note ? `<div class="updnote">${esc(data.note)}</div>` : "";
-    if (data.note) { clearError("keys"); clearTimeout(window.runsRetry); window.runsRetry = setTimeout(() => loadRuns(), 120000); }
+    if (data.note && !interim) { clearError("keys"); clearTimeout(window.runsRetry); window.runsRetry = setTimeout(() => loadRuns(), 120000); }
     const more = data.more && !data.partial ? `<button class="pill" onclick="loadRuns(12)">Load more</button>` : "";
     if (!data.runs.length) { $("runs").innerHTML = note || `<div class="empty">No recent M+ runs found.${more ? `<br><br>${more}` : ""}</div>`; return; }
     const row = (r) => `
@@ -701,12 +720,9 @@ async function loadRuns(limit = RUNS_LIMIT, fresh = false) {
       try { localStorage.setItem("keySessions", JSON.stringify(st)); } catch (e) {}
     });
     // Keys being prepared in the background: refresh the list until they're done.
+    if (interim) return;
     clearTimeout(window.prepPoll);
     if (data.runs.some((r) => r.queued)) window.prepPoll = setTimeout(() => loadRuns(), 20000);
-  } catch (e) {
-    reportError("keys", "Loading your recent keys", e.message, () => loadRuns(), e.ref);
-    $("runs").innerHTML = `<div class="empty">Couldn't load your recent keys.<br><br>${retry}</div>`;
-  }
 }
 
 function sevClass(s) { return s >= 70 ? "high" : s >= 45 ? "med" : "low"; }
@@ -1626,12 +1642,12 @@ const SECTIONS = {
 // Group meters after the key: a small DPS chart and a small HPS chart under the group, bars in class colours.
 function renderMeters(res) {
   if (!res.meters) return "";
-  const k = (x) => x >= 1e6 ? `${(x / 1e6).toFixed(1)}M` : `${Math.round(x / 1000)}k`;
+  const k = (x) => x >= 1e9 ? `${(x / 1e9).toFixed(2)}B` : x >= 1e6 ? `${(x / 1e6).toFixed(1)}M` : `${Math.round(x / 1000)}k`;
   const chart = (label, rows) => {
     const top = Math.max(1, ...rows.map((e) => e.per_s));
     return `<div class="meter"><div class="mh">${label}</div>${rows.map((e) => `<span class="mn">${esc(e.name)}</span>
       <span class="mb"><i style="width:${Math.max(1, e.per_s / top * 100).toFixed(1)}%;background:${CLASS_COLORS[e.class] || "var(--line-strong)"}"></i></span>
-      <span class="mv" title="${k(e.total)} total">${k(e.per_s)}</span>`).join("")}</div>`;
+      <span class="mv">${k(e.total)} <span class="sub">(${k(e.per_s)}/s)</span></span>`).join("")}</div>`;
   };
   return `<div class="meters">${chart("DPS", res.meters.damage || [])}${chart("HPS", res.meters.healing || [])}</div>`;
 }
