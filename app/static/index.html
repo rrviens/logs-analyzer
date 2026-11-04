@@ -754,7 +754,7 @@ function renderPreview(res, url) {
       <div class="progress" id="progress"></div></div>
     ${renderTimelineShell(res)}
     ${res.deaths ? renderDeaths(res) : ""}
-    ${res.meters ? sec("meters", "ok", renderMeters(res), "", false) : ""}
+    ${res.meters ? sec("meters", true, renderMeters(res), "", false) : ""}
     ${res.dps ? sec("dps", (res.dps_windows || []).length || 0, renderDps({...res, timeline: {...res.timeline, dps_windows: res.dps_windows}}),
         "No calm stretches long enough to deal damage in this run.", false) : ""}`;
   if (res.dps_windows) res.timeline.dps_windows = res.dps_windows;
@@ -1647,7 +1647,7 @@ function sec(id, count, body, emptyText, foldable = true) {
     <button onclick="foldAll('${id}', false)">Collapse all</button>` : "";
   return `<section class="sec card" id="sec-${id}" style="--acc:${s.color}">
     <div class="sechead"><span class="ico"><i data-lucide="${s.lucide}">${s.icon}</i></span><h2>${s.title}</h2>
-      <span class="badge">${count}</span><span class="sp"></span>${tools}</div>
+      ${count === true ? "" : `<span class="badge">${count}</span>`}<span class="sp"></span>${tools}</div>
     ${count ? body : `<div class="secempty">${esc(emptyText)}</div>`}</section>`;
 }
 
@@ -1933,7 +1933,7 @@ function render(res, url) {
           "Not enough heals to judge.", false)}
     ${sec("dps", ((res.timeline || {}).dps_windows || []).length ? counts.dps || "ok" : 0, renderDps(res),
           "No calm stretches long enough to deal damage in this run.", false)}
-    ${sec("meters", res.meters ? "ok" : 0, renderMeters(res), "No damage or healing totals for this run.", false)}
+    ${sec("meters", !!res.meters, renderMeters(res), "No damage or healing totals for this run.", false)}
     ${sec("pulls", rows ? counts.pulls || "ok" : 0, verdictBlock(v.pulls, `<details><summary>Show data</summary><div class="tablewrap"><table>
       <tr><th>Pull</th><th>Time</th><th>Group HP</th><th>Top HP</th><th>Dmg in/s</th><th>Top in/s</th><th>Heal/s</th><th>Top heal/s</th></tr>
       ${rows}</table></div></details>`), "No pulls to compare.", false)}
