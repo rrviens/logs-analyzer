@@ -207,6 +207,7 @@ def _cause(ev: dict, name_of, pulses: set[int]) -> dict:
         "lines": [f"{name_of(a)}: {v / total:.0%} of the damage in the last 10s"
                   + (" (constant pulse all pull - background)" if a in pulses else "")
                   for a, v in ranked[:3] if v / total >= 0.02],
+        "shares": {name_of(a): round(v / total, 2) for a, v in ranked},  # by name: debuffs and their damage match by name
     }
 
 
@@ -431,11 +432,18 @@ def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispe
     if not spans:
         return None
     # The cause's debuff if there is one, else the longest dispellable debuff they had.
+    # Only a debuff that mattered for the death: the cause itself, an interruptible cast that took control away
+    # (Seduction - the answer is the kick), or one that
+    # did a real share of the damage (Bloodthorn Roots). A stacking debuff that happened to be on them (Cold Claws while
+    # melee killed them) is not the story, however dispellable.
+    mattered = lambda a: (name_of(a) == cause["name"] or (FACTS.loss_of_control(a) and FACTS.interruptible(a))
+                          or cause.get("shares", {}).get(name_of(a), 0) >= CAUSE_MIN_SHARE)
     clearable = can_dispel | set(totems or {})
-    spans = sorted({tuple(s) for s in spans}, key=lambda s: (name_of(s[1]) != cause["name"], s[1] not in clearable, s[2] - s[3]))
-    tgt, aid, start, end = spans[0]
-    if name_of(aid) != cause["name"] and aid not in clearable:
+    spans = sorted({tuple(s) for s in spans if mattered(s[1])},
+                   key=lambda s: (name_of(s[1]) != cause["name"], s[1] not in clearable, s[2] - s[3]))
+    if not spans:
         return None
+    tgt, aid, start, end = spans[0]
     debuff = name_of(aid)
     dispellable = aid in can_dispel
     # Your own dispel only removes some types (a Resto Shaman's doesn't touch poison): learned from your and peer
