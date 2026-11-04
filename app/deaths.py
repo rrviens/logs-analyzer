@@ -12,6 +12,7 @@ from app.charges import SAME_USE_MS, free_at, infer_charges, learn_recharge_ms, 
 from app.config import PROJECT_ROOT
 from app.reports import Fight, Player
 from app.runs import RunData, _events
+from app.spellfacts import FACTS
 from app.wcl import WCLClient
 
 DEFENSIVES_PATH = PROJECT_ROOT / "data" / "defensives.json"
@@ -440,6 +441,9 @@ def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispe
     # Your own dispel only removes some types (a Resto Shaman's doesn't touch poison): learned from your and peer
     # healers' dispels. Unknown (no data passed) = trust "somebody dispelled it".
     mine = dispellable if own_dispel is None else aid in own_dispel
+    loc = FACTS.loss_of_control(aid)  # charmed / stunned / feared: the victim can't act, so can't dispel themselves
+    if loc and victim_id == run.healer_id:
+        mine = False
     healer_class = next((p.class_name for p in players if p.id == run.healer_id), "")
     totem = (totems or {}).get(aid) if healer_class == "Shaman" else None  # only Shamans have cleanse totems
     tools = clear_tools(defensives)
@@ -447,6 +451,10 @@ def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispe
     on_for = (min(end, t) - start) / 1000
     lines.append(f"{debuff} was on {pname(victim_id)} from {clock(start)} - {on_for:.1f}s "
                  + ("until the death." if end >= t - 300 else f"(removed {(t - end) / 1000:.1f}s before the death)."))
+    if loc and FACTS.interruptible(aid):  # the answer is stopping the cast, not anything the victim does
+        advice.append(f"{debuff} is a {loc} effect - {pname(victim_id)} can't break it themselves. It's an interruptible "
+                      f"cast: interrupt or stun the caster before it lands.")
+        fixes.append(f"Interrupt {debuff}")
 
     wave = [d for d in auras.debuffs if d[1] == aid and abs(d[2] - start) <= WAVE_MS and d[0] != victim_id]
     for d in wave:
@@ -468,8 +476,8 @@ def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispe
     dispel_cd = gaps[0] if gaps else 8000
     in_window = [x for x in healer_dispels if start <= x[0] <= t + 200]
     if dispellable and not mine:
-        lines.append(f"{debuff} can be dispelled, but not with your dispel"
-                     + (f" - {totem} clears it." if totem else "."))
+        lines.append(f"{debuff} can be dispelled by someone else - not by you while it holds you." if loc else
+                     f"{debuff} can be dispelled, but not with your dispel" + (f" - {totem} clears it." if totem else "."))
     if totem:
         t_line, t_advice, t_fix = _totem_story(run, group_casts, totem, healer, start, min(end, t), debuff, clock,
                                                lambda ts: _used_on(run, healer, ts, auras))

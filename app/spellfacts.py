@@ -29,6 +29,10 @@ GROUND_TARGETS = {28, 53, 63, 72, 73, 86, 87, 88, 89}
 CONE_TARGETS = {24, 54, 104, 110}  # frontal cones: dodgeable for everyone but the tank
 PERSISTENT_AREA = 27  # SpellEffect.Effect: a lasting area (puddle) on the ground
 TRIGGER_EFFECTS = {64, 142}  # effects that cast another spell - which inherits where the first one landed
+# SpellMechanic values that take control away (charm, disorient, fear, sleep, stun, freeze, incapacitate, polymorph,
+# banish, shackle, turn, horror, sap): the player can't act, so can't dispel or defend themselves.
+LOSS_OF_CONTROL = {1: "charm", 2: "disorient", 5: "fear", 10: "sleep", 12: "stun", 13: "freeze", 14: "incapacitate",
+                   17: "polymorph", 18: "banish", 20: "shackle", 23: "turn", 24: "horror", 30: "sap"}
 log = logging.getLogger("uvicorn.error")
 
 
@@ -40,16 +44,16 @@ class SpellFacts:
         with self._lock:
             self._db.execute("CREATE TABLE IF NOT EXISTS spellfacts_meta (key TEXT PRIMARY KEY, value REAL)")
             cols = [r[1] for r in self._db.execute("PRAGMA table_info(spellfacts)")]
-            if cols and "ground" not in cols:  # older layout: drop it, the next refresh rebuilds it
+            if cols and "mechanic" not in cols:  # older layout: drop it, the next refresh rebuilds it
                 self._db.execute("DROP TABLE spellfacts")
                 self._db.execute("DELETE FROM spellfacts_meta")
             self._db.execute("CREATE TABLE IF NOT EXISTS spellfacts (id INTEGER PRIMARY KEY, dispel INTEGER, "
-                             "interrupt INTEGER, cast_ms INTEGER, ground INTEGER)")
+                             "interrupt INTEGER, cast_ms INTEGER, ground INTEGER, mechanic INTEGER)")
             self._db.commit()
 
     def _row(self, spell_id: int):
         with self._lock:
-            return self._db.execute("SELECT dispel, interrupt, cast_ms, ground FROM spellfacts WHERE id = ?",
+            return self._db.execute("SELECT dispel, interrupt, cast_ms, ground, mechanic FROM spellfacts WHERE id = ?",
                                     (spell_id,)).fetchone()
 
     def dispel(self, spell_id: int) -> str | None:
@@ -67,6 +71,11 @@ class SpellFacts:
         row = self._row(spell_id)
         return {1: "ground", 2: "cone"}.get(row[3]) if row else None
 
+    def loss_of_control(self, spell_id: int) -> str | None:
+        """"charm" / "stun" / "fear"... when the debuff takes control away from the player, else None."""
+        row = self._row(spell_id)
+        return LOSS_OF_CONTROL.get(row[4]) if row else None
+
     def ready(self) -> bool:
         """The game data has been downloaded (until then callers keep their log-only behavior)."""
         with self._lock:
@@ -83,12 +92,15 @@ class SpellFacts:
 
     def _build(self) -> None:
         try:
-            facts: dict[int, list] = {}  # id -> [dispel, interrupt flags, cast_ms, ground]
-            row = lambda sid: facts.setdefault(sid, [None, None, None, None])
+            facts: dict[int, list] = {}  # id -> [dispel, interrupt flags, cast_ms, ground, mechanic]
+            row = lambda sid: facts.setdefault(sid, [None, None, None, None, None])
             for r in _stream("SpellCategories"):
                 d = int(r["DispelType"] or 0)
                 if d in DISPEL_NAMES:
                     row(int(r["SpellID"]))[0] = d
+                m = int(r["Mechanic"] or 0)
+                if m in LOSS_OF_CONTROL:
+                    row(int(r["SpellID"]))[4] = m
             for r in _stream("SpellInterrupts"):
                 f = row(int(r["SpellID"]))
                 f[1] = (f[1] or 0) | int(r["InterruptFlags"] or 0)  # any difficulty's flags
@@ -101,6 +113,8 @@ class SpellFacts:
             for r in _stream("SpellEffect"):
                 sid, targets = int(r["SpellID"] or 0), {int(r["ImplicitTarget_0"] or 0), int(r["ImplicitTarget_1"] or 0)}
                 effect = int(r["Effect"] or 0)
+                if int(r["EffectMechanic"] or 0) in LOSS_OF_CONTROL:
+                    row(sid)[4] = row(sid)[4] or int(r["EffectMechanic"])
                 if targets & GROUND_TARGETS or effect == PERSISTENT_AREA:
                     ground[sid] = 1
                 elif targets & CONE_TARGETS:
@@ -114,7 +128,7 @@ class SpellFacts:
                 row(sid)[3] = kind
             with self._lock:
                 self._db.execute("DELETE FROM spellfacts")
-                self._db.executemany("INSERT INTO spellfacts VALUES (?, ?, ?, ?, ?)",
+                self._db.executemany("INSERT INTO spellfacts VALUES (?, ?, ?, ?, ?, ?)",
                                      ((k, *v) for k, v in facts.items()))
                 self._db.execute("INSERT OR REPLACE INTO spellfacts_meta VALUES ('built', ?)", (time.time(),))
                 self._db.commit()
