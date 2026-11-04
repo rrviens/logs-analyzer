@@ -2029,11 +2029,15 @@ function paintIO() {
   const top = BASE === "top", avg = top ? d.study_avg : d.top_avg, rows = top ? d.study : d.tops;
   if (!avg) { cmp.hidden = true; return; }
   const gap = avg - g.avg, cls = Math.abs(gap) < 100 ? "even" : gap > 0 ? "behind" : "ahead";
-  const list = rows.filter((t) => t.avg).map((t) => `<div>${esc(t.player)} +${t.key}${t.duration_min ? `, ${t.duration_min} min` : ""}
-    <b>${fmtIO(t.avg)}</b>${ioPart(t)}</div>`).join("");
+  // What the number means, not where it came from: the groups themselves are on the timeline's baseline.
+  const diff = Math.abs(Math.round(gap));
+  const what = top ? `the top-ranked runs of this dungeon from the season study`
+    : `the peer groups your run is compared with - the best-ranked ${SP.plural} at your key level in this dungeon`;
   cmp.className = `hchip iocmp iohov ${cls}`;
   cmp.innerHTML = `<span class="k">${top ? "Top players" : "Peers"}</span> <b>${fmtIO(avg)}</b> <span class="gap">(${gap > 0 ? "+" : ""}${fmtIO(gap)})</span>
-    <span class="iotip">${list}<div class="ionote">${top ? "Season-study runs" : "Peer groups at your key level"}: average per group. ${IO_NOTE}</div></span>`;
+    <span class="iotip"><span class="ionote">Average Raider.io score of ${esc(what)}.
+    ${cls === "even" ? "Your group is about the same." : `Your group is ${fmtIO(diff)} ${gap > 0 ? "lower" : "higher"}.`}
+    ${IO_NOTE}</span></span>`;
   cmp.hidden = false;
 }
 
