@@ -62,6 +62,7 @@ MY_CHARACTERS_QUERY = "{ userData { currentUser { characters { name level classI
 CLASS_NAMES = {1: "Death Knight", 2: "Druid", 3: "Hunter", 4: "Mage", 5: "Monk", 6: "Paladin", 7: "Priest",
                8: "Rogue", 9: "Shaman", 10: "Warlock", 11: "Warrior", 12: "Demon Hunter", 13: "Evoker"}
 MY_CHARACTERS_TTL_S = 3600
+MY_CHARACTERS_SAVED = "my_characters_saved"  # per user (the cache namespace is the user's)
 
 app = FastAPI()
 log = logging.getLogger("uvicorn.error")  # shows in the Render logs
@@ -140,12 +141,17 @@ def my_characters(w: Who = Depends(who)):
         return {"characters": [], "local": True}
     try:
         user = w.client.quick().query(MY_CHARACTERS_QUERY, ttl=MY_CHARACTERS_TTL_S)["userData"]["currentUser"]
-    except (WCLError, httpx.HTTPError, KeyError, TypeError):  # e.g. a session from before the scope
+    except (WCLError, httpx.HTTPError) as e:  # out of API points / busy: the last list we got, else "try later"
+        log.warning("my characters unavailable (user %s): %s", w.user_id, e)
+        return {**(w.client.get_cached(MY_CHARACTERS_SAVED) or {"characters": []}), "busy": True}
+    except (KeyError, TypeError):  # a session from before the view-user-profile scope
         return {"characters": [], "relogin": True}
     chars = [{"name": c["name"], "server": c["server"]["name"], "region": c["server"]["region"]["slug"].lower(),
               "level": c.get("level") or 0, "class": CLASS_NAMES.get(c.get("classID"))}
              for c in (user or {}).get("characters") or [] if c.get("server")]
-    return {"characters": sorted(chars, key=lambda c: (-c["level"], c["name"]))}
+    out = {"characters": sorted(chars, key=lambda c: (-c["level"], c["name"]))}
+    w.client.set_cached(MY_CHARACTERS_SAVED, out)  # served when Warcraft Logs can't answer later
+    return out
 
 
 @app.get("/api/realms")

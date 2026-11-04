@@ -2186,7 +2186,8 @@ function rememberChar(c) {
 }
 let CHAR_OPTS = [];
 async function fillCharList() {
-  if (!MINE) MINE = await api("/api/my-characters").catch(() => ({characters: []}));
+  // Asked again on the next open when Warcraft Logs couldn't answer (the server then sends the last list it had).
+  if (!MINE || MINE.busy || MINE.failed) MINE = await api("/api/my-characters").catch(() => ({characters: [], failed: true}));
   const current = CURRENT_CHAR, mine = MINE.characters || [];
   const seen = new Set(current ? [charKey(current)] : []);
   const pick = (list) => list.filter((c) => !seen.has(charKey(c)) && seen.add(charKey(c)));
@@ -2203,7 +2204,8 @@ async function fillCharList() {
     }).join("")).join("");
   $("charList").querySelectorAll("[data-i]").forEach((b) => b.onclick = () => chooseChar(CHAR_OPTS[+b.dataset.i]));
   $("cMineHint").hidden = !!MINE.local || mine.length > 0;
-  $("cMineHint").textContent = MINE.relogin ? "Sign out and in again to list your own characters here."
+  $("cMineHint").textContent = MINE.busy || MINE.failed ? "Warcraft Logs is busy - your characters will show when it answers."
+    : MINE.relogin ? "Sign out and in again to list your own characters here."
     : "No characters claimed on your Warcraft Logs account - claim them there, or enter one manually.";
 }
 async function chooseChar(c, fromForm = false) {
