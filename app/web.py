@@ -297,15 +297,23 @@ def save_settings(s: Settings, w: Who = Depends(who)):
 
 
 @app.get("/api/recent")
-def recent(limit: int = RECENT_FIRST, fresh: bool = False, w: Who = Depends(who)):
+def recent(limit: int = RECENT_FIRST, fresh: bool = False, saved: bool = False, w: Who = Depends(who)):
     """Your recent keys from the newest `limit` reports (the page asks for more with "Load more"). Reports older
     than a day can't change, so their fight lists come from the cache; on a WCL rate limit it returns what it has
-    found so far with a note instead of failing. fresh: the refresh button - skip the 5-minute cache of new reports."""
+    found so far with a note instead of failing. fresh: the refresh button - skip the 5-minute cache of new reports.
+    saved: the last list built, without any Warcraft Logs call - the page shows it at once, then asks for the live one."""
     s, client = load_settings(w), w.client.quick()
     if not s:
         return {"runs": []}
     ttl = 1 if fresh else RECENT_TTL_S
     saved_key = f"recent_saved:{s['name'].lower()}:{server_slug(s['server'])}:{s['region']}"
+    if saved:
+        out = client.get_cached(saved_key) or {"runs": [], "more": False}
+        for r in out["runs"]:  # analyzed / queued may have changed since the list was saved: from our own cache
+            code, fid = parse_report_url(r["url"])
+            r["analyzed"] = client.get_cached(latest_key(code, int(fid), s["name"], TOP_LOGS)) is not None
+            r["queued"] = not r["analyzed"] and bool(queue.pending(w.user_id, "analyze", r["url"]))
+        return {**out, "saved": True, "partial": None}
     try:
         char = lookup_character(client, s, ttl=ttl)
     except WCLError as e:  # Warcraft Logs busy: the last list we built, with a quiet note, instead of an error
