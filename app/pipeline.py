@@ -41,7 +41,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 70
+RULES_VERSION = 71
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -155,6 +155,35 @@ def _stoppable(r: dict, avoid: Avoidance, run) -> dict | None:
     order = sorted(ready, key=lambda who: (who != healer, who))  # your own tools first
     return {"ability": w["ability"], "share": round(share, 2), "rate": round(w.get("rate", 0), 2), "seen": w.get("seen"),
             "kickable": kickable, "ready": [{"player": who, "you": who == healer, "tools": ready[who]} for who in order]}
+
+
+KICK_PULL_MIN = 3  # this many kickable damage casts going through on one pull is worth a finding
+KICK_HIT_MS = 3000  # the cast counts when its damage lands on a player this soon after it completes
+
+
+def _kick_findings(run, avoid: Avoidance, clock) -> list[Finding]:
+    """Pulls where several damage casts went through that peers interrupt (70%+ of the time - so casts a tank
+    reflects or soaks on purpose never count, and the notes' no-kick casts are dropped earlier) and the game data says can be
+    interrupted and have a cast time. One finding per pull, each cast type with how often peers stop it."""
+    out = []
+    for i, p in enumerate(run.pulls):
+        went = [w for w in avoid.went_through if p.start <= w["t"] <= p.end
+                and FACTS.interruptible(w["ability_id"]) and FACTS.cast_ms(w["ability_id"])
+                and any(d[2] == w["ability_id"] and w["t"] <= d[0] <= w["t"] + KICK_HIT_MS for d in run.damage)]
+        if len(went) < KICK_PULL_MIN:
+            continue
+        kinds: dict[str, list[dict]] = {}
+        for w in went:
+            kinds.setdefault(w["ability"], []).append(w)
+        lines = [f"{name} x{len(ws)} - peer groups stop it {ws[0]['rate']:.0%} of the time; "
+                 f"{sum(1 for w in ws if w['ready'])} of these with an interrupt ready"
+                 for name, ws in sorted(kinds.items(), key=lambda x: -len(x[1]))]
+        ready = sum(1 for w in went if w["ready"])
+        out.append(Finding(went[0]["t"], _pull_label(run, i), min(70, 40 + 5 * len(went)),
+                           f"{len(went)} kickable damage casts went through on {p.name}", lines,
+                           [["Interrupts", f"{ready} of {len(went)} went through while someone had an interrupt ready."]],
+                           rule="kicks", short=f"{len(went)} kickable casts went through", fix="Assign kicks"))
+    return out
 
 
 def _stoppable_finding(recaps: list[dict], clock) -> Finding | None:
@@ -347,6 +376,8 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     avoid.by_pull = {i: {a: t for a, t in tags.items() if not encounter.not_avoidable(a, run.ability_name(a))
                          and (encounter.avoidable(a, run.ability_name(a)) or on_floor(a))}
                      for i, tags in avoid.by_pull.items()}
+    # Casts groups let through on purpose (a tank reflects Fiery Blast) are never "went through".
+    avoid.went_through = [w for w in avoid.went_through if not encounter.no_kick(w["ability_id"], w["ability"])]
     chains = find_chains(run, tl, fetch_auras(client, fight, run.player_ids), my_state, tops, group_casts, spec)
     death_recaps = _death_recaps(client, fight, run, my_players, my_state, [tr.run for tr, _ in tops],
                                  candidates, clock, progress, spec)
@@ -372,6 +403,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     result = analyze(run, tl, segs, profiles, ctx, model, [tr for tr, _ in tops], my_trinkets, my_mods,
                      my_heals, phases, phase_rows, my_state, death_recaps, spec=spec, group_defs=group_defs)
     result.findings += _chain_findings(run, chains, clock)
+    result.findings += _kick_findings(run, avoid, clock)
     if (stop := _stoppable_finding(death_recaps, clock)):
         result.findings.append(stop)
     _soften(result.findings, run, avoid, death_recaps, clock)

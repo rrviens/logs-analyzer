@@ -567,6 +567,17 @@
   },
   "Ruby Life Pools": {
    "abilities": {
+    "1305955": {
+     "name": "Fiery Blast",
+     "kinds": [
+      "targeted",
+      "interrupt"
+     ],
+     "note": "Blazebound Destroyer's cast: tanks reflect or soak it on purpose to save kicks - not a missed interrupt.",
+     "boss": "",
+     "evidence": "User, Nov 2026: tanks reflect the upstairs destroyers' casts on purpose",
+     "no_kick": true
+    },
     "384024": {
      "name": "Hailbombs",
      "kinds": [

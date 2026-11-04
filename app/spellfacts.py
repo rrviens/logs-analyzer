@@ -66,6 +66,11 @@ class SpellFacts:
         row = self._row(spell_id)
         return None if not row or row[1] is None else bool(row[1] & INTERRUPT_FLAG)
 
+    def cast_ms(self, spell_id: int) -> int | None:
+        """Base cast time in ms (None: instant or not known)."""
+        row = self._row(spell_id)
+        return row[2] if row and row[2] else None
+
     def ground(self, spell_id: int) -> str | None:
         """'ground' (a spot on the floor or a puddle), 'cone' (a frontal), or None."""
         row = self._row(spell_id)

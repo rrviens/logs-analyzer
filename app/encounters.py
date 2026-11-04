@@ -31,6 +31,11 @@ class Encounter:
         e = self.entry(ability_id, name)
         return bool(e) and e.get("avoidable") is True
 
+    def no_kick(self, ability_id: int | None, name: str) -> bool:
+        """Interruptible, but groups let it through on purpose (a tank reflects it) - never a missed kick."""
+        e = self.entry(ability_id, name)
+        return bool(e) and e.get("no_kick") is True
+
     def not_avoidable(self, ability_id: int, name: str) -> bool:
         e = self.entry(ability_id, name)
         return bool(e) and e.get("avoidable") is False
