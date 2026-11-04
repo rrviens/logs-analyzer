@@ -12,7 +12,7 @@
     --bg: #0c0f13; --panel: #141920; --panel-2: #1a2029; --text: #e8ecf1; --muted: #8d98a7; --line: #232b35;
     --line-strong: #2f3945; --accent: #4f8cff; --accent-text: #ffffff; --accent-soft: rgba(79,140,255,.14);
     --high: #ff7a59; --high-bg: rgba(255,122,89,.12); --med: #f0b43c; --med-bg: rgba(240,180,60,.12);
-    --low: #a7b0bc; --low-bg: rgba(167,176,188,.10); --good: #45d483; --good-bg: rgba(69,212,131,.12);
+    --low: #a7b0bc; --low-bg: rgba(167,176,188,.10); --good: #45d483; --good-bg: rgba(69,212,131,.12); --bad: #f25c5c; --bad-bg: rgba(242,92,92,.13); --warn: #ffa047; --warn-bg: rgba(255,160,71,.13);
     --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-7: #9085e9;
     --grid: #1f262f; --axis: #2f3945; --ink-muted: #7d8794;
     --critical: #e5484d; --serious: #ec835a; --warning: #fab219; --phase-a: rgba(255,255,255,0.035);
@@ -27,7 +27,7 @@
     --bg: #f4f6f9; --panel: #ffffff; --panel-2: #f7f9fb; --text: #161b22; --muted: #5b6573; --line: #e2e6eb;
     --line-strong: #cfd5dd; --accent: #2563eb; --accent-text: #ffffff; --accent-soft: rgba(37,99,235,.10);
     --high: #c2410c; --high-bg: #fff1e8; --med: #a16207; --med-bg: #fdf6e3; --low: #4b5563; --low-bg: #f1f3f5;
-    --good: #15803d; --good-bg: #ecfdf3;
+    --good: #15803d; --good-bg: #ecfdf3; --bad: #b91c1c; --bad-bg: #fdecec; --warn: #b45309; --warn-bg: #fff4e5;
     --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-7: #6250d6;
     --grid: #e6e8ec; --axis: #c9ced6; --ink-muted: #898781;
     --critical: #d03b3b; --serious: #ec835a; --warning: #d89a0f; --phase-a: rgba(11,11,11,0.035);
@@ -206,7 +206,8 @@
   .run .st { grid-area: st; justify-self: end; min-height: 1.4em; }
   .run .st .tag { white-space: nowrap; }  .tag { font-size: 0.8667rem; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
   .tag.timed { background: var(--good-bg); color: var(--good); }
-  .tag.depleted { background: var(--low-bg); color: var(--low); }
+  .tag.depleted { background: var(--warn-bg); color: var(--warn); }  /* not timed: orange */
+  .tag.abandoned { background: var(--bad-bg); color: var(--bad); }
   .tag.done { background: var(--med-bg); color: var(--med); }
   .tag.prep { background: var(--accent-soft); color: var(--accent); }
   .empty { color: var(--muted); padding: 24px 4px; text-align: center; }
@@ -668,7 +669,7 @@ async function loadRuns(limit = RUNS_LIMIT, fresh = false) {
         `disabled title="You played ${esc(r.spec || "another character")} - only supported healer specs can be analyzed"`}>
         <span class="lvl">+${r.level}</span>
         <span class="nm" title="${esc(r.dungeon)} +${r.level}">${esc(r.dungeon)}</span>
-        <span class="tag res ${r.timed ? "timed" : "depleted"}" ${!r.timed && r.duration_min < 20 ? 'title="Left before the end - a completed key runs longer"' : ""}>${r.timed ? "Timed" : r.duration_min < 20 ? "Abandoned" : "Not timed"}</span>
+        <span class="tag res ${r.timed ? "timed" : r.duration_min < 20 ? "abandoned" : "depleted"}" ${!r.timed && r.duration_min < 20 ? 'title="Left before the end - a completed key runs longer"' : ""}>${r.timed ? "Timed" : r.duration_min < 20 ? "Abandoned" : "Not timed"}</span>
         <span class="sub"><span>${ago(r.started)}</span><span>${r.duration_min} min</span>
           ${r.analyzable ? "" : `<span>${esc(r.spec || "not in group")}</span>`}</span>
         <span class="st">${r.analyzed ? `<span class="tag done">Analyzed</span>` : r.queued
