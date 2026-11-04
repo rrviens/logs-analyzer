@@ -5,6 +5,7 @@ RULES_VERSION when findings logic changes.
 """
 import os
 import json
+import re
 import logging
 import statistics
 import time
@@ -218,7 +219,7 @@ def _meters(client, fight) -> dict | None:
     for kind in ("damage", "healing"):
         d = r[kind]["data"]
         secs = max(1, d["totalTime"] / 1000)
-        out[kind] = sorted(({"name": e["name"], "class": e["type"], "spec": e.get("icon", "").split("-")[-1],
+        out[kind] = sorted(({"name": e["name"], "class": e["type"], "spec": re.sub(r"(?<=[a-z])(?=[A-Z])", " ", e.get("icon", "").split("-")[-1]),
                              "total": e["total"], "per_s": round(e["total"] / secs)} for e in d["entries"]),
                            key=lambda e: -e["total"])
     return out
