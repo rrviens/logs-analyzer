@@ -714,6 +714,7 @@ function sevLabel(s) { return s >= 70 ? "High" : s >= 45 ? "Medium" : "Low"; }
 
 async function analyze(url, fresh = false) {
   current = url;
+  history.replaceState(null, "", `/?run=${encodeURIComponent(url)}`);  // the address bar is the share link
   document.querySelectorAll(".run").forEach((el) => el.classList.toggle("active", el.dataset.url === url));
   $("main").innerHTML = `<div class="card"><h2>Analyzing</h2><div class="progress" id="progress"><div>Starting...</div></div></div>`;
   try {
