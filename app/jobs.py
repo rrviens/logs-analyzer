@@ -64,6 +64,11 @@ class Jobs:
                                      "('queued', 'running', 'waiting') ORDER BY rowid DESC", (owner, kind)).fetchall()
         return next((jid for jid, p in rows if json.loads(p).get("url") == url), None)
 
+    def busy(self) -> bool:
+        """Someone's analysis is queued or running (background chores wait for it)."""
+        with self.c.lock:
+            return self.c.db.execute("SELECT 1 FROM jobs WHERE status IN ('queued', 'running') LIMIT 1").fetchone() is not None
+
     def get(self, job_id: str) -> dict | None:
         with self.c.lock:
             row = self.c.db.execute("SELECT id, owner, kind, payload, status, attempts, next_at, note, error, result_key "

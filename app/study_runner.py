@@ -21,11 +21,30 @@ BUDGET_RESERVE = 150  # keep this many points free for analyzing your own keys
 DEFAULT_RUNS = 10
 
 
+def current_zone(client: WCLClient) -> str:
+    """This season's Mythic+ zone name (cached for a day)."""
+    zones = [z for z in client.query(ZONES_QUERY, ttl=86400)["worldData"]["zones"] if "Mythic+" in z["name"]]
+    return max(zones, key=lambda z: z["id"])["name"]
+
+
+def covers(client: WCLClient, spec: Spec, dungeon: str) -> bool:
+    """The spec's study has this dungeon from this season (a dungeon back from an older season gets studied again)."""
+    path = model_path(spec)
+    if not path.exists():
+        return False
+    model = json.loads(path.read_text())
+    d = model.get("dungeons", {}).get(dungeon)
+    return bool(d) and d.get("zone", model.get("zone")) == current_zone(client)
+
+
 def run_study(client: WCLClient, spec: Spec, runs: int = DEFAULT_RUNS, dungeon: str | None = None,
               progress: Callable[[str], None] = print) -> dict:
     zones = [z for z in client.query(ZONES_QUERY, ttl=86400)["worldData"]["zones"] if "Mythic+" in z["name"]]
     zone = max(zones, key=lambda z: z["id"])
     dungeons = [e for e in zone["encounters"] if not dungeon or e["name"] == dungeon]
+    if not dungeons:  # not in this season's rotation: nothing to study, and the existing study stays as it is
+        progress(f"{dungeon} isn't in {zone['name']} - nothing to study.")
+        return {}
 
     def wait_for_budget():
         r = client.query(RATE_QUERY, ttl=0)["rateLimitData"]
@@ -48,10 +67,12 @@ def run_study(client: WCLClient, spec: Spec, runs: int = DEFAULT_RUNS, dungeon: 
                                        skipped=skipped[d["name"]])
 
     cooldowns = discover_cooldowns([r for rs_ in all_runs.values() for r in rs_])
+    if dungeon and model.get("cooldowns"):  # one dungeon added: the spec's cooldowns stay those of the full study
+        cooldowns = {int(k): v for k, v in model["cooldowns"].items()}
     model["cooldowns"] = {str(k): v for k, v in cooldowns.items()}
     for d in dungeons:
         model["dungeons"][d["name"]] = {"encounter_id": d["id"], **build_model(all_runs[d["name"]], cooldowns),
-                                        "skipped": skipped[d["name"]]}
+                                        "skipped": skipped[d["name"]], "zone": zone["name"]}
     model["generated"] = datetime.now(timezone.utc).isoformat()
     model["runs_per_dungeon"] = runs
 

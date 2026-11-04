@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import threading
+import time
 import unicodedata
 import uuid
 from dataclasses import dataclass
@@ -31,7 +32,7 @@ from app.reports import get_fights, get_players, parse_report_url, pick_fight, p
 from app.specs import SPECS, spec_for
 from app.spellfacts import FACTS
 from app.context_model import model_path
-from app.study_runner import DEFAULT_RUNS, add_curves, run_study, study_info
+from app.study_runner import DEFAULT_RUNS, add_curves, covers, run_study, study_info
 from app.wcl import WCLClient, WCLError
 
 STATIC = PROJECT_ROOT / "app" / "static"
@@ -496,11 +497,60 @@ def public_latest_key(code: str, fight_id: int) -> str:
     return f"public_latest:{code}:{fight_id}"
 
 
+# ---------- top-player study, kept up to date on its own ----------
+# Dungeons rotate every season: when a run is analyzed in a dungeon the spec's study doesn't cover yet, that dungeon
+# is studied in the background (on the site's own API budget, which keeps a reserve; never while an analysis runs),
+# so "Top players" fills in by itself. One at a time; a restart forgets the list, and the next analysis asks again.
+AUTO_STUDY_RUNS = 5
+_auto_study: list[tuple[str, str]] = []  # (spec key, dungeon)
+_auto_lock = threading.Lock()
+_auto_thread: threading.Thread | None = None
+
+
+def _want_study(spec_key: str, dungeon: str) -> None:
+    global _auto_thread
+    spec = next((s for s in SPECS if s.key == spec_key), None)
+    try:
+        if not spec or covers(app_client, spec, dungeon):
+            return
+    except (WCLError, httpx.HTTPError, KeyError):  # can't tell which season it is right now: ask again next time
+        return
+    with _auto_lock:
+        if (spec_key, dungeon) in _auto_study:
+            return
+        _auto_study.append((spec_key, dungeon))
+        log.info("auto study queued: %s %s", spec.label, dungeon)
+        if not (_auto_thread and _auto_thread.is_alive()):
+            _auto_thread = threading.Thread(target=_auto_study_loop, daemon=True)
+            _auto_thread.start()
+
+
+def _auto_study_loop() -> None:
+    while True:
+        with _auto_lock:
+            if not _auto_study:
+                return
+            spec_key, dungeon = _auto_study[0]
+        while queue.busy() or study_job.get("status") == "running":  # people's analyses and the admin study first
+            time.sleep(30)
+        spec = next(s for s in SPECS if s.key == spec_key)
+        try:
+            if not covers(app_client, spec, dungeon):  # someone may have studied it meanwhile
+                run_study(app_client, spec, AUTO_STUDY_RUNS, dungeon=dungeon, progress=lambda m: log.info("auto study: %s", m))
+                add_curves(app_client, spec, progress=lambda m: log.info("auto study: %s", m))
+        except Exception:  # noqa: BLE001 - a failed study must not stop the next one; the log has why
+            log.exception("auto study failed: %s %s", spec_key, dungeon)
+        finally:
+            with _auto_lock:
+                _auto_study.pop(0)
+
+
 @queue.handler("analyze")
 def _analyze_job(owner: int, p: dict, progress, preview) -> str:
     client = client_for(owner)
     out = run_analysis(client, p["url"], p.get("name"), TOP_LOGS, progress=progress, use_cache=not p.get("fresh"),
                        preview=preview)
+    _want_study((out.get("spec") or {}).get("key", ""), out["run"]["dungeon"])
     if owner:  # hosted: a public report's analysis can also be opened by anyone with the link, signed out
         try:
             if client.query(PUBLIC_REPORT_QUERY, {"code": out["key"].split(":")[2]})["reportData"]["report"]["visibility"] == "public":
