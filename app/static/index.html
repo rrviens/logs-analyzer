@@ -503,6 +503,13 @@
   .tip { background: var(--panel-2); border-radius: var(--radius-sm); }
   dialog { border-radius: var(--radius); }
   dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
+  .signdlg { width: min(360px, calc(100vw - 32px)); padding: 26px 28px 20px; text-align: center; }
+  .signdlg p { color: var(--muted); margin: 6px 0 16px; }
+  .sd-mark { height: 34px; display: grid; place-items: center; margin-bottom: 6px; font-size: 24px; }
+  .sd-mark.ok { color: var(--good); } .sd-mark.bad { color: var(--bad); }
+  .sd-mark .spin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--line);
+                   border-top-color: var(--accent); animation: spin .9s linear infinite; }
+  .sd-actions { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
   .ctx, .col { background: color-mix(in srgb, var(--bg) 70%, var(--panel-2)); }
   th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: .05em; }
   tr:hover td { background: color-mix(in srgb, var(--text) 3%, transparent); }
@@ -569,6 +576,14 @@
   </div>
 </header>
 <div class="errbanner" id="errBanner" role="alert" hidden></div>
+<dialog id="signinDialog" class="signdlg" aria-labelledby="signinTitle">
+  <div class="sd-mark" id="signinMark"><span class="spin"></span></div>
+  <strong id="signinTitle">Signing in with Warcraft Logs</strong>
+  <p id="signinText">Finish in the window that opened. This page updates by itself.</p>
+  <div class="sd-actions"><button class="pill" id="signinFocus">Show window</button>
+    <button class="primary" id="signinRetry" hidden>Try again</button>
+    <button class="link" id="signinCancel">Cancel</button></div>
+</dialog>
 <dialog id="studyDialog"><div class="errlisthead"><strong>Top-player study</strong>
   <button type="button" class="pill" onclick="$('studyDialog').close()">Close</button></div><div id="studyBody"></div></dialog>
 
@@ -2144,7 +2159,7 @@ const SIGNIN_REASONS = {
 };
 function signinError(reason) {
   const why = SIGNIN_REASONS[reason] || `Warcraft Logs didn't complete the login (${reason || "unknown error"}). Try again in a minute; if it keeps failing, the site's redirect URL may not match your Warcraft Logs API client settings.`;
-  reportError("signin", "Sign-in", why, () => { location.href = "/login"; });
+  reportError("signin", "Sign-in", why, () => signIn());
 }
 
 // ---------- "What to look at" for the selected pull ----------
@@ -2331,6 +2346,45 @@ document.addEventListener("click", (e) => {
   if (!$("dispMenu").hidden && !e.target.closest(".display")) { $("dispMenu").hidden = true; $("dispBtn").setAttribute("aria-expanded", "false"); }
 });
 
+// Sign-in in a popup window: this page stays open behind it (Warcraft Logs' pages can't be embedded). The popup's
+// last page tells us how it went and closes itself. If Warcraft Logs asks you to log in first, it may leave the
+// popup on its home page - closing it early shows "Try again", which then goes straight through.
+let SIGNIN = null;
+function signIn() {
+  const w = 520, h = 720, x = Math.max(0, screenX + (outerWidth - w) / 2), y = Math.max(0, screenY + (outerHeight - h) / 2);
+  const pop = window.open("/login?popup=true", "hr-signin", `popup=yes,width=${w},height=${h},left=${x},top=${y}`);
+  if (!pop) { location.href = "/login"; return; }  // popups blocked: the full-page way
+  clearInterval(SIGNIN && SIGNIN.poll);
+  SIGNIN = {pop, done: false, poll: setInterval(() => {
+    if (SIGNIN.pop.closed && !SIGNIN.done) { clearInterval(SIGNIN.poll); signinState("closed"); }
+  }, 500)};
+  signinState("waiting");
+  if (!$("signinDialog").open) $("signinDialog").showModal();
+}
+function signinState(state) {
+  const mark = $("signinMark"), t = {
+    waiting: ["", '<span class="spin"></span>', "Signing in with Warcraft Logs", "Finish in the window that opened. This page updates by itself."],
+    ok: ["ok", "&#10003;", "Signed in", "Loading your keys..."],
+    closed: ["bad", "!", "The window closed before sign-in finished",
+             "If Warcraft Logs showed its home page after you logged in, try again - it goes straight through now."],
+    failed: ["bad", "!", "Sign-in didn't finish", "Warcraft Logs didn't complete it. Try again in a moment."],
+  }[state];
+  mark.className = `sd-mark ${t[0]}`; mark.innerHTML = t[1]; $("signinTitle").textContent = t[2]; $("signinText").textContent = t[3];
+  $("signinFocus").hidden = state !== "waiting"; $("signinRetry").hidden = !["closed", "failed"].includes(state);
+}
+window.addEventListener("message", (e) => {
+  if (e.origin !== location.origin || !e.data || e.data.type !== "hr-signin" || !SIGNIN) return;
+  SIGNIN.done = true; clearInterval(SIGNIN.poll);
+  if (e.data.ok) { signinState("ok"); setTimeout(() => location.replace("/"), 400); } else signinState("failed");
+});
+$("signinFocus").onclick = () => SIGNIN && SIGNIN.pop.focus();
+$("signinRetry").onclick = () => signIn();
+$("signinCancel").onclick = () => { if (SIGNIN) { SIGNIN.done = true; clearInterval(SIGNIN.poll); try { SIGNIN.pop.close(); } catch (e) {} } $("signinDialog").close(); };
+// Every "Sign in" link on the page goes through the popup.
+document.addEventListener("click", (e) => {
+  if (e.target.closest('a[href="/login"]')) { e.preventDefault(); signIn(); }
+});
+
 // Hosted mode: sign in with Warcraft Logs first; your analyses then run on your own account.
 async function startApp() {
   const me = await api("/api/me").catch(() => ({mode: "local"}));
@@ -2355,9 +2409,7 @@ async function startApp() {
       <p>Context-aware Mythic+ healing review, compared with top players of your spec at your key level.</p>
       <p>Sign in with your Warcraft Logs account: your analyses run on your own account and API limit, and your
         private logs stay visible only to you.</p>
-      <a class="primary" href="/login">Sign in with Warcraft Logs</a>
-      <p class="secempty">If Warcraft Logs asks you to log in first, it may leave you on its home page afterwards -
-        come back here and click Sign in again; it goes straight through then.</p></main>`;
+      <a class="primary" href="/login">Sign in with Warcraft Logs</a></main>`;
     const q = new URLSearchParams(location.search);
     if (q.get("signin") === "failed") {
       signinError(q.get("reason"));

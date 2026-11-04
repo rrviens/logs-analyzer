@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from app import auth
@@ -226,27 +226,59 @@ def me(request: Request):
 
 
 @app.get("/login")
-def login():
+def login(popup: bool = False):
+    """popup: the page opened sign-in in a small window; the callback then answers with a page that tells the opener
+    and closes itself instead of redirecting."""
     url, state = auth.start_login(app_client)
     r = RedirectResponse(url, status_code=302)
     r.set_cookie(auth.STATE_COOKIE, state, max_age=auth.STATE_TTL_S, httponly=True, secure=SECURE_COOKIES, samesite="lax")
+    if popup:
+        r.set_cookie(POPUP_COOKIE, "1", max_age=auth.STATE_TTL_S, httponly=True, secure=SECURE_COOKIES, samesite="lax")
+    return r
+
+
+POPUP_COOKIE = "hr_signin_popup"
+POPUP_DONE = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Healer Review</title><style>
+:root { --bg: #0f1218; --panel: #171b23; --text: #e6e9ef; --muted: #98a2b3; --good: #45d483; --bad: #f25c5c; }
+@media (prefers-color-scheme: light) { :root { --bg: #f6f7f9; --panel: #fff; --text: #1a1f2b; --muted: #5b6475;
+  --good: #15803d; --bad: #b91c1c; } }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text);
+  font: 15px/1.5 Inter, system-ui, sans-serif; }
+.card { background: var(--panel); border-radius: 14px; padding: 28px 32px; text-align: center; max-width: 320px; }
+.mark { font-size: 28px; color: var(--%(tone)s); } p { color: var(--muted); margin: 6px 0 0; }
+</style></head><body><div class="card"><div class="mark">%(mark)s</div><strong>%(title)s</strong><p>%(text)s</p></div>
+<script>
+try { window.opener && window.opener.postMessage(%(msg)s, location.origin); } catch (e) {}
+setTimeout(() => window.close(), %(close_ms)d);
+</script></body></html>"""
+
+
+def _popup_done(ok: bool, reason: str = "") -> HTMLResponse:
+    page = POPUP_DONE % {"tone": "good" if ok else "bad", "mark": "&#10003;" if ok else "!",
+                         "title": "Signed in" if ok else "Sign-in didn't finish",
+                         "text": "Taking you back to Healer Review..." if ok else "Close this window and try again.",
+                         "msg": json.dumps({"type": "hr-signin", "ok": ok, "reason": reason}), "close_ms": 700 if ok else 2500}
+    r = HTMLResponse(page)
+    r.delete_cookie(POPUP_COOKIE)
     return r
 
 
 @app.get("/callback")
 def callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    popup = request.cookies.get(POPUP_COOKIE) == "1"
     if error or not code:
-        return RedirectResponse("/?signin=cancelled", status_code=302)
+        return _popup_done(False, "cancelled") if popup else RedirectResponse("/?signin=cancelled", status_code=302)
     try:
         s = auth.finish_login(app_client, code, state, request.cookies.get(auth.STATE_COOKIE))
     except PermissionError as e:  # state mismatch / expired
         log.warning("sign-in failed: %s", e)
-        return RedirectResponse("/?signin=failed&reason=state", status_code=302)
+        return _popup_done(False, "state") if popup else RedirectResponse("/?signin=failed&reason=state", status_code=302)
     except (httpx.HTTPError, KeyError, TypeError, ValueError) as e:  # WCL busy / rate limited / rejected the code
         reason, detail = _signin_reason(e)
         log.warning("sign-in failed: %s (%s)", reason, detail)  # status + WCL's error field only, never the code/token
-        return RedirectResponse(f"/?signin=failed&reason={reason}", status_code=302)
-    r = RedirectResponse("/", status_code=302)
+        return _popup_done(False, reason) if popup else RedirectResponse(f"/?signin=failed&reason={reason}", status_code=302)
+    r = _popup_done(True) if popup else RedirectResponse("/", status_code=302)
     r.delete_cookie(auth.STATE_COOKIE)
     r.set_cookie(auth.SESSION_COOKIE, s.id, max_age=int(s.expires - datetime.now().timestamp()), httponly=True,
                  secure=SECURE_COOKIES, samesite="lax")
