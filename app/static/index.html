@@ -416,6 +416,7 @@
   .cm-opt:hover, .cm-opt:focus-visible { background: var(--panel-2); box-shadow: none; outline: none; }
   .cm-opt .cls { width: 4px; height: 26px; border-radius: 2px; flex: none; background: var(--line-strong); }
   .cm-opt .nm { font-weight: 600; }
+  #charBtn .nm { font-weight: 600; } #charBtn .rl { color: var(--muted); margin-left: 4px; }
   .cm-opt .rl { color: var(--muted); font-size: 0.8667rem; display: block; }
   .cm-opt .ck { margin-left: auto; color: var(--accent); font-weight: 700; }
   .cm-opt[aria-selected="true"] { background: var(--accent-soft); }
@@ -614,10 +615,12 @@ async function loadBudget() {
 async function loadSettings() {
   const s = await api("/api/settings");
   if (s.name) {
-    $("charBtn").textContent = `${s.name} · ${s.server} ${s.region.toUpperCase()}`;
     $("cName").value = s.name; $("cServer").value = s.server; $("cRegion").value = s.region;
     const known = [...((MINE || {}).characters || []), ...recentChars()].find((c) => charKey(c) === charKey(s));
     CURRENT_CHAR = {...s, class: s.class || (known && known.class)};
+    // Like the dropdown: the name in its class colour, the realm muted.
+    $("charBtn").innerHTML = `<span class="nm" style="color:${CLASS_COLORS[CURRENT_CHAR.class] || "inherit"}">${esc(s.name)}</span>
+      <span class="rl">${esc(s.server)} ${esc(s.region.toUpperCase())}</span>`;
   }
   return s;
 }
