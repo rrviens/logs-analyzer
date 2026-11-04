@@ -9,6 +9,7 @@ learn from logs.
 """
 import csv
 import logging
+import re
 import sqlite3
 import threading
 import time
@@ -31,6 +32,9 @@ PERSISTENT_AREA = 27  # SpellEffect.Effect: a lasting area (puddle) on the groun
 TRIGGER_EFFECTS = {64, 142}  # effects that cast another spell - which inherits where the first one landed
 # SpellMechanic values that take control away (charm, disorient, fear, sleep, stun, freeze, incapacitate, polymorph,
 # banish, shackle, turn, horror, sap): the player can't act, so can't dispel or defend themselves.
+# Encounter Journal overviews state HP thresholds: "At 40% remaining health", "reaching $398295s1% health" (a number
+# inside a spell's effects). Those are where boss fights change, even when no cast shows it.
+HP_PHRASE = re.compile(r"(?:\$(\d+)s(\d)|\b(\d{1,2}))% (?:remaining )?health")
 LOSS_OF_CONTROL = {1: "charm", 2: "disorient", 5: "fear", 10: "sleep", 12: "stun", 13: "freeze", 14: "incapacitate",
                    17: "polymorph", 18: "banish", 20: "shackle", 23: "turn", 24: "horror", 30: "sap"}
 log = logging.getLogger("uvicorn.error")
@@ -49,7 +53,14 @@ class SpellFacts:
                 self._db.execute("DELETE FROM spellfacts_meta")
             self._db.execute("CREATE TABLE IF NOT EXISTS spellfacts (id INTEGER PRIMARY KEY, dispel INTEGER, "
                              "interrupt INTEGER, cast_ms INTEGER, ground INTEGER, mechanic INTEGER)")
+            self._db.execute("CREATE TABLE IF NOT EXISTS boss_hp_phases (encounter_id INTEGER, pct REAL)")
             self._db.commit()
+
+    def hp_thresholds(self, encounter_id: int) -> list[float]:
+        """Boss HP percentages where the fight changes, from the Encounter Journal (highest first)."""
+        with self._lock:
+            rows = self._db.execute("SELECT pct FROM boss_hp_phases WHERE encounter_id = ?", (encounter_id,)).fetchall()
+        return sorted({r[0] for r in rows}, reverse=True)
 
     def _row(self, spell_id: int):
         with self._lock:
@@ -90,7 +101,9 @@ class SpellFacts:
         """Starts a background download when the facts are older than a week (or missing)."""
         with self._lock:
             row = self._db.execute("SELECT value FROM spellfacts_meta WHERE key = 'built'").fetchone()
-        if (row and time.time() - row[0] < REFRESH_S) or self._building:
+        with self._lock:
+            have_bosses = self._db.execute("SELECT 1 FROM boss_hp_phases LIMIT 1").fetchone()
+        if (row and have_bosses and time.time() - row[0] < REFRESH_S) or self._building:
             return
         self._building = True
         threading.Thread(target=self._build, daemon=True).start()
@@ -114,8 +127,21 @@ class SpellFacts:
                 ms = cast_ms.get(int(r["CastingTimeIndex"] or 0), 0)
                 if ms:
                     row(int(r["SpellID"]))[2] = ms
+            # Boss HP thresholds: journal overviews first, so the spell numbers they point at are picked up below.
+            dungeon_id = {r["ID"]: int(r["DungeonEncounterID"] or 0) for r in _stream("JournalEncounter")}
+            phrases = []  # (encounter id, literal pct or None, (spell, effect index) or None)
+            for r in _stream("JournalEncounterSection"):
+                enc = dungeon_id.get(r["JournalEncounterID"])
+                if enc and r["Title_lang"] == "Overview":
+                    for m in HP_PHRASE.finditer(r["BodyText_lang"] or ""):
+                        phrases.append((enc, float(m.group(3)) if m.group(3) else None,
+                                        (int(m.group(1)), int(m.group(2)) - 1) if m.group(1) else None))
+            wanted, points = {ref for _, _, ref in phrases if ref}, {}
             ground, triggers = {}, []  # spell -> 1 ground / 2 cone; (parent, triggered spell)
             for r in _stream("SpellEffect"):
+                ref = (int(r["SpellID"] or 0), int(r["EffectIndex"] or 0))
+                if ref in wanted:
+                    points[ref] = float(r["EffectBasePointsF"] or 0)
                 sid, targets = int(r["SpellID"] or 0), {int(r["ImplicitTarget_0"] or 0), int(r["ImplicitTarget_1"] or 0)}
                 effect = int(r["Effect"] or 0)
                 if int(r["EffectMechanic"] or 0) in LOSS_OF_CONTROL:
@@ -135,6 +161,10 @@ class SpellFacts:
                 self._db.execute("DELETE FROM spellfacts")
                 self._db.executemany("INSERT INTO spellfacts VALUES (?, ?, ?, ?, ?, ?)",
                                      ((k, *v) for k, v in facts.items()))
+                self._db.execute("DELETE FROM boss_hp_phases")
+                self._db.executemany("INSERT INTO boss_hp_phases VALUES (?, ?)", sorted({
+                    (enc, pct if pct is not None else points.get(ref, 0)) for enc, pct, ref in phrases
+                    if 0 < (pct if pct is not None else points.get(ref, 0)) < 100}))
                 self._db.execute("INSERT OR REPLACE INTO spellfacts_meta VALUES ('built', ?)", (time.time(),))
                 self._db.commit()
             log.info("spell facts: %d spells refreshed", len(facts))

@@ -30,10 +30,10 @@ query($code: String!) {
 
 EVENTS_QUERY = """
 query($code: String!, $fightIDs: [Int], $start: Float, $end: Float, $dataType: EventDataType,
-      $hostility: HostilityType, $sourceID: Int, $abilityID: Float, $resources: Boolean, $limit: Int) {
+      $hostility: HostilityType, $sourceID: Int, $targetID: Int, $abilityID: Float, $resources: Boolean, $limit: Int) {
   reportData { report(code: $code) {
     events(fightIDs: $fightIDs, startTime: $start, endTime: $end, dataType: $dataType,
-           hostilityType: $hostility, sourceID: $sourceID, abilityID: $abilityID,
+           hostilityType: $hostility, sourceID: $sourceID, targetID: $targetID, abilityID: $abilityID,
            includeResources: $resources, limit: $limit) {
       data
       nextPageTimestamp
@@ -189,7 +189,8 @@ def fetch_run(client: WCLClient, fight: Fight, healer_id: int, spec: Spec) -> Ru
 
 
 def _events(client: WCLClient, fight: Fight, data_type: str, hostility: str | None = None,
-            source_id: int | None = None, ability_id: int | None = None, resources: bool = False):
+            source_id: int | None = None, ability_id: int | None = None, resources: bool = False,
+            target_id: int | None = None):
     """Yields the events page by page: callers trim each event as it comes, so the raw pages (10,000 events
     each, with every field) never pile up in memory - a 512 MB host would otherwise run out on long keys."""
     start = fight.start
@@ -204,6 +205,7 @@ def _events(client: WCLClient, fight: Fight, data_type: str, hostility: str | No
                 "dataType": data_type,
                 "hostility": hostility,
                 "sourceID": source_id,
+                "targetID": target_id,
                 "abilityID": ability_id,
                 "resources": resources,
                 "limit": EVENT_PAGE,

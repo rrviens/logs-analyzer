@@ -1,6 +1,9 @@
-"""Boss phases, learned from boss casts. M+ logs carry no phase markers, but phase changes
-show up as one-off boss casts (e.g. Lightwarden Ruia's Shapeshift: Bear / Haranir) that
-land well into the fight in most runs. Those become the phase boundaries.
+"""Boss fight parts. M+ logs carry no phase markers, so parts come from two places:
+- one-off boss casts that land well into the fight in most runs (Lightwarden Ruia's Shapeshift: Bear / Haranir,
+  Melidrussa's Awaken Whelps);
+- boss HP thresholds the Encounter Journal states ("upon reaching 40% health, Kyrakka lands") - for changes no
+  cast shows. The boss's HP comes from the players' hits on it.
+A part is named after what began it.
 """
 import statistics
 from dataclasses import dataclass, replace
@@ -8,6 +11,7 @@ from dataclasses import dataclass, replace
 from app.reports import Fight
 from app.runs import Pull, RunData, _events
 from app.specs.base import Spec
+from app.spellfacts import FACTS
 from app.wcl import WCLClient
 
 CACHE_VERSION = 1
@@ -42,6 +46,37 @@ def fetch_boss_casts(client: WCLClient, fight: Fight, run: RunData) -> dict[int,
     return out
 
 
+BOSS_ACTORS_QUERY = """query($code: String!) { reportData { report(code: $code) {
+  masterData { actors(type: "NPC") { id gameID subType } } } } }"""
+HP_CACHE_VERSION = 1
+TARGET_RESOURCES = 2  # resourceActor: the HP in a damage event is the target's (the boss)
+
+
+def fetch_boss_hp(client: WCLClient, fight: Fight, run: RunData) -> dict[int, list[list]]:
+    """Lowest boss HP % per second of each boss pull whose fight changes at an HP threshold (the journal says so):
+    {pull_id: [[ms since pull start, pct], ...]}. One cheap request per boss unit, cached."""
+    key = f"bosshp:v{HP_CACHE_VERSION}:{fight.report_code}:{fight.id}"
+    cached = client.get_cached(key)
+    if cached is not None:
+        return {int(k): v for k, v in cached.items()}
+    pulls = [p for p in run.pulls if p.is_boss and FACTS.hp_thresholds(p.encounter_id)]
+    actors = []
+    if pulls:
+        actors = client.query(BOSS_ACTORS_QUERY, {"code": fight.report_code})["reportData"]["report"]["masterData"]["actors"]
+    out = {}
+    for p in pulls:
+        per_s: dict[int, float] = {}  # "either of them reaching 40%": the lowest boss unit counts
+        for boss in (a["id"] for a in actors if a["subType"] == "Boss" and a["gameID"] in p.npc_ids):
+            for e in _events(client, replace(fight, start=p.start, end=p.end), "DamageDone", hostility="Friendlies",
+                             target_id=boss, resources=True):
+                if e.get("type") == "damage" and e.get("maxHitPoints") and e.get("resourceActor") == TARGET_RESOURCES:
+                    s = (e["timestamp"] - p.start) // 1000
+                    per_s[s] = min(per_s.get(s, 100.0), 100.0 * e["hitPoints"] / e["maxHitPoints"])
+        out[p.id] = [[s * 1000, round(v, 1)] for s, v in sorted(per_s.items())]
+    client.set_cached(key, out)
+    return out
+
+
 def learn_markers(samples: list[tuple[Pull, list[list]]]) -> list[str]:
     """Phase-start abilities for one boss, from several runs of it."""
     if len(samples) < 2:
@@ -70,8 +105,8 @@ def learn_markers(samples: list[tuple[Pull, list[list]]]) -> list[str]:
     return markers[:MAX_MARKERS]
 
 
-def phase_breakdown(run: RunData, tl, casts: dict[int, list[list]],
-                    tops: list[tuple[RunData, object, dict[int, list[list]]]],
+def phase_breakdown(run: RunData, tl, casts: dict[int, list[list]], hp: dict[int, list[list]],
+                    tops: list[tuple[RunData, object, dict[int, list[list]], dict[int, list[list]]]],
                     spec: Spec) -> tuple[dict[int, list[Phase]], list[dict]]:
     """Phases of each boss pull in your run, and per-phase group HP / damage vs the same
     phase in the top logs. Returns ({pull index: phases}, rows)."""
@@ -80,16 +115,17 @@ def phase_breakdown(run: RunData, tl, casts: dict[int, list[list]],
         if not pull.is_boss or pull.id not in casts:
             continue
         top_pulls = []
-        for trun, ttl, tcasts in tops:
+        for trun, ttl, tcasts, thp in tops:
             tp = next((p for p in trun.pulls if p.encounter_id == pull.encounter_id), None)
             if tp and tp.id in tcasts:
-                top_pulls.append((trun, ttl, tp, tcasts[tp.id]))
-        markers = learn_markers([(pull, casts[pull.id])] + [(tp, tc) for _, _, tp, tc in top_pulls])
-        mine = phases_for(pull, casts[pull.id], markers)
+                top_pulls.append((trun, ttl, tp, tcasts[tp.id], thp.get(tp.id, [])))
+        markers = learn_markers([(pull, casts[pull.id])] + [(tp, tc) for _, _, tp, tc, _ in top_pulls])
+        limits = FACTS.hp_thresholds(pull.encounter_id)
+        mine = phases_for(pull, casts[pull.id], markers, hp.get(pull.id, []), limits)
         if len(mine) < 2:
             continue
         my_phases[idx] = mine
-        top_phases = [(trun, ttl, phases_for(tp, tc, markers)) for trun, ttl, tp, tc in top_pulls]
+        top_phases = [(trun, ttl, phases_for(tp, tc, markers, th, limits)) for trun, ttl, tp, tc, th in top_pulls]
         for k, ph in enumerate(mine):
             same = [(trun, ttl, tph[k]) for trun, ttl, tph in top_phases if len(tph) > k and tph[k].name == ph.name]
             top_hp = [_median_hp(ttl, p) for _, ttl, p in same]
@@ -119,17 +155,25 @@ def _mean_intake(tl, ph: Phase) -> float:
     return sum(tl.intake_frac[b] for b in bins) / len(bins)
 
 
-def phases_for(pull: Pull, casts: list[list], markers: list[str]) -> list[Phase]:
-    """Parts of the fight named after what started them ("Start", "Awaken Whelps", "Awaken Whelps 2"): every cast of
-    a marker (they're cast at most twice) opens a part; casts close together open one part."""
+def phases_for(pull: Pull, casts: list[list], markers: list[str], hp: list[list] = (),
+               limits: list[float] = ()) -> list[Phase]:
+    """Parts of the fight named after what started them ("Start", "Awaken Whelps", "Awaken Whelps 2", "40% health"):
+    every cast of a marker (they're cast at most twice) opens a part, and so does the boss reaching a journal HP
+    threshold - unless a cast already opened a part at that moment (the cast's name says more)."""
     duration = max(1, pull.end - pull.start)
+    near = SAME_PHASE_FRACTION * duration
     seen: dict[str, int] = {}
     bounds = [(pull.start, "Start")]
     for t, name in sorted((t, n) for t, n in casts if n in markers):
-        if t / duration < MARKER_MIN_FRACTION or (t + pull.start) - bounds[-1][0] < SAME_PHASE_FRACTION * duration:
+        if t / duration < MARKER_MIN_FRACTION or (t + pull.start) - bounds[-1][0] < near:
             continue
         seen[name] = seen.get(name, 0) + 1
         bounds.append((t + pull.start, name if seen[name] == 1 else f"{name} {seen[name]}"))
+    for pct in limits:
+        t = next((t for t, v in hp if v <= pct), None)
+        if t is not None and all(abs(t + pull.start - b) >= near for b, _ in bounds):
+            bounds.append((t + pull.start, f"{pct:g}% health"))
+    bounds.sort()
     if len(bounds) < 2:
         return []
     return [Phase(label, start, bounds[i + 1][0] if i + 1 < len(bounds) else pull.end)

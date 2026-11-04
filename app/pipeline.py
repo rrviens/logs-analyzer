@@ -32,7 +32,7 @@ from app.deaths import (ENVIRONMENTAL, MAX_RECAPS, _applies, ability_schools, cl
 from app.context import CooldownTracker
 from app.defense_spans import active_at, fetch_defense_spans
 from app.healer_state import fetch_healer_state
-from app.phases import fetch_boss_casts, phase_breakdown
+from app.phases import fetch_boss_casts, fetch_boss_hp, phase_breakdown
 from app.quality import check as quality_check
 from app.spells import fetch_spell_heals, heal_casts
 from app.verdicts import _section, items_verdict, phases_verdict, pulls_verdict, spell_verdict
@@ -42,7 +42,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 73
+RULES_VERSION = 74
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -286,7 +286,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     segs = all_segments(run, tl, spec)
 
     my_state = fetch_healer_state(client, fight, run, spec)
-    my_boss_casts = fetch_boss_casts(client, fight, run)
+    my_boss_casts, my_boss_hp = fetch_boss_casts(client, fight, run), fetch_boss_hp(client, fight, run)
 
     tops, top_boss, candidates, skipped = [], [], [], []
     fetched = [0]
@@ -303,7 +303,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
             loaded = (TopRun(other, get_trinkets(pub, f).get(p.id, []),
                              frozenset(intake_modifiers(get_players(pub, f), effects)),
                              heal_casts(other, otl, fetch_spell_heals(pub, f, other, spec), state, spec)),
-                      otl, fetch_boss_casts(pub, f, other))
+                      otl, fetch_boss_casts(pub, f, other), fetch_boss_hp(pub, f, other))
         fetched[0] += 1
         progress(f"Fetched top log {fetched[0]} ({p.name} +{f.keystone_level}{'' if ok else ', incomplete data - skipped'})")
         return loaded, reasons
@@ -324,7 +324,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
                         continue
                     candidates.append((f, p))
                     tops.append(loaded[:2])
-                    top_boss.append((loaded[0].run, loaded[1], loaded[2]))
+                    top_boss.append((loaded[0].run, loaded[1], loaded[2], loaded[3]))
 
     # The top logs download in the background; meanwhile your own run goes to the page as a preview.
     loader = ThreadPoolExecutor(1)
@@ -359,7 +359,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     ctx = build_context(run, tl, segs, profiles)
     my_trinkets = get_trinkets(client, fight).get(me.id, [])
     my_heals = heal_casts(run, tl, fetch_spell_heals(client, fight, run, spec), my_state, spec)
-    phases, phase_rows = phase_breakdown(run, tl, my_boss_casts, top_boss, spec)
+    phases, phase_rows = phase_breakdown(run, tl, my_boss_casts, my_boss_hp, top_boss, spec)
 
     def clock(t: int) -> str:
         s = max(0, (t - run.start) // 1000)
