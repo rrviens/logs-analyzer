@@ -1716,6 +1716,8 @@ function renderDeaths(res) {
           ${d.story.advice.map((a) => `<li>${T(a)}</li>`).join("")}</ul></div>` : ""}
         ${d.note ? `<div class="story note"><strong>ℹ About ${esc(d.cause ? d.cause.name : d.killing)}:</strong> ${esc(d.note)}</div>` : ""}
         ${d.avoid ? `<div class="story"><strong>⚠ ${esc(d.avoid.label)}:</strong> ${T(d.avoid.line.split(" - ").slice(1).join(" - "))}</div>` : ""}
+        ${d.skip ? `<div class="story"><strong>Skip went wrong:</strong> died alone with nobody else in combat while the
+          group was skipping (${esc(d.skip)}) - not a healing problem.</div>` : ""}
         ${d.pull_melee ? `<div class="story"><strong>Threat, not healing:</strong> mob melee ${esc(d.pull_melee)} - a DPS the
           pack goes for first is one-shot before any heal lands.</div>` : ""}
         ${d.dodge && d.dodge.why !== d.note ? `<div class="story"><strong>Dodge it:</strong> ${T(d.dodge.why)} - no defensive

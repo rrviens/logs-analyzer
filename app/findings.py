@@ -480,13 +480,16 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
     # Personals with no time to react are context only: never a miss, never weight.
     no_window = [i for i in every if i.get("no_window") and i["status"] == "ready"]
     every = [i for i in every if not i.get("no_window")]
-    dodge, pull_melee = r.get("dodge"), r.get("pull_melee")
-    if dodge or pull_melee:  # dodge it / the DPS's own threat: no defensive is the answer, so none counts as missed
+    dodge, pull_melee, skip = r.get("dodge"), r.get("pull_melee"), r.get("skip")
+    if dodge or pull_melee or skip:  # dodge it / the DPS's own threat: no defensive is the answer, so none counts as missed
         every, no_window = [], []
     savers = [i for i in every if i["status"] == "ready" and i.get("verdict") == "lived"]
     hard_savers = [i for i in savers if not i.get("gcd")]  # GCD defensives: holding them is often right
     ready_any = [i for i in every if i["status"] == "ready"]
-    if pull_melee:
+    if skip:
+        ready_line = (f"Not a healing problem: a skip went wrong - {_names(c, group)} died alone, nobody else was in "
+                      f"combat, and the group was skipping ({skip}).")
+    elif pull_melee:
         ready_line = (f"Not a healing problem: {_names(c, group)} took mob melee {pull_melee}. A DPS the mobs go for "
                       f"first is one-shot before any healer can react - let the tank get threat, stay out of melee "
                       f"range of the pack" + (". Only a Blessing of Protection pressed before the hit would save it."
@@ -511,19 +514,19 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
     saver_weight = 30 if hard_savers else 10 if savers else 0
     severity = (50 + (saver_weight if not burst else 0) + (15 if low_secs >= 3 else 0) + (10 if advice else 0)
                 - (20 if burst and not savers else 0) - (15 if expected else 0))
-    if pull_melee:
+    if pull_melee or skip:
         severity = min(severity, 30)  # their threat / positioning, not your healing
     context = [["Ready?", ready_line]]
     if no_window:
         context.append(["No reaction window", f"{' and '.join(i['name'] for i in no_window)} "
                         f"{'was' if len(no_window) == 1 else 'were'} ready, but no reaction window "
                         f"({r.get('reaction', {}).get('why', '')}) - not a mistake."])
-    if others and not dodge and not pull_melee:
+    if others and not dodge and not pull_melee and not skip:
         context.append(["Group tools", "Also up, not expected to be spent on this: "
                         + ", ".join(f"{i['name']} ({i['owner']})" for i in others) + "."])
     if advice:
         context.append(["What to do", " ".join(advice)])
-    fix = ("Let the tank get threat first" if pull_melee else f"Dodge {dodge['ability']}" if dodge else
+    fix = ("Skip went wrong - not healing" if skip else "Let the tank get threat first" if pull_melee else f"Dodge {dodge['ability']}" if dodge else
            (r["story"] or {}).get("fix") or (f"Use {hard_savers[0]['name']}" if hard_savers
                                              and r["cause"]["name"] not in ENVIRONMENTAL else ""))
     return Finding(t, c.pull_label(pull), min(100, severity), title, detail, context, fix=fix)

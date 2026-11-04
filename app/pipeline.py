@@ -41,7 +41,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 69
+RULES_VERSION = 70
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -357,7 +357,8 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         r["stoppable"] = _stoppable(r, avoid, run)
         r["dodge"] = _dodgeable(r, avoid, encounter, run, [tr.run for tr, _ in tops])
         r["pull_melee"] = _pull_melee(r, run, chains)
-        if r["dodge"] or r["pull_melee"]:  # no "would have lived" on the card for damage you walk out of
+        r["skip"] = _failed_skip(r, run, group_casts)
+        if r["dodge"] or r["pull_melee"] or r["skip"]:  # no "would have lived" on the card for damage you walk out of
             for i in (i for items in r["ready"].values() for i in items):
                 i.pop("verdict", None)
         _judge(r, encounter)
@@ -714,6 +715,27 @@ def _pull_melee(r: dict, run, chains) -> str:
     return ""
 
 
+SKIP_TOOLS = {"Shadowmeld", "Stealth", "Prowl", "Vanish", "Shroud of Concealment", "Invisibility", "Greater Invisibility",
+              "Mass Invisibility", "Camouflage", "Feign Death"}
+SKIP_LOOKBACK_MS, SKIP_ALONE_MS, SKIP_END_MS = 30_000, 10_000, 10_000
+
+
+def _failed_skip(r: dict, run, group_casts) -> str:
+    """A skip that went wrong: the victim died alone (nobody else hit in that pull), the "pull" ended right after,
+    and the group was using skip tools (meld, stealth, invisibility). A tank gathering mobs for a funnel doesn't match:
+    the group then fights those mobs, so others get hit and the pull goes on. Returns the tools seen, or ""."""
+    t, vid = r["t"], next((p[0] for p in run.players if p[1] == r["victim"]), None)
+    pull = next((p for p in run.pulls if p.start <= t <= p.end), None)
+    if vid is None or not pull or pull.end - t > SKIP_END_MS:
+        return ""
+    others_hit = any(d[1] != vid for d in run.damage if pull.start <= d[0] <= pull.end)
+    if others_hit or not any(d[1] == vid for d in run.damage if t - SKIP_ALONE_MS <= d[0] <= t):
+        return ""
+    tools = sorted({f"{run.player_name(c[1])}: {run.ability_name(c[2])}" for c in group_casts
+                    if t - SKIP_LOOKBACK_MS <= c[0] <= t and run.ability_name(c[2]) in SKIP_TOOLS})
+    return ", ".join(tools)
+
+
 DODGE_MIN_TOPS = 3
 DODGE_ONE_SHOT = 0.5  # a killing blow this big (share of max HP) counts as the cause on its own
 DODGE_PEER_MAX = 1.0  # a ground effect peers still take this often per player a run isn't really avoidable
@@ -774,7 +796,9 @@ def _death_short(r: dict) -> tuple[str, str]:
     every = [i for i in r["ready"]["victim"]  # only the victim's own tools are a fix
              if not i.get("escape") and not i.get("no_window") and not i.get("gcd")]
     savers = [i for i in every if i["status"] == "ready" and i.get("verdict") == "lived"]
-    if r.get("pull_melee"):  # the DPS's own threat / positioning
+    if r.get("skip"):
+        fix = "Skip went wrong - not healing"
+    elif r.get("pull_melee"):  # the DPS's own threat / positioning
         fix = "Let the tank get threat first"
     elif r.get("dodge"):  # standing in it was the mistake, not a missing defensive
         fix = f"Dodge {r['dodge']['ability']}"
