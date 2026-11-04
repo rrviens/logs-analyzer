@@ -401,9 +401,8 @@ def _wipe_cooldowns(c: _Ctx, t0: int, t_end: int) -> tuple[list[str], bool]:
     """What each group cooldown was doing while the wipe unfolded."""
     lines, delayed = [], False
     for a in c.cds.casts:
-        name, cd = c.cds.name(a), c.cds.cd_ms[a]
-        last = c.cds.last_before(a, t0)
-        back = t0 if last is None or t0 - last >= cd else last + cd
+        name, last = c.cds.name(a), c.cds.last_before(a, t0)
+        back = c.cds.free_at(a, t0)
         if back > t_end:
             lines.append(f"{name}: on cooldown through all of it (used at {c.clock(last)}).")
             continue

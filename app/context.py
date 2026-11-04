@@ -2,6 +2,7 @@
 profile, finds emergency windows, detects team defensives and tracks healer cooldowns."""
 from dataclasses import dataclass
 
+from app.charges import infer_charges, learn_recharge_ms, uses, wait_ms
 from app.runs import RunData
 from app.segments import Profile, SegmentMetrics
 from app.timeline import Timeline
@@ -134,19 +135,23 @@ class CooldownTracker:
     def __init__(self, run: RunData, cooldowns: dict[int, tuple[str, int]]):
         """cooldowns: ability id -> (name, base cooldown s), e.g. spec.healing_cooldowns."""
         self.cooldowns = cooldowns
-        self.casts = {aid: sorted(c[0] for c in run.casts if c[1] == aid) for aid in self.cooldowns}
+        self.casts = {aid: uses([c[0] for c in run.casts if c[1] == aid]) for aid in self.cooldowns}  # channel ticks = 1 use
         self.casts = {aid: ts for aid, ts in self.casts.items() if ts}
-        self.cd_ms = {}
+        self.cd_ms, self.charges = {}, {}
         for aid, ts in self.casts.items():
-            gaps = [b - a for a, b in zip(ts, ts[1:])]
-            self.cd_ms[aid] = min([self.cooldowns[aid][1] * 1000] + gaps)
+            self.charges[aid] = infer_charges(ts, self.cooldowns[aid][1] * 1000)
+            self.cd_ms[aid] = learn_recharge_ms(ts, self.cooldowns[aid][1], self.charges[aid])
 
     def name(self, aid: int) -> str:
         return self.cooldowns[aid][0]
 
     def ready(self, aid: int, t: int) -> bool:
-        last = self.last_before(aid, t)
-        return last is None or t - last >= self.cd_ms[aid]
+        """A charge is free at t (a cooldown with two charges is still ready after one use)."""
+        return not wait_ms(self.casts[aid], t, self.cd_ms[aid], self.charges[aid])
+
+    def free_at(self, aid: int, t: int) -> int:
+        """When a charge is free at or after t, counting the casts up to t."""
+        return int(t + wait_ms(self.casts[aid], t, self.cd_ms[aid], self.charges[aid]))
 
     def last_before(self, aid: int, t: int) -> int | None:
         return max((c for c in self.casts[aid] if c <= t), default=None)

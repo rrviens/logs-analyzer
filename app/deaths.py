@@ -8,6 +8,7 @@ import json
 from dataclasses import dataclass
 
 from app.auras import Auras, removed_by
+from app.charges import SAME_USE_MS, free_at, infer_charges, learn_recharge_ms, uses, wait_ms
 from app.config import PROJECT_ROOT
 from app.reports import Fight, Player
 from app.runs import RunData, _events
@@ -257,23 +258,26 @@ def recap_death(run: RunData, players: list[Player], group_casts: list[list], de
             # Personals are the victim's; the healer's group/external cooldowns are the healer's even
             # when the healer is the one who died.
             bucket = "victim" if scope == "personal" else "healer" if p.id == run.healer_id else "group"
-            times = sorted(casts_by.get((p.id, name), []))
-            cd_ms = learned_cd_ms(times, d["cd"])
+            times = uses(casts_by.get((p.id, name), []), max(SAME_USE_MS, d["duration"] * 1000))
+            charges = infer_charges(times, d["cd"] * 1000)
+            cd_ms = learn_recharge_ms(times, d["cd"], charges)
             item = {"name": name, "owner": p.name, "scope": scope, "gcd": bool(d.get("gcd"))}
             used = [x for x in times if t - d["duration"] * 1000 <= x <= t]
             last = max((x for x in times if x <= t), default=None)
+            wait = wait_ms(times, t, cd_ms, charges)
+            two = f", {charges} charges" if charges > 1 else ""
             if used:
                 item.update(status="used", text=f"Used {(t - used[-1]) / 1000:.0f}s before the death - it was up.")
             elif not times:
                 item.update(status="unknown", text="Not pressed all run - may not be talented.")
             elif last is None:
                 item.update(status="ready", text="Ready - not pressed yet at that point (used later in the run).")
-            elif t - last >= cd_ms:
-                item.update(status="ready", text=f"Ready (last used {(t - last) / 1000:.0f}s earlier).")
+            elif not wait:
+                item.update(status="ready", text=f"Ready (last used {(t - last) / 1000:.0f}s earlier{two}).")
             else:
                 # Say why it wasn't available: when it was used and on what.
                 item.update(status="cooldown", text=f"Used at {clock(last)} ({(t - last) / 1000:.0f}s earlier"
-                            f"{_used_on(run, p.id, last, auras)}) - back {(last + cd_ms - t) / 1000:.0f}s after the death.")
+                            f"{_used_on(run, p.id, last, auras)}{two}) - back {wait / 1000:.0f}s after the death.")
             if d["effect"].get("escape"):
                 item["escape"] = True
             elif item["status"] in ("ready", "unknown"):
@@ -361,12 +365,6 @@ def judge_reaction(r: dict, telegraphed: str = "") -> None:
             i["no_window"] = True
 
 
-def learned_cd_ms(times: list[int], base_s: float) -> float:
-    """Base cooldown, or the shortest gap between the player's own casts if shorter (talents/CDR)."""
-    times = sorted(times)
-    return min([base_s * 1000] + [b - a for a, b in zip(times, times[1:])])
-
-
 def learn_dispels(sources: list[tuple]) -> tuple[set[int], dict[int, str]]:
     """From (Auras, healer id, name_of) of your run and peer healers' runs: debuffs the healer's own dispel removes,
     and debuffs a cleanse totem removes (debuff -> totem cast name)."""
@@ -392,9 +390,8 @@ def _totem_story(run, group_casts, totem: str, healer: int, start: int, until: i
     if used_in:
         return f"{totem} (clears it): dropped at {clock(used_in[0])}.", "", ""
     last = max((x for x in times if x < start), default=None)
-    cd_ms = learned_cd_ms(times, cd_s)
-    if last is not None and start - last < cd_ms:
-        back = last + cd_ms
+    back = free_at(times, start, cd_s)
+    if back > start:
         line = f"{totem} (clears it): used at {clock(last)}{used_on(last)}, back {(back - start) / 1000:.0f}s after {debuff} landed."
         if back < until - 1000:
             return line, (f"{totem} came back at {clock(back)} and wasn't dropped - {(until - back) / 1000:.0f}s more "
@@ -417,8 +414,7 @@ def _spent_tools(run, group_casts, defensives, known: set[str], victim_id: int, 
         if not d:
             continue
         times = [c[0] for c in group_casts if c[1] == victim_id and run.ability_name(c[2]) == n]
-        last = max((x for x in times if x <= start), default=None)
-        if last is not None and last + learned_cd_ms(times, d["cd"]) > until - 1000:
+        if free_at(times, start, d["cd"]) > until - 1000:
             out.append(n)
     return out
 
@@ -522,12 +518,11 @@ def _debuff_story(run, players, group_casts, defensives, auras: Auras, can_dispe
                 and n in known and d["scope"] == "personal":
             times = sorted(c[0] for c in group_casts if c[1] == victim_id and name_of(c[2]) == n)
             last = max((x for x in times if x <= start), default=None)
-            cd_ms = learned_cd_ms(times, d["cd"])
+            back = free_at(times, start, d["cd"])
             used_in = [x for x in times if start <= x <= min(end, t) + 500]
             if used_in:
                 options.append(f"{n} (clears it): used at {clock(used_in[0])}")
-            elif last is not None and start - last < cd_ms:
-                back = last + cd_ms
+            elif back > start:
                 options.append(f"{n} (clears it): used at {clock(last)}{_used_on(run, victim_id, last, auras)}, "
                                f"back {(back - start) / 1000:.0f}s after {debuff} landed")
                 if back < min(end, t) - 1000:

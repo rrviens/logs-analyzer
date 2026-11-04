@@ -41,7 +41,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 65
+RULES_VERSION = 66
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -805,7 +805,7 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
             if prev is None:
                 tip.append("First use - ready since the start.")
             else:
-                back = prev + cds.cd_ms[aid]
+                back = cds.free_at(aid, prev)  # a second charge can be free right away
                 tip.append(f"Came back at {clock(back)}; pressed {(t - back) / 1000:.0f}s later." if t > back + 1000
                            else "Pressed as soon as it came back.")
         markers.append({"t_s": rel(t), "kind": kind, "label": name, "tip": tip,
