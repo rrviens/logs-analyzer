@@ -9,6 +9,7 @@ from app.context_model import DungeonModel
 from app.deaths import ENVIRONMENTAL
 from app.metrics import hots_active
 from app.runs import RunData
+from app.spellfacts import FACTS
 from app.specs import RACIALS
 from app.specs.base import Spec
 from app.segments import MELEE_ID, RECOVERY_CAP_S, Profile, SegmentMetrics
@@ -197,11 +198,12 @@ def analyze(run: RunData, tl: Timeline, segs: list[SegmentMetrics], profiles: li
             heal_casts: list[HealCast] | None = None, phases: dict | None = None,
             phase_rows: list[dict] | None = None, state: HealerState | None = None,
             death_recaps: list[dict] | None = None, *, spec: Spec,
-            group_defs: list[tuple] | None = None) -> Analysis:
+            group_defs: list[tuple] | None = None, went_through: list[dict] | None = None) -> Analysis:
     """group_defs: other players' group defensive presses [(t, name, who)] - for healing overlaps."""
     profiles = [None if s.duration_s < MIN_PULL_S else p for s, p in zip(segs, profiles)]
     c = _Ctx(run, tl, segs, profiles, ctx, model, tops or [], my_trinkets or [], my_modifiers, spec)
     c.heal_casts = heal_casts or []
+    c.went_through = went_through or []  # enemy casts peers usually stop that completed here
     c.recaps = {(r["t"], r["victim"]): r for r in death_recaps or []}
     c.phases, c.phase_rows, c.state = phases or {}, phase_rows or [], state
     c.group_defs = group_defs or []
@@ -998,6 +1000,19 @@ def _slow_recovery(c: _Ctx) -> list[Finding]:
     return out
 
 
+LOOSE_MELEE = 0.25  # this share of a pull's mob melee on non-tanks: mobs not held
+
+
+def _intake_reason(c: _Ctx, a: int, pull) -> str:
+    """Why the group took more of one ability, when the log or game data can show it - else nothing (no guess)."""
+    if FACTS.ground(a):
+        return " - floor effect or frontal (game data): walk out of it"
+    through = sum(1 for w in c.went_through if w.get("ability_id") == a and pull.start <= w["t"] <= pull.end)
+    if through:
+        return f" - {through} cast{'s' if through > 1 else ''} went through that peer groups usually interrupt or stun"
+    return ""
+
+
 def _damage_intake(c: _Ctx) -> list[Finding]:
     """Extra damage taken vs top groups. Compared against top groups with the same
     damage-reducing composition (e.g. an Augmentation Evoker) when there are enough."""
@@ -1016,8 +1031,12 @@ def _damage_intake(c: _Ctx) -> list[Finding]:
         detail = ["Healing pressure here is partly damage peer groups avoid or mitigate. Biggest differences:"]
         detail += [
             f"  {c.ability(a)}: {seg.ability_intake[a] * 100:.1f}% group HP/s vs {ref['abilities'].get(a, 0.0) * 100:.1f}%"
-            for a, diff in extra if diff > 0
+            + _intake_reason(c, a, seg.pull) for a, diff in extra if diff > 0
         ]
+        melee = [d for d in c.run.damage if seg.pull.start <= d[0] < seg.pull.end and d[2] == MELEE_ID]
+        loose = sum(d[3] for d in melee if d[1] not in c.run.tank_ids) / (sum(d[3] for d in melee) or 1)
+        if loose >= LOOSE_MELEE:
+            detail.append(f"  Melee: {loose:.0%} of it landed on DPS or healer - mobs not held by the tank.")
         if note:
             detail.append(note)
         ratio = seg.intake_frac_ps / ref["intake"] - 1
