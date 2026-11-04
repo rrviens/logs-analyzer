@@ -341,6 +341,11 @@
   #tlSection.pinned details.legend { display: none; }
   #textSize.on { border-color: var(--accent); color: var(--accent); }
   .dpshead { font-weight: 600; margin-bottom: 8px; }
+  .meters { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+  .meters li { position: relative; display: flex; justify-content: space-between; gap: 10px; padding: 5px 10px;
+               border-radius: var(--radius-xs); background: var(--panel-2); overflow: hidden; }
+  .meters .fill { position: absolute; inset: 0 auto 0 0; opacity: .28; }
+  .meters span { position: relative; } .meters .v { font-variant-numeric: tabular-nums; color: var(--muted); }
   .dpslegend { margin: 6px 0 4px; }
   .dpslegend i.box { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
   .dpssub { margin: 14px 0 6px; font-size: 0.8667rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -749,6 +754,7 @@ function renderPreview(res, url) {
       <div class="progress" id="progress"></div></div>
     ${renderTimelineShell(res)}
     ${res.deaths ? renderDeaths(res) : ""}
+    ${res.meters ? sec("meters", "ok", renderMeters(res), "", false) : ""}
     ${res.dps ? sec("dps", (res.dps_windows || []).length || 0, renderDps({...res, timeline: {...res.timeline, dps_windows: res.dps_windows}}),
         "No calm stretches long enough to deal damage in this run.", false) : ""}`;
   if (res.dps_windows) res.timeline.dps_windows = res.dps_windows;
@@ -1608,9 +1614,32 @@ const SECTIONS = {
   items: {title: "Trinkets & consumables", icon: "◆", lucide: "flask-conical", color: "var(--series-3)"},
   spells: {title: "Single-target vs group heal", icon: "≈", lucide: "split", color: "var(--series-1)"},
   dps: {title: "DPS windows", icon: "⚔", lucide: "swords", color: "var(--series-3)"},
+  meters: {title: "Damage & healing", icon: "▮", lucide: "bar-chart-3", color: "var(--series-1)"},
   pulls: {title: "Pulls vs peers", icon: "▤", lucide: "rows-3", color: "var(--ink-muted)"},
   good: {title: "Good calls", icon: "✓", lucide: "circle-check", color: "var(--good)"},
 };
+
+// Group meters after the key: damage or healing per player, bars in class colours; the pick is remembered.
+let METERS = null;
+function renderMeters(res) {
+  if (!res.meters) return "";
+  METERS = res.meters;
+  const kind = lsGet("meters") === "healing" ? "healing" : "damage", rows = res.meters[kind] || [];
+  const top = Math.max(1, ...rows.map((e) => e.per_s)), k = (x) => x >= 1e6 ? `${(x / 1e6).toFixed(1)}M` : `${Math.round(x / 1000)}k`;
+  return `<div class="seg" role="group" aria-label="Damage or healing">
+      <button class="tlbtn ${kind === "damage" ? "on" : ""}" onclick="pickMeters('damage')">DPS</button>
+      <button class="tlbtn ${kind === "healing" ? "on" : ""}" onclick="pickMeters('healing')">HPS</button></div>
+    <ul class="meters">${rows.map((e) => `<li><i class="fill" style="width:${(e.per_s / top * 100).toFixed(1)}%;
+      background:${CLASS_COLORS[e.class] || "var(--line-strong)"}"></i><span>${esc(e.name)} <span class="v">${esc(e.spec)}</span></span>
+      <span class="v">${k(e.per_s)}/s · ${k(e.total)}</span></li>`).join("")}</ul>`;
+}
+function pickMeters(kind) {
+  lsSet("meters", kind);
+  const box = document.querySelector("#sec-meters");
+  if (!box || !METERS) return;
+  box.querySelectorAll(":scope > .seg, :scope > .meters").forEach((el) => el.remove());
+  box.insertAdjacentHTML("beforeend", renderMeters({meters: METERS}));
+}
 
 function sec(id, count, body, emptyText, foldable = true) {
   const s = SECTIONS[id];
@@ -1902,6 +1931,7 @@ function render(res, url) {
           "Not enough heals to judge.", false)}
     ${sec("dps", ((res.timeline || {}).dps_windows || []).length ? counts.dps || "ok" : 0, renderDps(res),
           "No calm stretches long enough to deal damage in this run.", false)}
+    ${sec("meters", res.meters ? "ok" : 0, renderMeters(res), "No damage or healing totals for this run.", false)}
     ${sec("pulls", rows ? counts.pulls || "ok" : 0, verdictBlock(v.pulls, `<details><summary>Show data</summary><div class="tablewrap"><table>
       <tr><th>Pull</th><th>Time</th><th>Group HP</th><th>Top HP</th><th>Dmg in/s</th><th>Top in/s</th><th>Heal/s</th><th>Top heal/s</th></tr>
       ${rows}</table></div></details>`), "No pulls to compare.", false)}

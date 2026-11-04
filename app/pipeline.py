@@ -38,10 +38,10 @@ from app.verdicts import _section, items_verdict, phases_verdict, pulls_verdict,
 from app.specs import SPECS, healers_in
 from app.spellfacts import FACTS
 from app.timeline import build_timeline
-from app.wcl import WCLClient, parallel_map
+from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 68
+RULES_VERSION = 69
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -175,6 +175,26 @@ def _stoppable_finding(recaps: list[dict], clock) -> Finding | None:
                    fix="Stun / interrupt that cast")
 
 
+METERS_QUERY = """query($code: String!, $f: [Int]) { reportData { report(code: $code) {
+  damage: table(fightIDs: $f, dataType: DamageDone) healing: table(fightIDs: $f, dataType: Healing) } } }"""
+
+
+def _meters(client, fight) -> dict | None:
+    """Damage and healing per player over the whole key (one cached request) - the group's meters."""
+    try:
+        r = client.query(METERS_QUERY, {"code": fight.report_code, "f": [fight.id]})["reportData"]["report"]
+    except (WCLError, KeyError, TypeError):
+        return None  # meters are a nice-to-have: never fail the analysis over them
+    out = {}
+    for kind in ("damage", "healing"):
+        d = r[kind]["data"]
+        secs = max(1, d["totalTime"] / 1000)
+        out[kind] = sorted(({"name": e["name"], "class": e["type"], "spec": e.get("icon", "").split("-")[-1],
+                             "total": e["total"], "per_s": round(e["total"] / secs)} for e in d["entries"]),
+                           key=lambda e: -e["total"])
+    return out
+
+
 def _own_run_sections(client, fight, run, tl, segs, players, state, spec) -> dict:
     def clock(t: int) -> str:
         s = max(0, (t - run.start) // 1000)
@@ -185,7 +205,7 @@ def _own_run_sections(client, fight, run, tl, segs, players, state, spec) -> dic
         r["note"] = encounter.note(name=r["cause"]["name"])
         _judge(r, encounter)
     dps, windows = _dps_windows(client, fight, run, tl, segs, [None] * len(segs), [], [], spec)
-    return {"deaths": deaths, "dps": dps, "dps_windows": windows}
+    return {"deaths": deaths, "dps": dps, "dps_windows": windows, "meters": _meters(client, fight)}
 
 
 def latest_key(code: str, fight_id: int, player: str, top: int) -> str:
@@ -420,6 +440,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         "phases": phase_out,
         "verdicts": verdicts,
         "deaths": death_recaps,
+        "meters": _meters(client, fight),
         "timeline": _timeline(run, tl, segs, profiles, phases, my_state, my_trinkets, result, tops, death_recaps,
                               my_players, spans,
                               group_casts, avoid, chains, spec, ability_icons(client, code), encounter,
