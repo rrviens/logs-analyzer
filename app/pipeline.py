@@ -41,7 +41,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 67
+RULES_VERSION = 68
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -327,6 +327,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     avoid.by_pull = {i: {a: t for a, t in tags.items() if not encounter.not_avoidable(a, run.ability_name(a))
                          and (encounter.avoidable(a, run.ability_name(a)) or on_floor(a))}
                      for i, tags in avoid.by_pull.items()}
+    chains = find_chains(run, tl, fetch_auras(client, fight, run.player_ids), my_state, tops, group_casts, spec)
     death_recaps = _death_recaps(client, fight, run, my_players, my_state, [tr.run for tr, _ in tops],
                                  candidates, clock, progress, spec)
     for r in death_recaps:
@@ -335,7 +336,8 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
         r["note"] = encounter.note(name=r["cause"]["name"])
         r["stoppable"] = _stoppable(r, avoid, run)
         r["dodge"] = _dodgeable(r, avoid, encounter, run, [tr.run for tr, _ in tops])
-        if r["dodge"]:  # no "would have lived" on the card for damage you walk out of
+        r["pull_melee"] = _pull_melee(r, run, chains)
+        if r["dodge"] or r["pull_melee"]:  # no "would have lived" on the card for damage you walk out of
             for i in (i for items in r["ready"].values() for i in items):
                 i.pop("verdict", None)
         _judge(r, encounter)
@@ -348,7 +350,6 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
             group_defs.append((s["start"], s["name"], run.player_name(s["source"])))
     result = analyze(run, tl, segs, profiles, ctx, model, [tr for tr, _ in tops], my_trinkets, my_mods,
                      my_heals, phases, phase_rows, my_state, death_recaps, spec=spec, group_defs=group_defs)
-    chains = find_chains(run, tl, fetch_auras(client, fight, run.player_ids), my_state, tops, group_casts, spec)
     result.findings += _chain_findings(run, chains, clock)
     if (stop := _stoppable_finding(death_recaps, clock)):
         result.findings.append(stop)
@@ -674,6 +675,24 @@ def _with_brings(group: list[dict], players, run, segs, group_casts) -> list[dic
     return group
 
 
+PULL_MELEE_MS = 15000  # mob melee this soon after a pack comes in: the tank hasn't got it yet
+MELEE = {"Melee", "Auto Attack"}
+
+
+def _pull_melee(r: dict, run, chains) -> str:
+    """Why a DPS dying to mob melee is their own threat/positioning, not something to heal through - "" otherwise.
+    As a pack comes in (a fresh pull or a chain) the mobs hit whoever they target first, and one-shot a DPS before any
+    healer can react."""
+    if r["cause"]["name"] not in MELEE or not any(p[1] == r["victim"] and p[2] == "dps" for p in run.players):
+        return ""
+    pull = next((p for p in run.pulls if p.start <= r["t"] <= p.end), None)
+    if pull and r["t"] - pull.start <= PULL_MELEE_MS:
+        return f"{(r['t'] - pull.start) / 1000:.0f}s into the pull"
+    if any(0 <= r["t"] - c.t <= PULL_MELEE_MS for c in chains):
+        return "while packs were chained"
+    return ""
+
+
 DODGE_MIN_TOPS = 3
 DODGE_ONE_SHOT = 0.5  # a killing blow this big (share of max HP) counts as the cause on its own
 DODGE_PEER_MAX = 1.0  # a ground effect peers still take this often per player a run isn't really avoidable
@@ -734,7 +753,9 @@ def _death_short(r: dict) -> tuple[str, str]:
     every = [i for i in r["ready"]["victim"]  # only the victim's own tools are a fix
              if not i.get("escape") and not i.get("no_window") and not i.get("gcd")]
     savers = [i for i in every if i["status"] == "ready" and i.get("verdict") == "lived"]
-    if r.get("dodge"):  # standing in it was the mistake, not a missing defensive
+    if r.get("pull_melee"):  # the DPS's own threat / positioning
+        fix = "Let the tank get threat first"
+    elif r.get("dodge"):  # standing in it was the mistake, not a missing defensive
         fix = f"Dodge {r['dodge']['ability']}"
     elif story and story.get("fix"):
         fix = story["fix"]
