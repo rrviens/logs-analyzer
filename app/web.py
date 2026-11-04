@@ -25,7 +25,7 @@ from app import auth
 from app.config import ADMIN_USER_IDS, AUTH_MODE, CACHE_PATH, DATA_DIR, PROJECT_ROOT, SECURE_COOKIES, wcl_credentials
 from app.context_model import load_dungeon
 from app.jobs import Jobs
-from app.pipeline import RULES_VERSION, AnalysisError, cache_key, run_analysis, stored_analysis
+from app.pipeline import RULES_VERSION, AnalysisError, cache_key, latest_key, run_analysis, stored_analysis
 from app import raiderio
 from app.reports import get_fights, get_players, parse_report_url, pick_fight, player_realms
 from app.specs import SPECS, spec_for
@@ -384,7 +384,7 @@ def _report_runs(client: WCLClient, rep: dict, s: dict, seen: list, ttl: float |
             "timed": bool(f.kill),
             "duration_min": round(f.duration_s / 60, 1),
             "started": started.isoformat(),
-            "analyzed": client.get_cached(cache_key(rep["code"], f.id, s["name"], TOP_LOGS)) is not None,
+            "analyzed": client.get_cached(latest_key(rep["code"], f.id, s["name"], TOP_LOGS)) is not None,
         })
     return runs
 
