@@ -208,6 +208,10 @@
   .tag.timed { background: var(--good-bg); color: var(--good); }
   .tag.depleted { background: var(--warn-bg); color: var(--warn); }  /* not timed: orange */
   .tag.abandoned { background: var(--bad-bg); color: var(--bad); }
+  .sevhead { margin: 14px 0 6px; font-size: 0.8667rem; text-transform: uppercase; letter-spacing: .04em; }
+  .sevhead.high { color: var(--high); } .sevhead.med { color: var(--med); } .sevhead.low { color: var(--low); }
+  .sevhead .n { color: var(--muted); font-weight: 400; margin-left: 4px; }
+  .sevgroup:first-of-type .sevhead { margin-top: 4px; }
   .tag.done { background: var(--med-bg); color: var(--med); }
   .tag.prep { background: var(--accent-soft); color: var(--accent); }
   .empty { color: var(--muted); padding: 24px 4px; text-align: center; }
@@ -1885,9 +1889,9 @@ function render(res, url) {
     ${nav(counts)}
     ${sec("look", split.shown.length + split.minor.length, `<div class="lookbar" id="lookBar" hidden></div>`
           + `<div class="tierline">${esc(tier.line)}</div>`
-          + split.shown.map(([f, i]) => renderFinding(f, i, res)).join("")
+          + bySeverity(split.shown, res)
           + (split.minor.length ? `<details class="vsec minor"><summary>${split.minor.length} minor note${split.minor.length > 1 ? "s" : ""}
-              (${esc(tier.minorWhy)})</summary><div class="body">${split.minor.map(([f, i]) => renderFinding(f, i, res)).join("")}</div></details>` : ""),
+              (${esc(tier.minorWhy)})</summary><div class="body">${byTime(split.minor).map(([f, i]) => renderFinding(f, i, res)).join("")}</div></details>` : ""),
           "Nothing worth flagging - this run holds up against your peers.")}
     ${renderDeaths(res)}
     ${sec("phases", res.phases && res.phases.length ? counts.phases || "ok" : 0, verdictBlock(v.phases, renderPhases(res)),
@@ -2001,6 +2005,15 @@ function reviewTier(res) {
   return {key, line: `${tiers[key]} (${why}).`, minorWhy: key === "farm" ? "farm key" : key === "normal" ? "below your push range" : "top players' timings are from higher keys"};
 }
 // [[finding, index]] shown / folded away. Timings learned from top players only count near the study's key range.
+// "What to look at": High, Medium, Low groups, each in run order (whole-run notes first).
+const byTime = (list) => [...list].sort(([a], [b]) => (a.pull === "Whole run" ? -1 : a.t_s) - (b.pull === "Whole run" ? -1 : b.t_s));
+function bySeverity(list, res) {
+  return [["high", "High"], ["med", "Medium"], ["low", "Low"]].map(([k, label]) => {
+    const g = byTime(list.filter(([f]) => sevClass(f.severity) === k));
+    return g.length ? `<div class="sevgroup"><h4 class="sevhead ${k}">${label} <span class="n">${g.length}</span></h4>`
+      + g.map(([f, i]) => renderFinding(f, i, res)).join("") + "</div>" : "";
+  }).join("");
+}
 function splitFindings(res, tier) {
   const studyMin = Math.min(...((res.compared || {}).model || "").split(",").map((x) => parseInt(x.replace("+", ""))).filter((n) => n > 0));
   const shown = [], minor = [];
@@ -2104,6 +2117,7 @@ function filterLook(i) {
     el.hidden = !on;
     if (on) n++;
   });
+  document.querySelectorAll("#sec-look .sevgroup").forEach((g) => g.hidden = !g.querySelector(".finding:not([hidden])"));
   const bar = $("lookBar"), badge = document.querySelector("#sec-look .badge");
   if (badge) badge.textContent = p ? `${n} / ${all.length}` : all.length;
   if (!bar) return;
