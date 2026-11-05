@@ -20,6 +20,8 @@ export type Analysis = {
   comp_notes?: string[]
   findings?: Finding[]
   deaths?: Death[]
+  spell_ids?: Record<string, number>
+  encounter?: { covered?: boolean } | null
   verdicts?: { items?: Verdict | null; spells?: Verdict | null; pulls?: Verdict | null }
   items?: { name: string; kind: string; uses: number; top_uses: number | null; top_users: number; top_count: number
             ready_pressure_s: number | null; paired: number | null; top_paired: number | null }[]

@@ -11,10 +11,16 @@ const SEV_EDGE: Record<Sev, string> = { high: "before:bg-high", med: "before:bg-
 const STRICT: [Strict, string][] = [["auto", "Auto"], ["relaxed", "Relaxed"], ["normal", "Normal"], ["strict", "Strict"]]
 
 // "What to look at": High / Medium / Low, each in run order; what the review tier leaves out folds into minor notes.
-export function Findings({ findings, level, model, best }: { findings: Finding[]; level: number; model?: string; best: number | null }) {
+export function Findings({ findings, level, model, best, pull, onShowAll }: {
+  findings: Finding[]; level: number; model?: string; best: number | null
+  pull?: { label: string; start_s: number; end_s: number } | null; onShowAll?: () => void
+}) {
   const [pick, setPick] = useState<Strict>(strictPick)
   const tier = reviewTier(level, best, pick)
-  const { shown, minor } = splitFindings(findings, level, model, tier)
+  const split = splitFindings(findings, level, model, tier)
+  // A pull picked on the timeline narrows the list to it (whole-run notes drop out).
+  const inPull = (f: Finding) => !pull || (f.pull !== "Whole run" && f.t_s >= pull.start_s - 1 && f.t_s <= pull.end_s + 1)
+  const shown = split.shown.filter(inPull), minor = split.minor.filter(inPull)
   const choose = (p: Strict) => { lsSet("strict", p); setPick(p) }  // same setting as the classic page's Display menu
 
   return (
@@ -33,7 +39,13 @@ export function Findings({ findings, level, model, best }: { findings: Finding[]
         </div>
       </div>
       <p className="text-sm text-muted-foreground">{tier.line}</p>
-      {!shown.length && <p className="text-sm text-muted-foreground">Nothing worth flagging - this run holds up against your peers.</p>}
+      {pull && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/8 px-3 py-2 text-sm">
+          <span>{shown.length ? `Showing ${shown.length} of ${split.shown.length} for` : "Nothing flagged in"} <b>{pull.label}</b></span>
+          <button className="ml-auto text-primary hover:underline" onClick={onShowAll}>Show full dungeon</button>
+        </div>
+      )}
+      {!shown.length && !pull && <p className="text-sm text-muted-foreground">Nothing worth flagging - this run holds up against your peers.</p>}
       {(["high", "med", "low"] as Sev[]).map((sev) => {
         const group = byTime(shown.filter((f) => sevOf(f.severity) === sev))
         return group.length > 0 && (

@@ -84,7 +84,7 @@ export type TimelineHandle = { focus: (s: number, e?: number | null) => void }
 
 // The run at a glance (overview strip: click a pull, drag a range), then the chart of what's open: HP, your events,
 // each player's defensives. Drag across the chart to select a range: it zooms there and summarizes it.
-export const Timeline = forwardRef<TimelineHandle, { res: Analysis }>(function Timeline({ res }, ref) {
+export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p: TPull | null) => void }>(function Timeline({ res, onPull }, ref) {
   const t = res.timeline as TimelineData
   const box = useRef<HTMLDivElement>(null), section = useRef<HTMLElement>(null)
   const chart = useRef<echarts.ECharts | null>(null)
@@ -110,8 +110,10 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis }>(function T
   // What the chart shows: a zoom, else the open pull, else the whole run (chart positions).
   const view: [number, number] = zoom ? [sc.toC(zoom[0]), sc.toC(zoom[1])]
     : pull >= 0 ? [sc.toC(t.pulls[pull].start_s), sc.toC(t.pulls[pull].end_s)] : [0, sc.total]
+  useEffect(() => { onPull?.(pull >= 0 ? t.pulls[pull] : null) }, [])  // a remembered pull filters on open, too  // eslint-disable-line react-hooks/exhaustive-deps
   const openPull = (i: number) => {
     setPull(i); setZoom(null); setMark(null); setSel(null)
+    onPull?.(i >= 0 ? t.pulls[i] : null)
     lsSet(`pull:${res.run.dungeon}:${t.pulls[0]?.start_s}`, String(i))
   }
   const focus = (s: number, e?: number | null) => {

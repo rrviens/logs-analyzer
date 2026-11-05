@@ -27,7 +27,7 @@ function Chip({ dot, children, className }: { dot?: string; children: React.Reac
   )
 }
 
-export function RunHeader({ res, url, onReanalyze, busy }: { res: Analysis; url: string; onReanalyze: () => void; busy: boolean }) {
+export function RunHeader({ res, url, onReanalyze, busy }: { res: Analysis; url: string; onReanalyze?: () => void; busy: boolean }) {
   const r = res.run
   const kind: Result = r.timed ? "timed" : r.duration_min < 20 ? "abandoned" : "untimed"
   const c = res.compared  // missing on the preview (your run alone) until the peer logs are in
@@ -41,9 +41,9 @@ export function RunHeader({ res, url, onReanalyze, busy }: { res: Analysis; url:
           <a className={buttonVariants({ variant: "outline", size: "sm" })} href={url} target="_blank" rel="noopener">
             <ExternalLink />Open log
           </a>
-          <Button variant="outline" size="sm" onClick={onReanalyze} disabled={busy}>
+          {onReanalyze && <Button variant="outline" size="sm" onClick={onReanalyze} disabled={busy}>
             <RefreshCw className={cn(busy && "animate-spin")} />Re-analyze
-          </Button>
+          </Button>}
         </div>
       </div>
       <p className="text-sm text-muted-foreground">

@@ -1,10 +1,11 @@
-import { useState } from "react"
-import { Check, ChevronDown, HeartPulse, LogOut, Monitor, Moon, Sun } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Check, ChevronDown, FlaskConical, Gauge, HeartPulse, LogOut, Monitor, Moon, Settings2, Sun } from "lucide-react"
 import { api, type Char, type Me, type MyChars, type Settings } from "@/lib/api"
 import type { ThemePick } from "@/lib/theme"
 import { CLASS_COLORS, lsGet, lsSet } from "@/lib/wow"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -23,8 +24,12 @@ export function Header({ me, settings, theme, setTheme, onCharacter }: Props) {
         <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground"><HeartPulse className="size-4.5" /></span>
         Healer Review
       </a>
-      {(me.mode === "local" || me.user) && <CharacterPicker settings={settings} onCharacter={onCharacter} />}
-      <ThemeMenu theme={theme} setTheme={setTheme} />
+      {(me.mode === "local" || me.user) && <>
+        <Budget />
+        <Study />
+        <CharacterPicker settings={settings} onCharacter={onCharacter} />
+      </>}
+      <DisplayMenu theme={theme} setTheme={setTheme} />
       {me.user && (
         <Button variant="ghost" size="sm" title={`Your Warcraft Logs user id: ${me.user_id}`}
                 onClick={async () => { await fetch("/logout", { method: "POST" }); location.href = "/next/" }}>
@@ -107,13 +112,17 @@ function ManualCharacter({ open, onOpenChange, initial, error, onSave }: {
   const [name, setName] = useState(initial?.name || "")
   const [server, setServer] = useState(initial?.server || "")
   const [region, setRegion] = useState(initial?.region || "eu")
+  // Realm autocomplete: a hand-kept list per region (data/realms.json); any name still works as typed.
+  const [realms, setRealms] = useState<Record<string, string[]> | null>(null)
+  useEffect(() => { if (open && !realms) api<Record<string, string[]>>("/api/realms").then(setRealms).catch(() => setRealms({})) }, [open, realms])
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader><DialogTitle>Your character</DialogTitle></DialogHeader>
         <form className="grid gap-3" onSubmit={(e) => { e.preventDefault(); onSave({ name, server, region }) }}>
           <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required />
-          <Input placeholder="Server" value={server} onChange={(e) => setServer(e.target.value)} required />
+          <Input placeholder="Realm, e.g. Kazzak" value={server} onChange={(e) => setServer(e.target.value)} required list="realms" autoComplete="off" />
+          <datalist id="realms">{(realms?.[region] || []).map((r) => <option key={r} value={r} />)}</datalist>
           <select className="h-9 rounded-md border bg-transparent px-3 text-sm" value={region} onChange={(e) => setRegion(e.target.value)}>
             {["eu", "us", "kr", "tw"].map((r) => <option key={r} value={r}>{r.toUpperCase()}</option>)}
           </select>
@@ -125,21 +134,127 @@ function ManualCharacter({ open, onOpenChange, initial, error, onSave }: {
   )
 }
 
-function ThemeMenu({ theme, setTheme }: { theme: ThemePick; setTheme: (p: ThemePick) => void }) {
+// Text size: Normal / Large (the page is in rem); same setting as the classic page.
+export const applyTextSize = (large: boolean) => document.documentElement.classList.toggle("large", large)
+
+// Display: theme and text size, from the icon at the header's edge.
+function DisplayMenu({ theme, setTheme }: { theme: ThemePick; setTheme: (p: ThemePick) => void }) {
+  const [large, setLarge] = useState(lsGet("textSize") === "large")
+  const size = (l: boolean) => { lsSet("textSize", l ? "large" : "normal"); applyTextSize(l); setLarge(l) }
   const opts: [ThemePick, string, typeof Sun][] = [["system", "System", Monitor], ["dark", "Dark", Moon], ["light", "Light", Sun]]
-  const Icon = opts.find(([k]) => k === theme)?.[2] || Monitor
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Theme" />}>
-        <Icon className="size-4" />
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Display: theme and text size" />}>
+        <Settings2 className="size-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="w-44">
+        <div className="px-2 py-1.5 text-xs text-muted-foreground">Theme</div>
         {opts.map(([k, label, I]) => (
           <DropdownMenuItem key={k} onClick={() => setTheme(k)} className="gap-2">
             <I className="size-4" />{label}{theme === k && <Check className="ml-auto size-4" />}
           </DropdownMenuItem>
         ))}
+        <DropdownMenuSeparator />
+        <div className="px-2 py-1.5 text-xs text-muted-foreground">Text size</div>
+        {([[false, "Normal"], [true, "Large"]] as const).map(([l, label]) => (
+          <DropdownMenuItem key={label} onClick={() => size(l)} className="gap-2">
+            {label}{large === l && <Check className="ml-auto size-4" />}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+type BudgetInfo = { used: number; limit: number; reset_in_s: number }
+// Warcraft Logs API points used this hour (your own account's limit when signed in).
+function Budget() {
+  const [b, setB] = useState<BudgetInfo | null>(null)
+  useEffect(() => {
+    const load = () => api<BudgetInfo>("/api/budget").then(setB).catch(() => setB(null))
+    load()
+    const id = setInterval(load, 60_000)
+    return () => clearInterval(id)
+  }, [])
+  if (!b) return null
+  const share = b.used / Math.max(1, b.limit)
+  return (
+    <span className="hidden items-center gap-1.5 text-xs text-muted-foreground lg:flex" title="Warcraft Logs API points used this hour">
+      <Gauge className={cn("size-3.5", share > 0.8 ? "text-bad" : share > 0.5 ? "text-warn" : "")} />
+      WCL API {b.used.toLocaleString()}/{b.limit.toLocaleString()} · resets in {Math.ceil(b.reset_in_s / 60)} min
+    </span>
+  )
+}
+
+type StudyInfo = { exists?: boolean; generated?: string; runs?: Record<string, number>; can_run?: boolean
+                   job?: { status?: string; progress?: string[]; error?: string } | null
+                   covered?: { key: string; label: string; generated?: string }[]; specs?: { key: string; label: string }[] }
+const daysAgo = (iso?: string) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null)
+
+// The top-player study the review compares against: its age on the chip; details (and, for admins, a refresh) on click.
+function Study() {
+  const [s, setS] = useState<StudyInfo | null>(null)
+  const [open, setOpen] = useState(false)
+  const [spec, setSpec] = useState("resto_shaman")
+  const [runs, setRuns] = useState(5)
+  const [error, setError] = useState("")
+  const running = s?.job?.status === "running"
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    const load = () => api<StudyInfo>("/api/study").then((d) => {
+      setS(d)
+      if (d.job?.status === "running") timer = setTimeout(load, 5000)
+    }).catch(() => {})
+    load()
+    return () => clearTimeout(timer)
+  }, [running])
+  if (!s) return null
+  const days = daysAgo(s.generated), counts = Object.values(s.runs || {})
+  const label = running ? `Study running: ${s.job?.progress?.at(-1) || "starting..."}`
+    : s.job?.status === "error" ? "Study failed"
+    : !s.exists ? "No top-player study"
+    : `Study ${days == null ? "age unknown" : days === 0 ? "today" : `${days}d old`}${counts.length ? ` · ${Math.min(...counts)}-${Math.max(...counts)} runs/dungeon` : ""}`
+  const stale = !running && (days == null || days >= 7)
+  const ago = (iso?: string) => { const d = daysAgo(iso); return d == null ? "never" : d === 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago` }
+  const start = async () => {
+    setError("")
+    try { await api("/api/study", { method: "POST", body: JSON.stringify({ spec, runs }) }); setOpen(false); setS({ ...s, job: { status: "running" } }) }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+  }
+  return (
+    <>
+      <Button variant="outline" size="sm" className={cn("max-w-80 gap-1.5 rounded-full", stale && "border-warn/50 text-warn")}
+              title={s.job?.error || "The top-player study the analysis compares against"} onClick={() => setOpen(true)}>
+        <FlaskConical className="size-3.5" /><span className="truncate">{label}</span>
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Top-player study</DialogTitle>
+            <DialogDescription>The season's top-ranked runs per dungeon: timings, habits and the Top players band.
+              {s.can_run ? "" : " It's refreshed by the site admin."}</DialogDescription>
+          </DialogHeader>
+          <p className="text-sm"><b>Specs covered:</b> {s.covered?.map((c) => `${c.label} (${ago(c.generated)})`).join(", ") || "none yet"}</p>
+          {running && <div className="rounded-md bg-secondary p-2 text-xs text-muted-foreground">{(s.job?.progress || []).slice(-6).map((x, i) => <div key={i}>{x}</div>)}</div>}
+          {s.can_run && !running && (
+            <div className="grid gap-2 text-sm">
+              <label className="grid gap-1">Spec
+                <select className="h-9 rounded-md border bg-transparent px-3" value={spec} onChange={(e) => setSpec(e.target.value)}>
+                  {s.specs?.map((sp) => <option key={sp.key} value={sp.key}>{sp.label}</option>)}
+                </select></label>
+              <label className="grid gap-1">Top runs per dungeon
+                <Input type="number" min={3} max={20} value={runs} onChange={(e) => setRuns(+e.target.value || 5)} /></label>
+              <p className="text-xs text-muted-foreground">It pauses for the hourly Warcraft Logs reset when the budget runs low (keeping some
+                for everyone's analyses), so it can take hours. Cached runs make a rerun cheap.</p>
+              {error && <p className="text-destructive">{error}</p>}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { location.href = `/api/study/export?spec=${spec}` }}>Export file</Button>
+                <Button onClick={start}>Start study</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
