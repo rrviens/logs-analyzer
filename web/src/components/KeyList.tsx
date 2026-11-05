@@ -140,7 +140,7 @@ function KeyRow({ run: r, active, onPick, live }: { run: Run; active: boolean; o
       <span className={cn("truncate text-sm", active ? "font-semibold" : "font-medium")}>{r.dungeon}</span>
       <span className="row-span-2 self-center">
         {analyzed ? (
-          <span className="grid size-4 place-items-center rounded-full bg-foreground text-background" title="Analyzed - opens instantly">
+          <span className="grid size-4 place-items-center rounded-full bg-good text-background" title="Analyzed - opens instantly">
             <Check className="size-2.5" strokeWidth={3.5} aria-label="Analyzed" />
           </span>
         ) : analyzing ? (  // being analyzed (here or in the background): the one blue thing in the list
