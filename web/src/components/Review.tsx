@@ -1,5 +1,8 @@
+import { useEffect, useState } from "react"
 import { ExternalLink } from "lucide-react"
+import { api } from "@/lib/api"
 import { useAnalysis } from "@/lib/analysis"
+import { Findings } from "@/components/Findings"
 import { Group } from "@/components/Group"
 import { RunHeader } from "@/components/RunHeader"
 import { buttonVariants } from "@/components/ui/button"
@@ -9,6 +12,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 export function Review({ url }: { url: string }) {
   const a = useAnalysis(url)
   const shown = a.result || a.preview
+  const [best, setBest] = useState<number | null>(null)  // your best timed key (Raider.io): sets how strict the review is
+  useEffect(() => {
+    api<{ best: number | null }>(`/api/best?url=${encodeURIComponent(url)}`).then((d) => setBest(d.best ?? null)).catch(() => {})
+  }, [url])
   if (a.error && !shown) {
     return (
       <div className="rounded-xl border bg-card p-6">
@@ -39,8 +46,13 @@ export function Review({ url }: { url: string }) {
         <RunHeader res={shown} url={url} onReanalyze={a.reanalyze} busy={busy} />
         <Group res={shown} />
       </section>
+      {a.result?.findings ? (
+        <Findings findings={a.result.findings} level={a.result.run.level} model={a.result.compared.model} best={best} />
+      ) : (
+        <p className="text-sm text-muted-foreground">Findings appear when the comparison with your peers is done.</p>
+      )}
       <a className={buttonVariants({ variant: "secondary" })} href={`/?run=${encodeURIComponent(url)}`}>
-        Findings, death recaps and timeline (classic view)<ExternalLink />
+        Death recaps, timeline and the other sections (classic view)<ExternalLink />
       </a>
     </div>
   )
