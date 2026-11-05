@@ -8,3 +8,5 @@ data/settings.json
 data/feedback.json
 data/users
 docs
+web/node_modules
+app/static/next

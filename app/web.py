@@ -134,6 +134,21 @@ def index():
     return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
 
 
+# The new React front end (web/, built into app/static/next) at /next while it's being ported; the classic page
+# stays at /. Hashed asset files can be cached; every other path is the app itself (it routes in the browser).
+NEXT = STATIC / "next"
+
+
+@app.get("/next/{path:path}")
+def next_app(path: str = ""):
+    asset = (NEXT / path).resolve()
+    if path.startswith("assets/") and asset.is_file() and NEXT.resolve() in asset.parents:
+        return FileResponse(asset, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+    if not (NEXT / "index.html").exists():
+        raise HTTPException(404, "The new front end isn't built yet (cd web && npm run build).")
+    return FileResponse(NEXT / "index.html", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/my-characters")
 def my_characters(w: Who = Depends(who)):
     """The signed-in visitor's claimed Warcraft Logs characters, for the character picker. Local mode has no

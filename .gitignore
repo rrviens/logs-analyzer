@@ -10,3 +10,7 @@ cache.sqlite3
 data/settings.json
 data/feedback.json
 data/users/
+
+# new front end: dependencies and build output (built in Docker)
+web/node_modules/
+app/static/next/
