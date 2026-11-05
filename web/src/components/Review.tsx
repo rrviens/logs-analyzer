@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { ExternalLink } from "lucide-react"
 import { api } from "@/lib/api"
 import { useAnalysis } from "@/lib/analysis"
+import { Deaths } from "@/components/Deaths"
 import { Findings } from "@/components/Findings"
 import { Group } from "@/components/Group"
 import { RunHeader } from "@/components/RunHeader"
@@ -51,8 +52,9 @@ export function Review({ url }: { url: string }) {
       ) : (
         <p className="text-sm text-muted-foreground">Findings appear when the comparison with your peers is done.</p>
       )}
+      {a.result?.deaths && <Deaths deaths={a.result.deaths} player={a.result.run.player} />}
       <a className={buttonVariants({ variant: "secondary" })} href={`/?run=${encodeURIComponent(url)}`}>
-        Death recaps, timeline and the other sections (classic view)<ExternalLink />
+        Timeline and the other sections (classic view)<ExternalLink />
       </a>
     </div>
   )

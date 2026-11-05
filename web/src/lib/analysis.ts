@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api, ApiError } from "./api"
 import type { Finding } from "./review"
+import type { Death } from "@/components/Deaths"
 
 // The parts of an analysis result the new views use so far (the API sends more).
 export type Bring = { name: string; scope: "group" | "external"; casts: number; on_big_hits: number }
@@ -14,6 +15,7 @@ export type Analysis = {
   meters?: { damage: Meter[]; healing: Meter[] } | null
   comp_notes?: string[]
   findings?: Finding[]
+  deaths?: Death[]
   preview?: unknown
 }
 
