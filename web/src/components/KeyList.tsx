@@ -134,11 +134,10 @@ function KeyRow({ run: r, active, onPick }: { run: Run; active: boolean; onPick:
       </span>
       <span className={cn("truncate text-sm", active ? "font-semibold" : "font-medium")}>{r.dungeon}</span>
       <span className="row-span-2 self-center">
-        {r.analyzed ? (
-          <span className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-medium"><Check className="size-3 text-good" />Analyzed</span>
-        ) : r.queued ? (
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><LoaderCircle className="size-3 animate-spin" />Preparing</span>
-        ) : null}
+        {r.analyzed ? <Check className="size-3.5 text-muted-foreground" aria-label="Analyzed" />
+          : r.queued ? (  // being analyzed in the background: the one blue thing in the list
+            <span className="flex items-center gap-1 text-[11px] font-medium text-data"><LoaderCircle className="size-3 animate-spin" />Analyzing</span>
+          ) : null}
       </span>
       <span className="truncate text-xs text-muted-foreground">
         {RESULT_LABEL[res]}, {r.duration_min} min{!r.analyzable && `, ${r.spec || "not in group"}`}
