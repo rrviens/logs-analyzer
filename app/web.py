@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import queue as queue_mod
 import threading
 import time
 import unicodedata
@@ -470,6 +471,14 @@ class PageView(BaseModel):
     ref: str = ""
 
 
+_views: "queue_mod.Queue[dict]" = queue_mod.Queue(maxsize=200)  # a burst beyond this is dropped, not queued forever
+
+
+def _view_sender() -> None:
+    while True:
+        _send_view(_views.get())
+
+
 def _send_view(hit: dict) -> None:
     try:
         r = httpx.post(GOATCOUNTER_URL, json={"no_sessions": False, "hits": [hit]}, timeout=10,
@@ -488,7 +497,10 @@ def page_view(pv: PageView, request: Request):
     ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
           or (request.client.host if request.client else ""))
     hit = {"path": pv.path[:200] or "/", "title": pv.title[:200], "ref": pv.ref[:500], "ip": ip, "user_agent": ua}
-    threading.Thread(target=_send_view, args=(hit,), daemon=True).start()
+    try:
+        _views.put_nowait(hit)
+    except queue_mod.Full:
+        log.warning("goatcounter: dropping a page view (sender is behind)")
 
 
 # ---------- analysis and comparison (background jobs, visible only to their owner) ----------
@@ -577,9 +589,27 @@ def _analyze_job(owner: int, p: dict, progress, preview) -> str:
     return out["key"]
 
 
+# The cache lives on a small disk (1 GB on Render): hourly, the oldest raw downloads go once it passes the cap.
+CACHE_MAX_MB = int(os.environ.get("CACHE_MAX_MB", "700"))
+CACHE_TARGET_MB = int(os.environ.get("CACHE_TARGET_MB", "500"))
+
+
+def _prune_loop() -> None:
+    while True:
+        try:
+            n = app_client.prune(CACHE_MAX_MB * 2**20, CACHE_TARGET_MB * 2**20)
+            if n:
+                log.info("cache: pruned %d old downloads, now %d MB", n, app_client.used_bytes() // 2**20)
+        except Exception:  # noqa: BLE001 - never let housekeeping take the site down
+            log.exception("cache prune failed")
+        time.sleep(3600)
+
+
 @app.on_event("startup")
 def _start_queue():
     queue.start()
+    threading.Thread(target=_view_sender, daemon=True).start()
+    threading.Thread(target=_prune_loop, daemon=True).start()
     FACTS.refresh_if_stale()  # game spell data + community avoidable list, weekly, in the background
 
 

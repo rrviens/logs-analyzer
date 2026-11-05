@@ -13,6 +13,7 @@ refresh are serialized; HTTP calls run in parallel.
 import copy
 import hashlib
 import json
+import re
 import sqlite3
 import threading
 import time
@@ -54,6 +55,17 @@ def parallel_map(fn, items, workers: int = AUX_WORKERS) -> list:
         return [fn(i) for i in items]
     with ThreadPoolExecutor(min(workers, len(items))) as pool:
         return list(pool.map(fn, items))
+
+
+# Cache kinds that are plain downloads from Warcraft Logs (fetched again when missing). Query-cache rows are
+# 64-char hashes. Everything else (analyses, "latest" pointers, settings, saved lists) is never pruned.
+RAW_KINDS = {"run", "light", "dmgdone", "groupcasts", "discovery", "discovery-hots", "spellheals", "healerstate",
+             "kicks", "auras", "defspans", "deathevents", "bosscasts", "bosshp", "avoidance"}
+
+
+def _is_raw(key: str) -> bool:
+    kind = re.sub(r"^u\d+:", "", key).split(":")[0]
+    return kind in RAW_KINDS or bool(re.fullmatch(r"[0-9a-f]{64}", kind))
 
 
 class WCLClient:
@@ -133,11 +145,34 @@ class WCLClient:
     def forget_fight(self, code: str, fight_id: int) -> int:
         """Drops everything cached for one fight (run data, casts, auras, stored analyses) - for a copy fetched
         while the log was still uploading."""
+        mine = "" if self._ns else " AND key NOT GLOB 'u[0-9]*:*'"  # shared: leave each user's own copies alone
         with self._lock:
-            n = self._db.execute("DELETE FROM cache WHERE key LIKE ? OR key LIKE ?",
+            n = self._db.execute(f"DELETE FROM cache WHERE (key LIKE ? OR key LIKE ?){mine}",
                                  (f"{self._ns}%:{code}:{fight_id}:%", f"{self._ns}%:{code}:{fight_id}")).rowcount
             self._db.commit()
         return n
+
+    def used_bytes(self) -> int:
+        """Space the cache's rows take up (freed pages are reused by SQLite, so this is what keeps growing)."""
+        page_count, free, size = (self._db.execute(f"PRAGMA {p}").fetchone()[0] for p in ("page_count", "freelist_count", "page_size"))
+        return (page_count - free) * size
+
+    def prune(self, max_bytes: int, target_bytes: int) -> int:
+        """Over max_bytes: deletes the oldest raw downloads (any user's) until under target_bytes. Only kinds that
+        can be fetched again from Warcraft Logs go; saved analyses, settings and anything unknown stay."""
+        if self.used_bytes() <= max_bytes:
+            return 0
+        with self._lock:
+            keys = [k for (k,) in self._db.execute("SELECT key FROM cache ORDER BY created")]
+        old = [k for k in keys if _is_raw(k)]
+        removed = 0
+        for i in range(0, len(old), 200):
+            if self.used_bytes() <= target_bytes:
+                break
+            with self._lock:
+                removed += self._db.executemany("DELETE FROM cache WHERE key = ?", [(k,) for k in old[i:i + 200]]).rowcount
+                self._db.commit()
+        return removed
 
     def _post(self, query: str, variables: dict | None) -> httpx.Response:
         """POST with backoff on 429 / 5xx. A 429 with the hourly points used up is not worth waiting out:

@@ -135,9 +135,11 @@ class Jobs:
                 else:
                     log.warning("job %s (%s, owner %s) failed: %s", job_id[:8], kind, owner, e)
                     self._set(job_id, status="error", error=str(e))
+                    self.previews.pop(job_id, None)
             except Exception as e:  # noqa: BLE001 - report to the page, full traceback to the log
                 log.error("job %s (%s, owner %s) crashed:\n%s", job_id[:8], kind, owner, traceback.format_exc())
                 self._set(job_id, status="error", error=_friendly(e))
+                self.previews.pop(job_id, None)
 
 
 def _dur(s: float) -> str:
