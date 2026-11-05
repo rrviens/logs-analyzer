@@ -18,7 +18,7 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>({})
   const [version, setVersion] = useState(0)  // bumped when the character changes: everything reloads
   const [picked, setPicked] = useState<Run | null>(null)
-  const [keysOpen, setKeysOpen] = useState(true)  // folds to a rail while a review is open, so the review gets the width
+  const [keysOpen, setKeysOpen] = useState(true)  // stays open; "Hide your keys" folds it to a rail by hand
   const open = keysOpen || !picked
 
   const [shared, setShared] = useState<Analysis | null>(null)  // signed out: a saved analysis from a ?run= link
@@ -69,7 +69,7 @@ export default function App() {
               </aside>
             )}
             <main className="min-w-0 px-5 py-6 md:px-10 md:py-8"><div className="mx-auto max-w-[90rem]">
-              {picked ? <ErrorBoundary key={picked.url}><Review url={picked.url} onReady={() => setKeysOpen(false)} /></ErrorBoundary> : (
+              {picked ? <ErrorBoundary key={picked.url}><Review url={picked.url} /></ErrorBoundary> : (
                 <div className="py-16">
                   <h1 className="text-2xl font-semibold tracking-tight">Pick a key to review</h1>
                   <p className="mt-2 max-w-prose text-muted-foreground">Choose one of your keys on the left, or paste a Warcraft Logs URL to review any healer's run.</p>

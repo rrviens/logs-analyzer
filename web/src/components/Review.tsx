@@ -18,12 +18,11 @@ const Timeline = lazy(() => import("@/components/Timeline").then((m) => ({ defau
 
 // One key's review: header and group, timeline, then the sections.
 // saved: a finished analysis to show read-only (signed out, from a shared link) - nothing is fetched or re-run.
-export function Review({ url, onReady, saved }: { url: string; onReady?: () => void; saved?: Analysis }) {
+export function Review({ url, saved }: { url: string; saved?: Analysis }) {
   const a = useAnalysis(saved ? null : url)
   const result = saved || a.result
   const shown = result || a.preview
   const [lookPull, setLookPull] = useState<TPull | null>(null)  // the pull open on the timeline filters "What to look at"
-  useEffect(() => { if (shown) onReady?.() }, [!!shown])  // eslint-disable-line react-hooks/exhaustive-deps
   const tl = useRef<TimelineHandle>(null)
   const spells = useMemo(() => spellPattern(result?.spell_ids), [result])
   const ctx = useMemo(() => ({ focus: (s: number, e?: number | null) => tl.current?.focus(s, e), spells }), [spells])
