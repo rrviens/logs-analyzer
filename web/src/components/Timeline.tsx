@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
-import { ChartNoAxesCombined, X } from "lucide-react"
+import { X } from "lucide-react"
 import * as echarts from "echarts/core"
 import { CustomChart, LineChart, ScatterChart } from "echarts/charts"
 import { BrushComponent, DataZoomComponent, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent } from "echarts/components"
@@ -171,7 +171,7 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
   const option = useMemo(() => {
     void dark
     const C = { text: css("--foreground"), muted: css("--muted-foreground"), grid: css("--border"), card: css("--card"),
-                primary: css("--primary"), good: css("--good"), warn: css("--warn"), bad: css("--bad"), high: css("--high"), low: css("--low") }
+                primary: css("--data"), good: css("--good"), warn: css("--warn"), bad: css("--bad"), high: css("--high"), low: css("--low") }
     const span = view[1] - view[0]
     const plotW = Math.max(200, (box.current?.clientWidth || 900) - LEFT - RIGHT)
     const fits = (c0: number, c1: number, text: string) => (Math.min(c1, view[1]) - Math.max(c0, view[0])) / span * plotW > text.length * 6.5 + 8
@@ -351,10 +351,9 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
     : open && base === "top" && open.study_approx ? "Top-player band from the most similar pack (approximate)" : ""
 
   return (
-    <section ref={section} className="flex scroll-mt-4 flex-col gap-3 rounded-xl border bg-card p-5">
+    <section ref={section} className="flex scroll-mt-18 flex-col gap-4 border-t pt-7">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="grid size-8 place-items-center rounded-lg bg-primary/12 text-primary"><ChartNoAxesCombined className="size-4" /></span>
-        <h2 className="text-lg font-semibold">Timeline</h2>
+        <h2 className="text-lg font-semibold tracking-tight">Timeline</h2>
         <select className="h-8 max-w-72 rounded-md border bg-background px-2 text-sm" aria-label="Pull" value={pull} onChange={(e) => openPull(+e.target.value)}>
           <option value={-1}>Whole run</option>
           {t.pulls.map((p, i) => <option key={i} value={i}>{p.label} ({fmtClock(p.start_s)})</option>)}
@@ -378,13 +377,13 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
       </div>
       <Overview t={t} sc={sc} pull={pull} view={view} zoomed={!!zoom} onPull={openPull} onRange={(a, b) => focus(a, b)} />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 bg-primary" />Group HP</span>
+        <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 bg-data" />Group HP</span>
         <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 bg-high" />Lowest player</span>
         <span className="flex items-center gap-1.5"><i className="h-2.5 w-4 rounded-sm bg-muted-foreground/30" />{base === "top" ? "Top players" : "Peers"} (middle half, dashed = median)</span>
         <span className="flex items-center gap-1.5"><i className="h-2.5 w-1 rounded-sm bg-bad" />Big hit, unanswered</span>
         <span>⛓ chain pull · <span className="text-high">⚡</span> Bloodlust</span>
         {party && <>
-          <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm bg-primary/60" />Personal</span>
+          <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm bg-data/60" />Personal</span>
           <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm bg-high/60" />External</span>
           <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm bg-good/60" />Group</span>
         </>}
@@ -450,16 +449,16 @@ function Overview({ t, sc, pull, view, zoomed, onPull, onRange }: {
           return (
             <g key={i}>
               <rect x={x0} y={top} width={Math.max(1, x1 - x0)} height={hpH} rx={3}
-                    className={cn(p.boss ? "fill-primary/15" : "fill-muted-foreground/10", tip?.i === i && "fill-primary/25")} />
-              {i === pull && !zoomed && <rect x={x0} y={top - 1} width={x1 - x0} height={hpH + 2} rx={3} fill="none" className="stroke-primary" strokeWidth={1.5} />}
-              <polyline points={pts.join(" ")} fill="none" className="stroke-primary" strokeWidth={1.2} />
+                    className={cn(p.boss ? "fill-data/15" : "fill-muted-foreground/10", tip?.i === i && "fill-data/25")} />
+              {i === pull && !zoomed && <rect x={x0} y={top - 1} width={x1 - x0} height={hpH + 2} rx={3} fill="none" className="stroke-data" strokeWidth={1.5} />}
+              <polyline points={pts.join(" ")} fill="none" className="stroke-data" strokeWidth={1.2} />
               {ch && x1 - x0 > 14 && <text x={x0 + 2} y={top - 4} className={cn("text-[11px]", ch.risky ? "fill-warn" : "fill-muted-foreground")}>⛓</text>}
               {x1 - lx > label.length * 6.2 && <text x={lx} y={top - 4} className={cn("fill-muted-foreground text-[11px]", p.boss && "fill-foreground font-bold")}>{label}</text>}
               {!!p.deaths && <text x={x1 - 3} y={top + hpH - 4} textAnchor="end" className="fill-bad text-[11px] font-bold">✕{p.deaths}</text>}
             </g>
           )
         })}
-        {zoomed && <rect x={x(view[0])} y={top} width={Math.max(2, x(view[1]) - x(view[0]))} height={hpH} className="fill-primary/25" pointerEvents="none" />}
+        {zoomed && <rect x={x(view[0])} y={top} width={Math.max(2, x(view[1]) - x(view[0]))} height={hpH} className="fill-data/25" pointerEvents="none" />}
         {(t.markers || []).filter((m) => m.kind === "death").map((m, i) =>
           <line key={`d${i}`} x1={xs(m.t_s)} x2={xs(m.t_s)} y1={top} y2={top + hpH} className="stroke-bad" strokeWidth={1.5} pointerEvents="none" />)}
         {(t.markers || []).filter((m) => m.kind === "cooldown").map((m, i) =>
@@ -473,7 +472,7 @@ function Overview({ t, sc, pull, view, zoomed, onPull, onRange }: {
               <rect key={k} x={xs(a)} y={readyTop + i * laneH} width={Math.max(1, xs(b) - xs(a))} height={laneH - 4} className="fill-good/70" />)}
           </g>
         ))}
-        {drag && <rect x={Math.min(...drag)} y={0} width={Math.abs(drag[1] - drag[0])} height={H} className="fill-primary/15" pointerEvents="none" />}
+        {drag && <rect x={Math.min(...drag)} y={0} width={Math.abs(drag[1] - drag[0])} height={H} className="fill-data/15" pointerEvents="none" />}
       </svg>
       {tp && (
         <div className="pointer-events-none absolute z-10 max-w-sm rounded-md border bg-popover px-3 py-2 text-xs shadow-md"

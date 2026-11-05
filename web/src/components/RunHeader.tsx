@@ -79,7 +79,7 @@ function IoChips({ url }: { url: string }) {
     <>
       <Tooltip>
         <TooltipTrigger render={<span className="cursor-help" />}>
-          <Chip dot={g.color || "var(--primary)"}><span className="font-medium text-muted-foreground">IO</span> {fmt(g.avg)}{part}</Chip>
+          <Chip dot={g.color || "var(--data)"}><span className="font-medium text-muted-foreground">IO</span> {fmt(g.avg)}{part}</Chip>
         </TooltipTrigger>
         <TooltipContent className="w-60">
           {g.players.map((p) => (

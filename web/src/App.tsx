@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { PanelLeftOpen } from "lucide-react"
 import { api, type Me, type Run, type Settings } from "@/lib/api"
 import { useTheme } from "@/lib/theme"
 import { Header } from "@/components/Header"
@@ -36,10 +36,10 @@ export default function App() {
   return (
     <TooltipProvider>
       <div className="flex min-h-svh flex-col">
-        <Header me={me} settings={settings} theme={theme} setTheme={setTheme}
+        <Header me={me} settings={settings} theme={theme} setTheme={setTheme} current={picked?.dungeon && `${picked.dungeon} +${picked.level}`}
                 onCharacter={() => { setPicked(null); setVersion((v) => v + 1) }} />
         {!signedIn ? (shared && linked ? (
-          <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-4 p-5">
+          <div className="mx-auto flex w-full max-w-[90rem] flex-col gap-6 px-5 py-6 md:px-10">
             <p className="flex flex-wrap items-center gap-3 rounded-lg border bg-secondary px-4 py-2.5 text-sm text-muted-foreground">
               Viewing a saved analysis of a public run. Sign in to analyze new runs or your private logs.
               <a href="/login" className="ml-auto font-medium text-primary hover:underline">Sign in with Warcraft Logs</a>
@@ -47,17 +47,12 @@ export default function App() {
             <ErrorBoundary><Review url={linked} saved={shared} /></ErrorBoundary>
           </div>
         ) : <SignIn />) : (
-          <div className={`mx-auto grid w-full max-w-[100rem] flex-1 gap-5 p-5 transition-[grid-template-columns] duration-300 ease-out motion-reduce:transition-none ${open ? "md:grid-cols-[20rem_1fr]" : "md:grid-cols-[2.5rem_1fr]"}`}>
-            {!settings.name ? <p className="text-sm text-muted-foreground">Set your character (top right) to see your recent keys.</p> : (
+          <div className={`grid flex-1 transition-[grid-template-columns] duration-300 ease-out motion-reduce:transition-none ${open ? "md:grid-cols-[18.5rem_1fr]" : "md:grid-cols-[3rem_1fr]"}`}>
+            {!settings.name ? <p className="p-5 text-sm text-muted-foreground">Pick your character at the top right to see your keys.</p> : (
               // Both stay mounted: the column width animates while the list fades into the rail (and back).
-              <aside className="relative min-w-0 md:overflow-x-clip">
-                <div inert={!open} className={`flex w-full flex-col gap-2 transition-opacity duration-200 md:w-[20rem] ${open ? "opacity-100 delay-100" : "opacity-0 max-md:hidden"}`}>
-                  {picked && (
-                    <button className="flex items-center gap-1.5 self-end text-xs text-muted-foreground hover:text-foreground" onClick={() => setKeysOpen(false)}>
-                      <PanelLeftClose className="size-4" />Hide keys
-                    </button>
-                  )}
-                  <form className="flex gap-2" onSubmit={(e) => {
+              <aside className="relative min-w-0 border-b bg-sidebar md:sticky md:top-14 md:h-[calc(100svh-3.5rem)] md:overflow-x-clip md:border-r md:border-b-0">
+                <div inert={!open} className={`flex h-full w-full flex-col transition-opacity duration-200 md:w-[18.5rem] ${open ? "opacity-100 delay-100" : "opacity-0 max-md:hidden"}`}>
+                  <form className="flex gap-2 border-b p-3" onSubmit={(e) => {
                     e.preventDefault()
                     const v = new FormData(e.currentTarget).get("url")?.toString().trim()
                     if (v) setPicked({ url: v } as Run)
@@ -65,19 +60,22 @@ export default function App() {
                     <Input name="url" placeholder="Paste a Warcraft Logs URL" autoComplete="off" className="h-8 text-sm" />
                     <Button type="submit" size="sm" variant="secondary">Analyze</Button>
                   </form>
-                  <KeyList selected={picked?.url} onPick={setPicked} version={version} />
+                  <KeyList selected={picked?.url} onPick={setPicked} version={version} onHide={picked ? () => setKeysOpen(false) : undefined} />
                 </div>
                 <button inert={open} onClick={() => setKeysOpen(true)} title="Show your keys" aria-label="Show your keys"
-                        className={`top-0 flex w-full items-center justify-center gap-2 rounded-lg border bg-card py-3 text-xs text-muted-foreground transition-opacity duration-200 hover:text-foreground md:absolute md:w-10 md:flex-col ${open ? "pointer-events-none opacity-0 max-md:hidden" : "opacity-100 delay-150"}`}>
+                        className={`flex w-full items-center justify-center gap-2 py-3 text-xs text-muted-foreground transition-opacity duration-200 hover:bg-accent hover:text-foreground md:absolute md:inset-0 md:flex-col md:justify-start md:pt-4 ${open ? "pointer-events-none opacity-0 max-md:hidden" : "opacity-100 delay-150"}`}>
                   <PanelLeftOpen className="size-4" /><span className="md:[writing-mode:vertical-rl]">Your keys</span>
                 </button>
               </aside>
             )}
-            <main className="min-w-0">{picked ? <ErrorBoundary key={picked.url}><Review url={picked.url} onReady={() => setKeysOpen(false)} /></ErrorBoundary> : (
-              <div className="grid h-48 place-items-center rounded-xl border border-dashed text-muted-foreground">
-                Pick a key on the left.
-              </div>
-            )}</main>
+            <main className="min-w-0 px-5 py-6 md:px-10 md:py-8"><div className="mx-auto max-w-[90rem]">
+              {picked ? <ErrorBoundary key={picked.url}><Review url={picked.url} onReady={() => setKeysOpen(false)} /></ErrorBoundary> : (
+                <div className="py-16">
+                  <h1 className="text-2xl font-semibold tracking-tight">Pick a key to review</h1>
+                  <p className="mt-2 max-w-prose text-muted-foreground">Choose one of your keys on the left, or paste a Warcraft Logs URL to review any healer's run.</p>
+                </div>
+              )}
+            </div></main>
           </div>
         )}
       </div>

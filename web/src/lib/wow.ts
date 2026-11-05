@@ -21,7 +21,7 @@ export function ago(iso: string): string {
 
 // Keys played less than an hour apart (end of one to start of the next) are one play session, across reports.
 const SESSION_GAP_MS = 3600 * 1000
-export type Session = { id: string; label: string; runs: Run[] }
+export type Session = { id: string; day: string; hours: string; count: string; timed: number; runs: Run[] }
 
 export function playSessions(runs: Run[]): Session[] {
   const sorted = [...runs].sort((a, b) => +new Date(b.started) - +new Date(a.started))
@@ -37,8 +37,8 @@ export function playSessions(runs: Run[]): Session[] {
   return out.map((s) => {
     const day = new Date(s.start).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })
     const timed = s.runs.filter((r) => r.timed).length, n = s.runs.length
-    return { id: new Date(s.start).toISOString(), runs: s.runs,
-             label: `${day}, ${hm(s.start)}–${hm(s.end)} · ${n} key${n > 1 ? "s" : ""} · ${timed} timed` }
+    return { id: new Date(s.start).toISOString(), runs: s.runs, day, hours: `${hm(s.start)}–${hm(s.end)}`,
+             count: `${n} key${n > 1 ? "s" : ""}`, timed }
   })
 }
 

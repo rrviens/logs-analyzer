@@ -52,13 +52,13 @@ export function Review({ url, onReady, saved }: { url: string; onReady?: () => v
   const busy = !result || !!a.updating
   return (
     <TimelineContext.Provider value={ctx}>
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-8">
       {(a.updating || (!result && a.progress.length > 0)) && (
         <p className="rounded-lg border bg-secondary px-3 py-2 text-sm text-muted-foreground">
           {a.updating || `Your run is ready; comparing with peers... ${a.progress.at(-1) || ""}`}
         </p>
       )}
-      <section className="flex flex-col gap-5 rounded-xl border bg-card p-5">
+      <section className="flex flex-col gap-5">
         <RunHeader res={shown} url={url} onReanalyze={saved ? undefined : a.reanalyze} busy={busy} />
         <Group res={shown} />
       </section>

@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { Skull } from "lucide-react"
 import { pullShort } from "@/lib/review"
 import { Tx } from "@/lib/timeline"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -34,11 +33,10 @@ const Pill = ({ className, title, children }: { className?: string; title?: stri
 // Each death: why it happened, what could have saved it (and from whom), and the last seconds of hits and heals.
 export function Deaths({ deaths, player }: { deaths: Death[]; player: string }) {
   return (
-    <section className="flex flex-col gap-3 rounded-xl border bg-card p-5">
+    <section className="flex flex-col gap-4 border-t pt-7">
       <div className="flex items-center gap-3">
-        <span className="grid size-8 place-items-center rounded-lg bg-bad/12 text-bad"><Skull className="size-4" /></span>
-        <h2 className="text-lg font-semibold">Death recaps</h2>
-        <span className="rounded-full bg-secondary px-2 text-sm text-muted-foreground tabular-nums">{deaths.length}</span>
+        <h2 className="text-lg font-semibold tracking-tight">Death recaps</h2>
+        <span className="text-sm text-muted-foreground tabular-nums">{deaths.length}</span>
       </div>
       {!deaths.length && <p className="text-sm text-muted-foreground">Deaths: none.</p>}
       {deaths.map((d) => {

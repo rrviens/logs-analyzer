@@ -15,15 +15,17 @@ const charKey = (c: Char | Settings) => `${c.name}|${c.server}|${c.region}`.toLo
 // Same list as the classic page ("recentChars2"), so recently used characters show in both.
 const recentChars = (): Char[] => { try { return JSON.parse(lsGet("recentChars2") || "[]") } catch { return [] } }
 
-type Props = { me: Me; settings: Settings; theme: ThemePick; setTheme: (p: ThemePick) => void; onCharacter: () => void }
+type Props = { me: Me; settings: Settings; theme: ThemePick; setTheme: (p: ThemePick) => void; onCharacter: () => void; current?: string }
 
-export function Header({ me, settings, theme, setTheme, onCharacter }: Props) {
+export function Header({ me, settings, theme, setTheme, onCharacter, current }: Props) {
   return (
-    <header className="flex flex-wrap items-center gap-3 border-b px-5 py-3">
-      <a href="/next/" className="mr-auto flex items-center gap-2 font-semibold">
-        <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground"><HeartPulse className="size-4.5" /></span>
-        Healer Review
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-sidebar px-4">
+      <a href="/next/" className="flex items-center gap-2 text-sm font-semibold">
+        <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground"><HeartPulse className="size-4" /></span>
+        <span className="max-sm:sr-only">Healer Review</span>
       </a>
+      {current && <span className="hidden min-w-0 items-center gap-3 md:flex"><span className="text-muted-foreground/60">/</span><span className="truncate text-sm text-muted-foreground">{current}</span></span>}
+      <span className="mr-auto" />
       {(me.mode === "local" || me.user) && <>
         <Budget />
         <Study />
@@ -223,7 +225,7 @@ function Study() {
   }
   return (
     <>
-      <Button variant="outline" size="sm" className={cn("max-w-80 gap-1.5 rounded-full", stale && "border-warn/50 text-warn")}
+      <Button variant="outline" size="sm" className={cn("max-w-80 gap-1.5 rounded-full max-sm:hidden", stale && "border-warn/50 text-warn")}
               title={s.job?.error || "The top-player study the analysis compares against"} onClick={() => setOpen(true)}>
         <FlaskConical className="size-3.5" /><span className="truncate">{label}</span>
       </Button>

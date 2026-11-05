@@ -1,4 +1,4 @@
-import { ChevronRight, CircleCheck, FlaskConical, Rows3, Split, Swords } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 import type { Analysis } from "@/lib/analysis"
 import { pullShort } from "@/lib/review"
 import { Tx, useFocus } from "@/lib/timeline"
@@ -12,15 +12,12 @@ const pct = (v?: number | null) => (v == null ? "-" : `${Math.round(v * 100)}%`)
 const k = (v?: number | null) => (v == null ? "-" : `${Math.round(v / 1000)}k`)
 const m = (v: number) => `${(v / 1e6).toFixed(1)}M`
 
-function Section({ title, icon: Icon, tone, count, empty, children }: {
-  title: string; icon: typeof Swords; tone: string; count: number | string; empty: string; children: React.ReactNode
-}) {
+function Section({ title, count, empty, children }: { title: string; count: number | string; empty: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-3 rounded-xl border bg-card p-5">
+    <section className="flex flex-col gap-4 border-t pt-7">
       <div className="flex items-center gap-3">
-        <span className={cn("grid size-8 place-items-center rounded-lg", tone)}><Icon className="size-4" /></span>
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <span className="rounded-full bg-secondary px-2 text-sm text-muted-foreground tabular-nums">{count || 0}</span>
+        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+        <span className="text-sm text-muted-foreground tabular-nums">{count || 0}</span>
       </div>
       {count ? children : <p className="text-sm text-muted-foreground">{empty}</p>}
     </section>
@@ -87,7 +84,7 @@ function Table({ head, rows, note }: { head: React.ReactNode[]; rows: React.Reac
 export function Items({ res }: { res: Analysis }) {
   const items = res.items || []
   return (
-    <Section title="Trinkets & consumables" icon={FlaskConical} tone="bg-high/12 text-high" count={countOf(items.length > 0, res.verdicts?.items)}
+    <Section title="Trinkets & consumables" count={countOf(items.length > 0, res.verdicts?.items)}
              empty="Trinkets & consumables: none used.">
       <VerdictBlock v={res.verdicts?.items}>
         <Table head={["Item", "Type", "Your uses", "Top uses*", "Top players using it", "Ready during pressure", "With big cooldowns", "Top with big cooldowns"]}
@@ -105,7 +102,7 @@ const SITUATION = { none: "Nobody injured", one: "1 player injured", two: "2 pla
 export function Spells({ res }: { res: Analysis }) {
   const sc = res.spell_choice, G = res.spec.group || "Group heal", S = res.spec.single || "Single-target heal"
   return (
-    <Section title={`${S} vs ${G}`} icon={Split} tone="bg-primary/12 text-primary" count={countOf(!!sc?.you, res.verdicts?.spells)}
+    <Section title={`${S} vs ${G}`} count={countOf(!!sc?.you, res.verdicts?.spells)}
              empty="Not enough heals to judge.">
       {sc?.you && (
         <VerdictBlock v={res.verdicts?.spells}>
@@ -138,7 +135,7 @@ export function DpsWindows({ res }: { res: Analysis }) {
   const focus = useFocus()
   const worst = ws.filter((w) => w.missed >= 5e4).sort((a, b) => b.missed - a.missed).slice(0, 6)
   return (
-    <Section title="DPS windows" icon={Swords} tone="bg-high/12 text-high" count={ws.length ? ws.filter((w) => w.use != null && w.use < 0.4).length || "ok" : 0}
+    <Section title="DPS windows" count={ws.length ? ws.filter((w) => w.use != null && w.use < 0.4).length || "ok" : 0}
              empty="No calm stretches long enough to deal damage in this run.">
       {d && (
         <p className="text-sm">
@@ -205,7 +202,7 @@ export function Pulls({ res }: { res: Analysis }) {
     }
   }
   return (
-    <Section title="Pulls vs peers" icon={Rows3} tone="bg-muted text-muted-foreground" count={countOf(reqs.length > 0, res.verdicts?.pulls)} empty="No pulls to compare.">
+    <Section title="Pulls vs peers" count={countOf(reqs.length > 0, res.verdicts?.pulls)} empty="No pulls to compare.">
       <VerdictBlock v={res.verdicts?.pulls}>
         <Table head={["Pull", "Time", "Group HP", "Top HP", "Dmg in/s", "Top in/s", "Heal/s", "Top heal/s"]} rows={rows} />
       </VerdictBlock>
@@ -216,7 +213,7 @@ export function Pulls({ res }: { res: Analysis }) {
 export function GoodCalls({ res }: { res: Analysis }) {
   const good = res.good_calls || []
   return (
-    <Section title="Good calls" icon={CircleCheck} tone="bg-good/12 text-good" count={good.length} empty="Good calls: none recorded.">
+    <Section title="Good calls" count={good.length} empty="Good calls: none recorded.">
       <Fold label={<span className="font-semibold text-good">✓ {good.length} cooldowns pressed at the right moment</span>}>
         {good.map((g, i) => (
           <p key={i}><span className="text-good">✓</span> <Tx>{g.title}</Tx> · {pullShort(g.pull)}

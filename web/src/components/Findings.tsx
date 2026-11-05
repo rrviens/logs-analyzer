@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronRight, TriangleAlert } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 import { byTime, type Finding, pullShort, reviewTier, SEV_LABEL, type Sev, sevOf, splitFindings, type Strict, strictPick } from "@/lib/review"
 import { lsSet } from "@/lib/wow"
 import { Tx } from "@/lib/timeline"
@@ -24,11 +24,10 @@ export function Findings({ findings, level, model, best, pull, onShowAll }: {
   const choose = (p: Strict) => { lsSet("strict", p); setPick(p) }  // same setting as the classic page's Display menu
 
   return (
-    <section className="flex flex-col gap-3 rounded-xl border bg-card p-5">
+    <section className="flex flex-col gap-4 border-t pt-7">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="grid size-8 place-items-center rounded-lg bg-high/12 text-high"><TriangleAlert className="size-4" /></span>
-        <h2 className="text-lg font-semibold">What to look at</h2>
-        <span className="rounded-full bg-secondary px-2 text-sm text-muted-foreground tabular-nums">{shown.length}</span>
+        <h2 className="text-lg font-semibold tracking-tight">What to look at</h2>
+        <span className="text-sm text-muted-foreground tabular-nums">{shown.length}</span>
         <div className="ml-auto flex rounded-lg border p-0.5 text-xs" role="group" aria-label="How strict the review is">
           {STRICT.map(([k, label]) => (
             <button key={k} onClick={() => choose(k)}
