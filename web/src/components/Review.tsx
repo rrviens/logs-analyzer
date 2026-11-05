@@ -4,6 +4,7 @@ import { api } from "@/lib/api"
 import { useAnalysis } from "@/lib/analysis"
 import { Deaths } from "@/components/Deaths"
 import { Findings } from "@/components/Findings"
+import { DpsWindows, GoodCalls, Items, Pulls, Spells } from "@/components/Sections"
 import { Group } from "@/components/Group"
 import { RunHeader } from "@/components/RunHeader"
 import { buttonVariants } from "@/components/ui/button"
@@ -53,8 +54,17 @@ export function Review({ url }: { url: string }) {
         <p className="text-sm text-muted-foreground">Findings appear when the comparison with your peers is done.</p>
       )}
       {a.result?.deaths && <Deaths deaths={a.result.deaths} player={a.result.run.player} />}
+      {a.result && (
+        <>
+          <Items res={a.result} />
+          <Spells res={a.result} />
+          <DpsWindows res={a.result} />
+          <Pulls res={a.result} />
+          <GoodCalls res={a.result} />
+        </>
+      )}
       <a className={buttonVariants({ variant: "secondary" })} href={`/?run=${encodeURIComponent(url)}`}>
-        Timeline and the other sections (classic view)<ExternalLink />
+        Timeline (classic view)<ExternalLink />
       </a>
     </div>
   )

@@ -2,20 +2,37 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { api, ApiError } from "./api"
 import type { Finding } from "./review"
 import type { Death } from "@/components/Deaths"
+import type { Verdict } from "@/components/Sections"
 
 // The parts of an analysis result the new views use so far (the API sends more).
 export type Bring = { name: string; scope: "group" | "external"; casts: number; on_big_hits: number }
 export type Member = { name: string; role: string; spec?: string; class?: string; note?: string; brings?: Bring[]; big_hits?: number }
 export type Meter = { name: string; class: string; spec: string; total: number; per_s: number }
+type HealStats = { casts: number; ch_share?: number; ch_overheal?: number; hw_overheal?: number; ch_effective?: number
+                  hw_effective?: number; mana?: number }
 export type Analysis = {
   run: { dungeon: string; level: number; timed: boolean; duration_min: number; deaths: number; player: string }
-  spec: { key: string; label: string; plural: string }
+  spec: { key: string; label: string; plural: string; single?: string; group?: string; majors?: string }
   compared: { count: number; levels: number[]; model?: string; skipped?: { player: string; key: number; reasons: string[] }[] }
   group: Member[]
   meters?: { damage: Meter[]; healing: Meter[] } | null
   comp_notes?: string[]
   findings?: Finding[]
   deaths?: Death[]
+  verdicts?: { items?: Verdict | null; spells?: Verdict | null; pulls?: Verdict | null }
+  items?: { name: string; kind: string; uses: number; top_uses: number | null; top_users: number; top_count: number
+            ready_pressure_s: number | null; paired: number | null; top_paired: number | null }[]
+  spell_choice?: { you?: Record<string, HealStats>; top?: Record<string, HealStats>
+                   buffs?: { you: Record<string, HealStats>; top?: Record<string, HealStats> } } | null
+  dps?: { windows: number; seconds: number; your_dps?: number; top_dps?: number; missed?: number } | null
+  timeline?: { pulls: { label: string; start_s: number; end_s: number; boss?: boolean }[]
+               dps_windows?: { clock: string; pull: string; start_s: number; end_s: number; seconds: number; use: number | null
+                               missed: number; dps_casts: number; other_casts: number; idle_s: number; tip: string[] }[] }
+  requirements?: { pull: string; duration_s: number; group_hp: number; top_group_hp: number | null; intake: number
+                   top_intake: number | null; healing: number; top_healing: number | null }[]
+  phases?: { pull: string; phase: string; clock: string; duration_s: number; group_hp: number; top_group_hp: number | null
+             intake: number; top_intake: number | null }[]
+  good_calls?: { title: string; pull: string; detail: string[] }[]
   preview?: unknown
 }
 

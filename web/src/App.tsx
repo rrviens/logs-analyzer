@@ -25,7 +25,7 @@ export default function App() {
         <Header me={me} settings={settings} theme={theme} setTheme={setTheme}
                 onCharacter={() => { setPicked(null); setVersion((v) => v + 1) }} />
         {!signedIn ? <SignIn /> : (
-          <div className="grid flex-1 gap-5 p-5 md:grid-cols-[20rem_1fr]">
+          <div className="mx-auto grid w-full max-w-7xl flex-1 gap-5 p-5 md:grid-cols-[20rem_1fr]">
             {settings.name ? <KeyList selected={picked?.url} onPick={setPicked} version={version} />
               : <p className="text-sm text-muted-foreground">Set your character (top right) to see your recent keys.</p>}
             <main className="min-w-0">{picked ? <Review key={picked.url} url={picked.url} /> : (
