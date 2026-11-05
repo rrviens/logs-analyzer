@@ -1,13 +1,14 @@
 import { useState } from "react"
 import { ChevronRight } from "lucide-react"
+import { LogRow } from "@/components/LogRow"
 import { byTime, type Finding, pullShort, reviewTier, SEV_LABEL, type Sev, sevOf, splitFindings, type Strict, strictPick } from "@/lib/review"
 import { lsSet } from "@/lib/wow"
 import { Tx } from "@/lib/timeline"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 
-const SEV_TONE: Record<Sev, string> = { high: "text-high bg-high/12", med: "text-med bg-med/12", low: "text-low bg-low/12" }
-const SEV_EDGE: Record<Sev, string> = { high: "before:bg-high", med: "before:bg-med", low: "before:bg-low" }
+const SEV_MARK: Record<Sev, string> = { high: "bg-high", med: "bg-med", low: "bg-low" }
+const SEV_HEAD: Record<Sev, string> = { high: "High impact", med: "Medium impact", low: "Low impact" }
 const STRICT: [Strict, string][] = [["auto", "Auto"], ["relaxed", "Relaxed"], ["normal", "Normal"], ["strict", "Strict"]]
 
 // "What to look at": High / Medium / Low, each in run order; what the review tier leaves out folds into minor notes.
@@ -39,18 +40,18 @@ export function Findings({ findings, level, model, best, pull, onShowAll }: {
       </div>
       <p className="text-sm text-muted-foreground">{tier.line}</p>
       {pull && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/8 px-3 py-2 text-sm">
+        <div className="flex flex-wrap items-center gap-3 border-l-2 border-foreground py-1 pl-3 text-sm">
           <span>{shown.length ? `Showing ${shown.length} of ${split.shown.length} for` : "Nothing flagged in"} <b>{pull.label}</b></span>
-          <button className="ml-auto text-primary hover:underline" onClick={onShowAll}>Show full dungeon</button>
+          <button className="ml-auto underline underline-offset-2 hover:no-underline" onClick={onShowAll}>Show the whole dungeon</button>
         </div>
       )}
       {!shown.length && !pull && <p className="text-sm text-muted-foreground">Nothing worth flagging - this run holds up against your peers.</p>}
       {(["high", "med", "low"] as Sev[]).map((sev) => {
         const group = byTime(shown.filter((f) => sevOf(f.severity) === sev))
         return group.length > 0 && (
-          <div key={sev} className="flex flex-col gap-1.5">
-            <h3 className={cn("mt-2 text-xs font-semibold tracking-wider uppercase", SEV_TONE[sev].split(" ")[0])}>
-              {SEV_LABEL[sev]} <span className="font-normal text-muted-foreground">{group.length}</span>
+          <div key={sev} className="flex flex-col">
+            <h3 className="mt-3 mb-2 flex items-baseline gap-2 text-sm font-medium">
+              {SEV_HEAD[sev]} <span className="font-normal text-muted-foreground tabular-nums">{group.length}</span>
             </h3>
             {group.map((f, i) => <FindingCard key={`${f.rule}-${f.t_s}-${i}`} f={f} id={findings.indexOf(f)} />)}
           </div>
@@ -62,7 +63,7 @@ export function Findings({ findings, level, model, best, pull, onShowAll }: {
             <ChevronRight className="size-4 transition-transform group-data-[panel-open]:rotate-90" />
             {minor.length} minor note{minor.length > 1 ? "s" : ""} ({tier.minorWhy})
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 flex flex-col gap-1.5">
+          <CollapsibleContent className="mt-2 flex flex-col">
             {byTime(minor).map((f, i) => <FindingCard key={`m-${f.rule}-${f.t_s}-${i}`} f={f} id={findings.indexOf(f)} />)}
           </CollapsibleContent>
         </Collapsible>
@@ -74,25 +75,18 @@ export function Findings({ findings, level, model, best, pull, onShowAll }: {
 function FindingCard({ f, id }: { f: Finding; id: number }) {
   const sev = sevOf(f.severity)
   return (
-    <Collapsible id={`finding-${id}`} className={cn("relative scroll-mt-4 overflow-hidden rounded-lg border bg-secondary before:absolute before:inset-y-0 before:left-0 before:w-1", SEV_EDGE[sev])}>
-      <CollapsibleTrigger className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 py-2.5 pr-3 pl-4 text-left hover:bg-accent">
-        <span className="w-10 text-sm text-muted-foreground tabular-nums">{f.pull !== "Whole run" ? f.clock : "run"}</span>
-        <span className="text-xs text-muted-foreground">{pullShort(f.pull)}</span>
-        <span className="min-w-48 flex-1 font-semibold">{f.short || f.title}</span>
-        {f.fix && <span className="rounded-full bg-med/12 px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-med">→ {f.fix}</span>}
-        <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", SEV_TONE[sev])} title={`Impact score ${f.severity}`}>{SEV_LABEL[sev]}</span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="flex flex-col gap-2 pr-4 pb-3 pl-[4.25rem] text-sm">
-        <p className="text-muted-foreground">{f.title} · {f.pull}</p>
-        {f.context?.length > 0 && (
-          <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
-            {f.context.map(([k, v]) => (
-              <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd><Tx>{v}</Tx></dd></div>
-            ))}
-          </dl>
-        )}
-        {f.detail.length > 0 && <ul className="list-disc space-y-0.5 pl-4">{f.detail.map((d, i) => <li key={i}><Tx>{d}</Tx></li>)}</ul>}
-      </CollapsibleContent>
-    </Collapsible>
+    <LogRow id={`finding-${id}`} time={f.pull !== "Whole run" ? f.clock : "run"} mark={SEV_MARK[sev]} fix={f.fix}
+            title={<><span className="font-medium">{f.short || f.title}</span>
+              <span className="ml-2 text-xs text-muted-foreground" title={`${SEV_LABEL[sev]} impact, score ${f.severity}`}>{pullShort(f.pull)}</span></>}>
+      <p className="text-muted-foreground">{f.title}, {f.pull}</p>
+      {f.context?.length > 0 && (
+        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+          {f.context.map(([k, v]) => (
+            <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd><Tx>{v}</Tx></dd></div>
+          ))}
+        </dl>
+      )}
+      {f.detail.length > 0 && <ul className="list-disc space-y-0.5 pl-4 marker:text-muted-foreground">{f.detail.map((d, i) => <li key={i}><Tx>{d}</Tx></li>)}</ul>}
+    </LogRow>
   )
 }

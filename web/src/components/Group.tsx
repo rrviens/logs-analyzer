@@ -9,38 +9,36 @@ export function Group({ res }: { res: Analysis }) {
   const brings = res.group.flatMap((m) => (m.brings || []).map((b) => ({ m, b })))
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      {/* The roster: name in class colour, role and spec quiet beneath - no boxes. */}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3 border-y py-3 sm:grid-cols-3 lg:grid-cols-5">
         {res.group.map((m) => (
-          <div key={m.name} className="flex gap-2.5 overflow-hidden rounded-lg border bg-secondary py-2 pr-2">
-            <span className="w-1 shrink-0 rounded-r" style={{ background: CLASS_COLORS[m.class || ""] || "var(--border)" }} />
-            <div className="min-w-0">
-              <div className="text-[0.7rem] font-medium tracking-wider text-muted-foreground uppercase">{m.role}</div>
-              <div className="truncate font-semibold">{m.name}</div>
-              <div className="truncate text-xs text-muted-foreground">{[m.spec, m.class].filter(Boolean).join(" ")}</div>
-              {m.note && <div className="text-xs text-med">{m.note}</div>}
+          <div key={m.name} className="min-w-0">
+            <div className="truncate font-semibold" style={{ color: CLASS_COLORS[m.class || ""] }}>{m.name}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              <span className="capitalize">{m.role === "dps" ? "DPS" : m.role}</span>, {[m.spec, m.class].filter(Boolean).join(" ")}
             </div>
+            {m.note && <div className="text-xs text-med">{m.note}</div>}
           </div>
         ))}
       </div>
       {brings.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="mr-1 font-semibold text-muted-foreground">Group cooldowns</span>
+        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
+          <span className="text-xs font-medium text-muted-foreground">Group cooldowns</span>
           {brings.map(({ m, b }) => {
             const group = b.scope === "group", big = m.big_hits || 0
             const missed = !b.casts || (group && !b.on_big_hits && big)
             const text = !b.casts ? "never pressed" : !group ? `${b.casts}x` : !b.on_big_hits && big
-              ? `${b.casts}x, never on a big hit` : `${b.casts}x · ${b.on_big_hits} big hit${b.on_big_hits === 1 ? "" : "s"}`
+              ? `${b.casts}x, never on a big hit` : `${b.casts}x, ${b.on_big_hits} big hit${b.on_big_hits === 1 ? "" : "s"}`
             return (
               <Tooltip key={`${m.name}-${b.name}`}>
-                <TooltipTrigger render={<span className={cn("inline-flex cursor-help items-center gap-1.5 rounded-full border bg-secondary px-2.5 py-1",
-                                                           missed && "border-warn/50")} />}>
-                  <span className="size-1.5 rounded-full" style={{ background: CLASS_COLORS[m.class || ""] }} />
-                  <b>{b.name}</b>
-                  <span className={missed ? "font-semibold text-warn" : "text-muted-foreground"}>{m.name} · {text}</span>
+                <TooltipTrigger render={<span className="inline-flex cursor-help items-baseline gap-1.5" />}>
+                  <span className="font-medium">{b.name}</span>
+                  <span className="text-xs" style={{ color: CLASS_COLORS[m.class || ""] }}>{m.name}</span>
+                  <span className={cn("text-xs", missed ? "font-medium text-warn" : "text-muted-foreground")}>{text}</span>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {group ? "Group" : "External"} cooldown · pressed {b.casts}x · up for {b.on_big_hits} of {big} big group hits
-                  {b.casts ? "" : " · may not be talented"}
+                  {group ? "Group" : "External"} cooldown, pressed {b.casts}x, up for {b.on_big_hits} of {big} big group hits
+                  {b.casts ? "" : " (may not be talented)"}
                 </TooltipContent>
               </Tooltip>
             )
@@ -64,7 +62,7 @@ function Chart({ label, rows }: { label: string; rows: Meter[] }) {
   const top = Math.max(1, ...rows.map((e) => e.per_s))
   return (
     <div className="grid grid-cols-[max-content_1fr_max-content] items-center gap-x-2.5 gap-y-1.5 text-sm">
-      <div className="col-span-3 text-xs font-semibold tracking-wider text-muted-foreground">{label}</div>
+      <div className="col-span-3 text-xs font-medium text-muted-foreground">{label}</div>
       {rows.map((e) => (
         <Row key={e.name} e={e} pct={(e.per_s / top) * 100} />
       ))}

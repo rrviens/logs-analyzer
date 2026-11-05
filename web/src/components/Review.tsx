@@ -73,7 +73,7 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
       ) : (
         <p className="text-sm text-muted-foreground">Findings appear when the comparison with your peers is done.</p>
       )}
-      {result?.deaths && <Deaths deaths={result.deaths} player={result.run.player} />}
+      {result?.deaths && <Deaths deaths={result.deaths} player={result.run.player} classes={Object.fromEntries(result.group.map((m) => [m.name, m.class]))} />}
       {result && (
         <>
           <Items res={result} />

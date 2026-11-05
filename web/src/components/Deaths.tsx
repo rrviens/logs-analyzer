@@ -1,7 +1,8 @@
 import { useState } from "react"
 import { pullShort } from "@/lib/review"
 import { Tx } from "@/lib/timeline"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { LogRow } from "@/components/LogRow"
+import { CLASS_COLORS } from "@/lib/wow"
 import { cn } from "@/lib/utils"
 
 type ReadyItem = { name: string; owner: string; status: string; text: string; verdict?: "lived" | "close" | "died"; lowest?: number;
@@ -23,41 +24,42 @@ export type Death = {
 }
 
 const VERDICT = { lived: "Likely lived", close: "Too close to call", died: "Would still die" }
-const VERDICT_TONE = { lived: "text-good bg-good/12", close: "text-med bg-med/12", died: "text-bad bg-bad/12" }
+const VERDICT_DOT = { lived: "bg-good", close: "bg-med", died: "bg-bad" }
 const k = (v?: number | null) => (v == null ? "" : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : `${Math.round(v / 1000)}k`)
 export const deathId = (clock: string, victim: string) => `death-${clock}-${victim}`
 
-const Pill = ({ className, title, children }: { className?: string; title?: string; children: React.ReactNode }) =>
-  <span title={title} className={cn("rounded-full bg-muted px-2 py-0.5 text-xs font-semibold whitespace-nowrap", className)}>{children}</span>
+// A small status in text: an optional coloured dot, never a filled chip.
+const Note = ({ dot, title, children }: { dot?: string; title?: string; children: React.ReactNode }) => (
+  <span title={title} className={cn("inline-flex items-center gap-1.5 text-xs whitespace-nowrap", title && "cursor-help")}>
+    {dot && <i className={cn("size-1.5 rounded-full", dot)} />}{children}
+  </span>
+)
 
 // Each death: why it happened, what could have saved it (and from whom), and the last seconds of hits and heals.
-export function Deaths({ deaths, player }: { deaths: Death[]; player: string }) {
+export function Deaths({ deaths, player, classes = {} }: { deaths: Death[]; player: string; classes?: Record<string, string | undefined> }) {
   return (
     <section className="flex flex-col gap-4 border-t pt-7">
       <div className="flex items-center gap-3">
         <h2 className="text-lg font-semibold tracking-tight">Death recaps</h2>
         <span className="text-sm text-muted-foreground tabular-nums">{deaths.length}</span>
       </div>
-      {!deaths.length && <p className="text-sm text-muted-foreground">Deaths: none.</p>}
-      {deaths.map((d) => {
-        const id = deathId(d.clock, d.victim)
-        return (
-          <Collapsible key={id} id={id}
-                       className="scroll-mt-4 overflow-hidden rounded-lg border bg-secondary">
-            <CollapsibleTrigger className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-left hover:bg-accent">
-              <span className="w-10 text-sm text-muted-foreground tabular-nums">{d.clock}</span>
-              <span className="text-xs text-muted-foreground">{pullShort(d.pull)}</span>
-              <span className="min-w-48 flex-1"><b>{d.victim}</b> {d.short || `died to ${d.killing}`}</span>
-              {d.avoid && <Pill className="bg-med/12 text-med" title={d.avoid.line}>{d.avoid.label}</Pill>}
-              {d.stoppable && <Pill className="bg-high/12 text-high" title="A cast peer groups usually stop did most of the damage">Stoppable</Pill>}
-              {d.fix && <Pill className="bg-med/12 text-med">→ {d.fix}</Pill>}
-            </CollapsibleTrigger>
-            <CollapsibleContent className="flex flex-col gap-2.5 px-4 pb-4 text-sm">
-              <DeathBody d={d} player={player} />
-            </CollapsibleContent>
-          </Collapsible>
-        )
-      })}
+      {!deaths.length && <p className="text-sm text-muted-foreground">Nobody died.</p>}
+      <div className="flex flex-col">
+        {deaths.map((d) => (
+          <LogRow key={deathId(d.clock, d.victim)} id={deathId(d.clock, d.victim)} time={d.clock} mark="bg-bad" fix={d.fix}
+                  title={<>
+                    <span className="font-semibold" style={{ color: CLASS_COLORS[classes[d.victim] || ""] }}>{d.victim}</span>{" "}
+                    <span className="font-medium">{(d.short || `died to ${d.killing}`).replace(/^Died/, "died")}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">{pullShort(d.pull)}</span>
+                  </>}
+                  extra={<>
+                    {d.avoid && <Note dot="bg-med" title={d.avoid.line}>{d.avoid.label}</Note>}
+                    {d.stoppable && <Note dot="bg-high" title="A cast peer groups usually stop did most of the damage">Stoppable</Note>}
+                  </>}>
+            <DeathBody d={d} player={player} />
+          </LogRow>
+        ))}
+      </div>
     </section>
   )
 }
@@ -73,9 +75,9 @@ function DeathBody({ d, player }: { d: Death; player: string }) {
   return (
     <>
       {d.story?.advice.length ? (
-        <div className="rounded-md border-l-3 border-med bg-med/10 px-3 py-2">
-          <b>What to do:</b>
-          <ul className="mt-1 list-disc pl-5">{d.story.advice.map((a, i) => <li key={i}><Tx>{a}</Tx></li>)}</ul>
+        <div>
+          <b>What to do</b>
+          <ul className="mt-1 list-disc pl-5 marker:text-med">{d.story.advice.map((a, i) => <li key={i}><Tx>{a}</Tx></li>)}</ul>
         </div>
       ) : null}
       {d.note && <Story label={`About ${d.cause?.name || d.killing}:`}>{d.note}</Story>}
@@ -95,15 +97,15 @@ function DeathBody({ d, player }: { d: Death; player: string }) {
         </Story>
       )}
       {d.cause && (
-        <Story label="Cause:"><Tx>{d.cause.lines.join(" · ")}</Tx>{d.cause.name !== d.killing ? ` · killing blow ${d.killing}` : ""}</Story>
+        <Story label="Cause:"><Tx>{d.cause.lines.join("; ")}</Tx>{d.cause.name !== d.killing ? `; killing blow ${d.killing}` : ""}</Story>
       )}
       {d.story && <ul className="list-disc pl-5 text-muted-foreground">{d.story.lines.map((l, i) => <li key={i}><Tx>{l}</Tx></li>)}</ul>}
       {!!d.last_casts?.filter((x) => x.target).length && (
         <Story label="Last casts:">
-          {d.last_casts.filter((x) => x.target).map((x) => `${x.ability} → ${x.target}${x.hp != null ? ` @${Math.round(x.hp * 100)}%` : ""} (${x.dt.toFixed(1)}s)`).join(" · ")}
+          {d.last_casts.filter((x) => x.target).map((x) => `${x.ability} → ${x.target}${x.hp != null ? ` @${Math.round(x.hp * 100)}%` : ""} (${x.dt.toFixed(1)}s)`).join("; ")}
         </Story>
       )}
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-4 border-y py-3 md:grid-cols-3 md:gap-0 md:divide-x">
         <ReadyCol title="Group" items={d.ready.group} owner />
         <ReadyCol title={d.victim === player ? `${d.victim} (you, died)` : `${d.victim} (died)`} items={d.ready.victim} />
         <ReadyCol title={`${player} (healer)`} items={d.ready.healer} />
@@ -111,15 +113,15 @@ function DeathBody({ d, player }: { d: Death; player: string }) {
       <p className="text-xs text-muted-foreground">Last 10s: took {k(d.taken)}, healed {k(d.healed)} (max HP {k(d.max_hp)}).</p>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="text-muted-foreground"><tr className="text-left">
+          <thead className="text-muted-foreground"><tr className="border-b text-left">
             <th className="py-1 pr-3 font-medium">Before death</th><th className="pr-3" /><th className="pr-3 font-medium">Ability</th>
             <th className="pr-3 font-medium">From</th><th className="pr-3 font-medium">Amount</th><th className="font-medium">HP after</th>
           </tr></thead>
           <tbody>
             {events.map((e, i) => (
-              <tr key={i} className="border-t border-border/60">
+              <tr key={i} className="border-b border-border/50 last:border-0">
                 <td className="py-1 pr-3 tabular-nums">{e.dt.toFixed(1)}s</td>
-                <td className={cn("pr-3 font-semibold", e.kind === "hit" ? "text-bad" : e.kind === "heal" ? "text-good" : "text-primary")}>
+                <td className={cn("pr-3 font-semibold", e.kind === "hit" ? "text-bad" : e.kind === "heal" ? "text-good" : "text-foreground")}>
                   {e.kind === "hit" ? "Hit" : e.kind === "heal" ? "Heal" : "Defensive"}</td>
                 <td className="pr-3">{e.ability}{e.school && <span className="text-muted-foreground"> ({e.school})</span>}</td>
                 <td className="pr-3 text-muted-foreground">{e.source || ""}</td>
@@ -138,7 +140,7 @@ function DeathBody({ d, player }: { d: Death; player: string }) {
         </table>
       </div>
       {!all && d.events.length > 8 && (
-        <button className="self-start text-xs text-primary hover:underline" onClick={() => setAll(true)}>Show all {d.events.length} events</button>
+        <button className="self-start text-xs underline underline-offset-2 hover:no-underline" onClick={() => setAll(true)}>Show all {d.events.length} events</button>
       )}
     </>
   )
@@ -148,19 +150,19 @@ function ReadyCol({ title, items, owner }: { title: string; items: ReadyItem[]; 
   const known = items.filter((i) => i.status !== "unknown" && !i.escape)
   const unknown = items.filter((i) => i.status === "unknown" && !i.escape)
   return (
-    <div className="rounded-md border bg-card p-3">
-      <h4 className="mb-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">{title}</h4>
+    <div className="md:px-4 md:first:pl-0 md:last:pr-0">
+      <h4 className="mb-2 text-xs font-medium text-muted-foreground">{title}</h4>
       {known.length ? known.map((i) => (
         <div key={`${i.owner}-${i.name}`} className="mb-2 last:mb-0">
           <div className="flex flex-wrap items-center gap-1.5">
             <b>{i.name}</b>{owner && <span className="text-xs text-muted-foreground">({i.owner})</span>}
             {i.verdict && (
-              <Pill className={i.no_window ? "" : VERDICT_TONE[i.verdict]}>
+              <Note dot={i.no_window ? "bg-muted-foreground" : VERDICT_DOT[i.verdict]}>
                 {VERDICT[i.verdict]}{i.verdict !== "died" && i.lowest != null ? ` ~${Math.round(i.lowest * 100)}%` : ""}
-              </Pill>
+              </Note>
             )}
-            {i.no_window && <Pill title="No time to react: not telegraphed and they weren't low for 2s+ - not a mistake">No reaction window</Pill>}
-            {i.gcd && <Pill title="Costs a global cooldown - holding it is often right">GCD</Pill>}
+            {i.no_window && <Note title="No time to react: not telegraphed and they weren't low for 2s+ - not a mistake"><span className="text-muted-foreground underline decoration-dotted">no reaction window</span></Note>}
+            {i.gcd && <Note title="Costs a global cooldown - holding it is often right"><span className="text-muted-foreground underline decoration-dotted">GCD</span></Note>}
           </div>
           <div className="text-xs text-muted-foreground"><Tx>{i.text}</Tx></div>
         </div>

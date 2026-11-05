@@ -29,11 +29,11 @@ const countOf = (has: boolean, v?: Verdict | null) => (has ? todo(v) || "ok" : 0
 
 function Fold({ label, className, children }: { label: React.ReactNode; className?: string; children: React.ReactNode }) {
   return (
-    <Collapsible className={cn("rounded-lg border bg-secondary", className)}>
-      <CollapsibleTrigger className="group flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-accent">
-        <ChevronRight className="size-4 shrink-0 transition-transform group-data-[panel-open]:rotate-90" />{label}
+    <Collapsible className={cn("border-y", className)}>
+      <CollapsibleTrigger className="group flex w-full items-center gap-2 px-1 py-2.5 text-left text-sm hover:bg-accent/50">
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]:rotate-90" />{label}
       </CollapsibleTrigger>
-      <CollapsibleContent className="flex flex-col gap-3 px-4 pb-4 text-sm">{children}</CollapsibleContent>
+      <CollapsibleContent className="mb-4 ml-3 flex flex-col gap-4 border-l pl-5 text-sm">{children}</CollapsibleContent>
     </Collapsible>
   )
 }
@@ -51,7 +51,7 @@ function VerdictBlock({ v, children }: { v?: Verdict | null; children?: React.Re
               <span><Tx>{l.text}</Tx>
                 {l.examples.length > 0 && (
                   <span className="mt-0.5 flex flex-wrap gap-1.5">
-                    {l.examples.map((e, j) => <span key={j} className="rounded bg-muted px-1.5 text-xs text-muted-foreground"><Tx>{e}</Tx></span>)}
+                    {l.examples.map((e, j) => <span key={j} className="text-xs text-muted-foreground"><Tx>{e}</Tx></span>)}
                   </span>
                 )}</span>
             </li>
@@ -66,13 +66,13 @@ function VerdictBlock({ v, children }: { v?: Verdict | null; children?: React.Re
 function Table({ head, rows, note }: { head: React.ReactNode[]; rows: React.ReactNode[][]; note?: React.ReactNode }) {
   return (
     <div>
-      <div className="overflow-x-auto rounded-md border bg-card">
+      <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-muted/50 text-left text-muted-foreground">
-            <tr>{head.map((h, i) => <th key={i} className="px-2.5 py-1.5 font-medium">{h}</th>)}</tr>
+          <thead className="text-left text-muted-foreground">
+            <tr className="border-b">{head.map((h, i) => <th key={i} className="py-1.5 pr-4 font-medium">{h}</th>)}</tr>
           </thead>
           <tbody className="tabular-nums">
-            {rows.map((r, i) => <tr key={i} className="border-t">{r.map((c, j) => <td key={j} className="px-2.5 py-1.5">{c}</td>)}</tr>)}
+            {rows.map((r, i) => <tr key={i} className="border-b border-border/50 last:border-0">{r.map((c, j) => <td key={j} className="py-1.5 pr-4">{c}</td>)}</tr>)}
           </tbody>
         </table>
       </div>
@@ -168,13 +168,13 @@ export function DpsWindows({ res }: { res: Analysis }) {
       </div>
       {worst.length > 0 && (
         <>
-          <h3 className="mt-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase">Biggest missed windows</h3>
-          <ul className="flex flex-col gap-1 text-sm">
+          <h3 className="mt-1 text-sm font-medium">Biggest missed windows</h3>
+          <ul className="flex flex-col text-sm">
             {worst.map((w, i) => (
-              <li key={i} className="flex flex-wrap items-center gap-x-3 rounded-md bg-secondary px-3 py-1.5">
+              <li key={i} className="flex flex-wrap items-baseline gap-x-3 border-b px-1 py-2 first:border-t">
                 <span className="w-10 tabular-nums"><Tx>{w.clock}</Tx></span>
                 <span className="text-xs text-muted-foreground">{pullShort(w.pull)}</span>
-                <span className="flex-1">{w.seconds}s calm · {w.dps_casts} damage cast{w.dps_casts === 1 ? "" : "s"}, {w.other_casts} other, ~{w.idle_s}s idle</span>
+                <span className="flex-1">{w.seconds}s calm, {w.dps_casts} damage cast{w.dps_casts === 1 ? "" : "s"}, {w.other_casts} other, ~{w.idle_s}s idle</span>
                 <b className="text-bad">~{m(w.missed)} missed</b>
               </li>
             ))}
@@ -216,8 +216,8 @@ export function GoodCalls({ res }: { res: Analysis }) {
     <Section title="Good calls" count={good.length} empty="Good calls: none recorded.">
       <Fold label={<span className="font-semibold text-good">✓ {good.length} cooldowns pressed at the right moment</span>}>
         {good.map((g, i) => (
-          <p key={i}><span className="text-good">✓</span> <Tx>{g.title}</Tx> · {pullShort(g.pull)}
-            <span className="text-muted-foreground"> - <Tx>{g.detail.join(" ")}</Tx></span></p>
+          <p key={i}><span className="text-good">✓</span> <Tx>{g.title}</Tx> <span className="text-xs text-muted-foreground">{pullShort(g.pull)}</span>
+            <span className="block pl-4 text-muted-foreground"><Tx>{g.detail.join(" ")}</Tx></span></p>
         ))}
       </Fold>
     </Section>
