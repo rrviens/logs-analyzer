@@ -1,6 +1,7 @@
 import { ChevronRight, CircleCheck, FlaskConical, Rows3, Split, Swords } from "lucide-react"
 import type { Analysis } from "@/lib/analysis"
 import { pullShort } from "@/lib/review"
+import { Tx, useFocus } from "@/lib/timeline"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 
@@ -50,10 +51,10 @@ function VerdictBlock({ v, children }: { v?: Verdict | null; children?: React.Re
           {v.lines.map((l, i) => (
             <li key={i} className="flex gap-2">
               <span className={cn("font-bold", l.action ? "text-med" : "text-good")}>{l.action ? "→" : "✓"}</span>
-              <span>{l.text}
+              <span><Tx>{l.text}</Tx>
                 {l.examples.length > 0 && (
                   <span className="mt-0.5 flex flex-wrap gap-1.5">
-                    {l.examples.map((e, j) => <span key={j} className="rounded bg-muted px-1.5 text-xs text-muted-foreground">{e}</span>)}
+                    {l.examples.map((e, j) => <span key={j} className="rounded bg-muted px-1.5 text-xs text-muted-foreground"><Tx>{e}</Tx></span>)}
                   </span>
                 )}</span>
             </li>
@@ -134,6 +135,7 @@ const useTone = (u?: number | null) => (u == null ? "bg-muted-foreground" : u >=
 
 export function DpsWindows({ res }: { res: Analysis }) {
   const d = res.dps, ws = res.timeline?.dps_windows || [], pulls = res.timeline?.pulls || []
+  const focus = useFocus()
   const worst = ws.filter((w) => w.missed >= 5e4).sort((a, b) => b.missed - a.missed).slice(0, 6)
   return (
     <Section title="DPS windows" icon={Swords} tone="bg-high/12 text-high" count={ws.length ? ws.filter((w) => w.use != null && w.use < 0.4).length || "ok" : 0}
@@ -152,7 +154,7 @@ export function DpsWindows({ res }: { res: Analysis }) {
             <div className={cn("truncate text-[11px] text-muted-foreground", p.boss && "font-semibold text-foreground")}>{pullShort(p.label)}</div>
             <div className={cn("relative h-6 rounded", p.boss ? "bg-primary/12" : "bg-muted")}>
               {ws.filter((w) => w.start_s >= p.start_s && w.start_s <= p.end_s).map((w, j) => (
-                <span key={j} title={[`${w.clock} · ${pullShort(w.pull)}`, ...w.tip.filter(Boolean)].join("\n")}
+                <button key={j} type="button" onClick={() => focus(w.start_s, w.end_s)} title={[`${w.clock} · ${pullShort(w.pull)}`, ...w.tip.filter(Boolean)].join("\n")}
                       className={cn("absolute inset-y-1 min-w-1 rounded-sm opacity-80 hover:opacity-100", useTone(w.use))}
                       style={{ left: `${(w.start_s - p.start_s) / (p.end_s - p.start_s) * 100}%`,
                                width: `${(Math.min(w.end_s, p.end_s) - w.start_s) / (p.end_s - p.start_s) * 100}%` }} />
@@ -165,7 +167,7 @@ export function DpsWindows({ res }: { res: Analysis }) {
         {([["bg-good", "used like your peers"], ["bg-warn", "partly used"], ["bg-bad", "mostly missed"]] as const).map(([c, l]) => (
           <span key={l} className="flex items-center gap-1.5"><i className={cn("size-2.5 rounded-sm", c)} />{l}</span>
         ))}
-        <span>A window = 3s+ with the group healthy, nobody low and no big hit coming. Hover one for details.</span>
+        <span>A window = 3s+ with the group healthy, nobody low and no big hit coming. Hover one for details, click to open it on the timeline.</span>
       </div>
       {worst.length > 0 && (
         <>
@@ -173,7 +175,7 @@ export function DpsWindows({ res }: { res: Analysis }) {
           <ul className="flex flex-col gap-1 text-sm">
             {worst.map((w, i) => (
               <li key={i} className="flex flex-wrap items-center gap-x-3 rounded-md bg-secondary px-3 py-1.5">
-                <span className="w-10 text-muted-foreground tabular-nums">{w.clock}</span>
+                <span className="w-10 tabular-nums"><Tx>{w.clock}</Tx></span>
                 <span className="text-xs text-muted-foreground">{pullShort(w.pull)}</span>
                 <span className="flex-1">{w.seconds}s calm · {w.dps_casts} damage cast{w.dps_casts === 1 ? "" : "s"}, {w.other_casts} other, ~{w.idle_s}s idle</span>
                 <b className="text-bad">~{m(w.missed)} missed</b>
@@ -217,8 +219,8 @@ export function GoodCalls({ res }: { res: Analysis }) {
     <Section title="Good calls" icon={CircleCheck} tone="bg-good/12 text-good" count={good.length} empty="Good calls: none recorded.">
       <Fold label={<span className="font-semibold text-good">✓ {good.length} cooldowns pressed at the right moment</span>}>
         {good.map((g, i) => (
-          <p key={i}><span className="text-good">✓</span> {g.title} · {pullShort(g.pull)}
-            <span className="text-muted-foreground"> - {g.detail.join(" ")}</span></p>
+          <p key={i}><span className="text-good">✓</span> <Tx>{g.title}</Tx> · {pullShort(g.pull)}
+            <span className="text-muted-foreground"> - <Tx>{g.detail.join(" ")}</Tx></span></p>
         ))}
       </Fold>
     </Section>

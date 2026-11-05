@@ -3,6 +3,7 @@ import { api, ApiError } from "./api"
 import type { Finding } from "./review"
 import type { Death } from "@/components/Deaths"
 import type { Verdict } from "@/components/Sections"
+import type { TimelineData } from "@/components/Timeline"
 
 // The parts of an analysis result the new views use so far (the API sends more).
 export type Bring = { name: string; scope: "group" | "external"; casts: number; on_big_hits: number }
@@ -25,7 +26,7 @@ export type Analysis = {
   spell_choice?: { you?: Record<string, HealStats>; top?: Record<string, HealStats>
                    buffs?: { you: Record<string, HealStats>; top?: Record<string, HealStats> } } | null
   dps?: { windows: number; seconds: number; your_dps?: number; top_dps?: number; missed?: number } | null
-  timeline?: { pulls: { label: string; start_s: number; end_s: number; boss?: boolean }[]
+  timeline?: TimelineData & {
                dps_windows?: { clock: string; pull: string; start_s: number; end_s: number; seconds: number; use: number | null
                                missed: number; dps_casts: number; other_casts: number; idle_s: number; tip: string[] }[] }
   requirements?: { pull: string; duration_s: number; group_hp: number; top_group_hp: number | null; intake: number

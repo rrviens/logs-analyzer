@@ -2,6 +2,7 @@ import { useState } from "react"
 import { ChevronRight, TriangleAlert } from "lucide-react"
 import { byTime, type Finding, pullShort, reviewTier, SEV_LABEL, type Sev, sevOf, splitFindings, type Strict, strictPick } from "@/lib/review"
 import { lsSet } from "@/lib/wow"
+import { Tx } from "@/lib/timeline"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 
@@ -40,7 +41,7 @@ export function Findings({ findings, level, model, best }: { findings: Finding[]
             <h3 className={cn("mt-2 text-xs font-semibold tracking-wider uppercase", SEV_TONE[sev].split(" ")[0])}>
               {SEV_LABEL[sev]} <span className="font-normal text-muted-foreground">{group.length}</span>
             </h3>
-            {group.map((f, i) => <FindingCard key={`${f.rule}-${f.t_s}-${i}`} f={f} />)}
+            {group.map((f, i) => <FindingCard key={`${f.rule}-${f.t_s}-${i}`} f={f} id={findings.indexOf(f)} />)}
           </div>
         )
       })}
@@ -51,7 +52,7 @@ export function Findings({ findings, level, model, best }: { findings: Finding[]
             {minor.length} minor note{minor.length > 1 ? "s" : ""} ({tier.minorWhy})
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2 flex flex-col gap-1.5">
-            {byTime(minor).map((f, i) => <FindingCard key={`m-${f.rule}-${f.t_s}-${i}`} f={f} />)}
+            {byTime(minor).map((f, i) => <FindingCard key={`m-${f.rule}-${f.t_s}-${i}`} f={f} id={findings.indexOf(f)} />)}
           </CollapsibleContent>
         </Collapsible>
       )}
@@ -59,10 +60,10 @@ export function Findings({ findings, level, model, best }: { findings: Finding[]
   )
 }
 
-function FindingCard({ f }: { f: Finding }) {
+function FindingCard({ f, id }: { f: Finding; id: number }) {
   const sev = sevOf(f.severity)
   return (
-    <Collapsible className={cn("relative overflow-hidden rounded-lg border bg-secondary before:absolute before:inset-y-0 before:left-0 before:w-1", SEV_EDGE[sev])}>
+    <Collapsible id={`finding-${id}`} className={cn("relative scroll-mt-4 overflow-hidden rounded-lg border bg-secondary before:absolute before:inset-y-0 before:left-0 before:w-1", SEV_EDGE[sev])}>
       <CollapsibleTrigger className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 py-2.5 pr-3 pl-4 text-left hover:bg-accent">
         <span className="w-10 text-sm text-muted-foreground tabular-nums">{f.pull !== "Whole run" ? f.clock : "run"}</span>
         <span className="text-xs text-muted-foreground">{pullShort(f.pull)}</span>
@@ -75,11 +76,11 @@ function FindingCard({ f }: { f: Finding }) {
         {f.context?.length > 0 && (
           <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
             {f.context.map(([k, v]) => (
-              <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd>{v}</dd></div>
+              <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd><Tx>{v}</Tx></dd></div>
             ))}
           </dl>
         )}
-        {f.detail.length > 0 && <ul className="list-disc space-y-0.5 pl-4">{f.detail.map((d, i) => <li key={i}>{d}</li>)}</ul>}
+        {f.detail.length > 0 && <ul className="list-disc space-y-0.5 pl-4">{f.detail.map((d, i) => <li key={i}><Tx>{d}</Tx></li>)}</ul>}
       </CollapsibleContent>
     </Collapsible>
   )

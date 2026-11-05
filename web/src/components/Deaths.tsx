@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Skull } from "lucide-react"
 import { pullShort } from "@/lib/review"
+import { Tx } from "@/lib/timeline"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 
@@ -76,7 +77,7 @@ function DeathBody({ d, player }: { d: Death; player: string }) {
       {d.story?.advice.length ? (
         <div className="rounded-md border-l-3 border-med bg-med/10 px-3 py-2">
           <b>What to do:</b>
-          <ul className="mt-1 list-disc pl-5">{d.story.advice.map((a, i) => <li key={i}>{a}</li>)}</ul>
+          <ul className="mt-1 list-disc pl-5">{d.story.advice.map((a, i) => <li key={i}><Tx>{a}</Tx></li>)}</ul>
         </div>
       ) : null}
       {d.note && <Story label={`About ${d.cause?.name || d.killing}:`}>{d.note}</Story>}
@@ -96,9 +97,9 @@ function DeathBody({ d, player }: { d: Death; player: string }) {
         </Story>
       )}
       {d.cause && (
-        <Story label="Cause:">{d.cause.lines.join(" · ")}{d.cause.name !== d.killing ? ` · killing blow ${d.killing}` : ""}</Story>
+        <Story label="Cause:"><Tx>{d.cause.lines.join(" · ")}</Tx>{d.cause.name !== d.killing ? ` · killing blow ${d.killing}` : ""}</Story>
       )}
-      {d.story && <ul className="list-disc pl-5 text-muted-foreground">{d.story.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>}
+      {d.story && <ul className="list-disc pl-5 text-muted-foreground">{d.story.lines.map((l, i) => <li key={i}><Tx>{l}</Tx></li>)}</ul>}
       {!!d.last_casts?.filter((x) => x.target).length && (
         <Story label="Last casts:">
           {d.last_casts.filter((x) => x.target).map((x) => `${x.ability} → ${x.target}${x.hp != null ? ` @${Math.round(x.hp * 100)}%` : ""} (${x.dt.toFixed(1)}s)`).join(" · ")}
@@ -163,7 +164,7 @@ function ReadyCol({ title, items, owner }: { title: string; items: ReadyItem[]; 
             {i.no_window && <Pill title="No time to react: not telegraphed and they weren't low for 2s+ - not a mistake">No reaction window</Pill>}
             {i.gcd && <Pill title="Costs a global cooldown - holding it is often right">GCD</Pill>}
           </div>
-          <div className="text-xs text-muted-foreground">{i.text}</div>
+          <div className="text-xs text-muted-foreground"><Tx>{i.text}</Tx></div>
         </div>
       )) : <p className="text-xs text-muted-foreground">Nothing tracked.</p>}
       {unknown.length > 0 && (
