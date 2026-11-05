@@ -18,9 +18,14 @@ const Timeline = lazy(() => import("@/components/Timeline").then((m) => ({ defau
 
 // One key's review: header and group, timeline, then the sections.
 // saved: a finished analysis to show read-only (signed out, from a shared link) - nothing is fetched or re-run.
-export function Review({ url, saved }: { url: string; saved?: Analysis }) {
+export type LiveStatus = "analyzing" | "done" | "left"
+
+export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis; onStatus?: (s: LiveStatus) => void }) {
   const a = useAnalysis(saved ? null : url)
   const result = saved || a.result
+  const analyzing = !saved && !a.error && (!a.result || !!a.updating)
+  useEffect(() => { onStatus?.(analyzing ? "analyzing" : a.result ? "done" : "left") }, [analyzing, !!a.result])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onStatus?.("left"), [])  // eslint-disable-line react-hooks/exhaustive-deps
   const shown = result || a.preview
   const [lookPull, setLookPull] = useState<TPull | null>(null)  // the pull open on the timeline filters "What to look at"
   const tl = useRef<TimelineHandle>(null)

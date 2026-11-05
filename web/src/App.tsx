@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { PanelLeftOpen } from "lucide-react"
 import { api, type Me, type Run, type Settings } from "@/lib/api"
 import { useTheme } from "@/lib/theme"
 import { Header } from "@/components/Header"
 import { KeyList } from "@/components/KeyList"
 import { SignIn } from "@/components/SignIn"
-import { Review } from "@/components/Review"
+import { type LiveStatus, Review } from "@/components/Review"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,6 +20,18 @@ export default function App() {
   const [picked, setPicked] = useState<Run | null>(null)
   const [keysOpen, setKeysOpen] = useState(true)  // stays open; "Hide your keys" folds it to a rail by hand
   const open = keysOpen || !picked
+  // What the open review is doing with its key, for the key list (which only learns it from the server on reload).
+  const [live, setLive] = useState<Record<string, "analyzing" | "done">>({})
+  const [refresh, setRefresh] = useState(0)
+  const liveNow = useRef(live)
+  liveNow.current = live
+  const onStatus = (url: string) => (s: LiveStatus) => {
+    if (s !== "left") return setLive((m) => ({ ...m, [url]: s }))
+    if (liveNow.current[url] !== "analyzing") return
+    // Left while still analyzing: the job goes on server-side, and the reloaded list shows it.
+    setLive((m) => { const { [url]: _, ...rest } = m; return rest })
+    setRefresh((n) => n + 1)
+  }
 
   const [shared, setShared] = useState<Analysis | null>(null)  // signed out: a saved analysis from a ?run= link
   const linked = new URLSearchParams(location.search).get("run")
@@ -60,7 +72,7 @@ export default function App() {
                     <Input name="url" placeholder="Paste a Warcraft Logs URL" autoComplete="off" className="h-8 text-sm" />
                     <Button type="submit" size="sm" variant="secondary">Analyze</Button>
                   </form>
-                  <KeyList selected={picked?.url} onPick={setPicked} version={version} onHide={picked ? () => setKeysOpen(false) : undefined} />
+                  <KeyList selected={picked?.url} onPick={setPicked} version={version} live={live} refresh={refresh} onHide={picked ? () => setKeysOpen(false) : undefined} />
                 </div>
                 <button inert={open} onClick={() => setKeysOpen(true)} title="Show your keys" aria-label="Show your keys"
                         className={`flex w-full items-center justify-center gap-2 py-3 text-xs text-muted-foreground transition-opacity duration-200 hover:bg-accent hover:text-foreground md:absolute md:inset-0 md:flex-col md:justify-start md:pt-4 ${open ? "pointer-events-none opacity-0 max-md:hidden" : "opacity-100 delay-150"}`}>
@@ -69,7 +81,7 @@ export default function App() {
               </aside>
             )}
             <main className="min-w-0 px-5 py-6 md:px-10 md:py-8"><div className="mx-auto max-w-[90rem]">
-              {picked ? <ErrorBoundary key={picked.url}><Review url={picked.url} /></ErrorBoundary> : (
+              {picked ? <ErrorBoundary key={picked.url}><Review url={picked.url} onStatus={onStatus(picked.url)} /></ErrorBoundary> : (
                 <div className="py-16">
                   <h1 className="text-2xl font-semibold tracking-tight">Pick a key to review</h1>
                   <p className="mt-2 max-w-prose text-muted-foreground">Choose one of your keys on the left, or paste a Warcraft Logs URL to review any healer's run.</p>

@@ -11,7 +11,11 @@ const STRIPE = { timed: "bg-good", untimed: "bg-warn", abandoned: "bg-bad" }
 
 // Your recent keys, grouped into play sessions. The last saved list shows at once (no Warcraft Logs call), then the
 // live one replaces it; when Warcraft Logs can't answer, the saved list stays with a note.
-export function KeyList({ selected, onPick, version, onHide }: { selected?: string; onPick: (r: Run) => void; version: number; onHide?: () => void }) {
+type Live = Record<string, "analyzing" | "done">
+
+export function KeyList({ selected, onPick, version, onHide, live = {}, refresh = 0 }: {
+  selected?: string; onPick: (r: Run) => void; version: number; onHide?: () => void; live?: Live; refresh?: number
+}) {
   const [data, setData] = useState<Recent | null>(null)
   const [note, setNote] = useState("")
   const [error, setError] = useState("")
@@ -43,7 +47,7 @@ export function KeyList({ selected, onPick, version, onHide }: { selected?: stri
     }
   }, [limit])
 
-  useEffect(() => { load() }, [load, version])
+  useEffect(() => { load() }, [load, version, refresh])
 
   // Keys being prepared in the background: look again until they're done.
   useEffect(() => {
@@ -75,7 +79,7 @@ export function KeyList({ selected, onPick, version, onHide }: { selected?: stri
       )}
       {!data && !error && <div className="flex flex-col gap-1.5 p-3">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-11 w-full" />)}</div>}
       {data && !data.runs.length && <p className="px-3 text-sm text-muted-foreground">No Mythic+ keys in your recent logs. Paste a log URL above to review one.</p>}
-      {data && <Sessions runs={data.runs} selected={selected} onPick={onPick} />}
+      {data && <Sessions runs={data.runs} selected={selected} onPick={onPick} live={live} />}
       {data?.more && !data.partial && limit < 12 && (
         <Button variant="ghost" size="sm" className="mx-3 mb-3 text-muted-foreground" onClick={() => setLimit(12)}>Show older keys</Button>
       )}
@@ -83,7 +87,7 @@ export function KeyList({ selected, onPick, version, onHide }: { selected?: stri
   )
 }
 
-function Sessions({ runs, selected, onPick }: { runs: Run[]; selected?: string; onPick: (r: Run) => void }) {
+function Sessions({ runs, selected, onPick, live }: { runs: Run[]; selected?: string; onPick: (r: Run) => void; live: Live }) {
   const [open, setOpen] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(lsGet("keySessions") || "{}") } catch { return {} }
   })
@@ -104,7 +108,7 @@ function Sessions({ runs, selected, onPick }: { runs: Run[]; selected?: string; 
             <span className="ml-auto text-muted-foreground">{s.count}</span>
           </CollapsibleTrigger>
           <CollapsibleContent className="flex flex-col pt-0.5">
-            {s.runs.map((r) => <KeyRow key={r.url} run={r} active={r.url === selected} onPick={onPick} />)}
+            {s.runs.map((r) => <KeyRow key={r.url} run={r} active={r.url === selected} onPick={onPick} live={live[r.url]} />)}
           </CollapsibleContent>
         </Collapsible>
       ))}
@@ -114,8 +118,9 @@ function Sessions({ runs, selected, onPick }: { runs: Run[]; selected?: string; 
 
 // One key: the level as a numeral, the dungeon, and the result as a coloured stripe (green timed, amber over time,
 // red abandoned) - the word is there too, for anyone who can't tell the colours apart.
-function KeyRow({ run: r, active, onPick }: { run: Run; active: boolean; onPick: (r: Run) => void }) {
+function KeyRow({ run: r, active, onPick, live }: { run: Run; active: boolean; onPick: (r: Run) => void; live?: "analyzing" | "done" }) {
   const res = result(r)
+  const analyzed = r.analyzed || live === "done", analyzing = !analyzed && (r.queued || live === "analyzing")
   return (
     <button
       disabled={!r.analyzable}
@@ -134,10 +139,13 @@ function KeyRow({ run: r, active, onPick }: { run: Run; active: boolean; onPick:
       </span>
       <span className={cn("truncate text-sm", active ? "font-semibold" : "font-medium")}>{r.dungeon}</span>
       <span className="row-span-2 self-center">
-        {r.analyzed ? <Check className="size-3.5 text-muted-foreground" aria-label="Analyzed" />
-          : r.queued ? (  // being analyzed in the background: the one blue thing in the list
-            <span className="flex items-center gap-1 text-[11px] font-medium text-data"><LoaderCircle className="size-3 animate-spin" />Analyzing</span>
-          ) : null}
+        {analyzed ? (
+          <span className="grid size-4 place-items-center rounded-full bg-foreground text-background" title="Analyzed - opens instantly">
+            <Check className="size-2.5" strokeWidth={3.5} aria-label="Analyzed" />
+          </span>
+        ) : analyzing ? (  // being analyzed (here or in the background): the one blue thing in the list
+          <span className="flex items-center gap-1 text-[11px] font-medium text-data"><LoaderCircle className="size-3 animate-spin" />Analyzing</span>
+        ) : null}
       </span>
       <span className="truncate text-xs text-muted-foreground">
         {RESULT_LABEL[res]}, {r.duration_min} min{!r.analyzable && `, ${r.spec || "not in group"}`}
