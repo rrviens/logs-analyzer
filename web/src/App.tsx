@@ -6,6 +6,7 @@ import { Header } from "@/components/Header"
 import { KeyList } from "@/components/KeyList"
 import { SignIn } from "@/components/SignIn"
 import { Review } from "@/components/Review"
+import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
 export default function App() {
@@ -15,7 +16,6 @@ export default function App() {
   const [version, setVersion] = useState(0)  // bumped when the character changes: everything reloads
   const [picked, setPicked] = useState<Run | null>(null)
   const [keysOpen, setKeysOpen] = useState(true)  // folds to a rail while a review is open, so the review gets the width
-  const pick = (r: Run) => { setPicked(r); setKeysOpen(false) }
   const open = keysOpen || !picked
 
   useEffect(() => { api<Me>("/api/me").then(setMe).catch(() => setMe({ mode: "local", user: null })) }, [])
@@ -39,7 +39,7 @@ export default function App() {
                       <PanelLeftClose className="size-4" />Hide keys
                     </button>
                   )}
-                  <KeyList selected={picked?.url} onPick={pick} version={version} />
+                  <KeyList selected={picked?.url} onPick={setPicked} version={version} />
                 </div>
                 <button inert={open} onClick={() => setKeysOpen(true)} title="Show your keys" aria-label="Show your keys"
                         className={`top-0 flex w-full items-center justify-center gap-2 rounded-lg border bg-card py-3 text-xs text-muted-foreground transition-opacity duration-200 hover:text-foreground md:absolute md:w-10 md:flex-col ${open ? "pointer-events-none opacity-0 max-md:hidden" : "opacity-100 delay-150"}`}>
@@ -47,7 +47,7 @@ export default function App() {
                 </button>
               </aside>
             )}
-            <main className="min-w-0">{picked ? <Review key={picked.url} url={picked.url} /> : (
+            <main className="min-w-0">{picked ? <ErrorBoundary key={picked.url}><Review url={picked.url} onReady={() => setKeysOpen(false)} /></ErrorBoundary> : (
               <div className="grid h-48 place-items-center rounded-xl border border-dashed text-muted-foreground">
                 Pick a key on the left.
               </div>

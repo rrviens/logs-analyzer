@@ -30,7 +30,7 @@ function Chip({ dot, children, className }: { dot?: string; children: React.Reac
 export function RunHeader({ res, url, onReanalyze, busy }: { res: Analysis; url: string; onReanalyze: () => void; busy: boolean }) {
   const r = res.run
   const kind: Result = r.timed ? "timed" : r.duration_min < 20 ? "abandoned" : "untimed"
-  const levels = res.compared.levels.map((l) => `+${l}`).join(", ") || "none"
+  const c = res.compared  // missing on the preview (your run alone) until the peer logs are in
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -47,9 +47,9 @@ export function RunHeader({ res, url, onReanalyze, busy }: { res: Analysis; url:
         </div>
       </div>
       <p className="text-sm text-muted-foreground">
-        {r.player} ({res.spec.label}) · {r.duration_min} min · {r.deaths} death{r.deaths === 1 ? "" : "s"} · compared with{" "}
-        {res.compared.count} peer {res.spec.label} logs ({levels})
-        {res.compared.model ? ` · top players ${res.compared.model}` : ""}
+        {r.player} ({res.spec.label}) · {r.duration_min} min · {r.deaths} death{r.deaths === 1 ? "" : "s"} ·{" "}
+        {c ? <>compared with {c.count} peer {res.spec.label} logs ({c.levels.map((l) => `+${l}`).join(", ") || "none"})
+               {c.model ? ` · top players ${c.model}` : ""}</> : "comparing with peer logs..."}
       </p>
     </div>
   )

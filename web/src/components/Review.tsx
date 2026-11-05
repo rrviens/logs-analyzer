@@ -15,9 +15,10 @@ import { TimelineContext } from "@/lib/timeline"
 const Timeline = lazy(() => import("@/components/Timeline").then((m) => ({ default: m.Timeline })))
 
 // One key's review: header and group, timeline, then the sections.
-export function Review({ url }: { url: string }) {
+export function Review({ url, onReady }: { url: string; onReady?: () => void }) {
   const a = useAnalysis(url)
   const shown = a.result || a.preview
+  useEffect(() => { if (shown) onReady?.() }, [!!shown])  // eslint-disable-line react-hooks/exhaustive-deps
   const tl = useRef<TimelineHandle>(null)
   const ctx = useMemo(() => ({ focus: (s: number, e?: number | null) => tl.current?.focus(s, e) }), [])
   const [best, setBest] = useState<number | null>(null)  // your best timed key (Raider.io): sets how strict the review is
@@ -57,7 +58,7 @@ export function Review({ url }: { url: string }) {
       </section>
       {shown.timeline?.pulls?.length ? <Suspense fallback={<Skeleton className="h-96 w-full rounded-xl" />}><Timeline ref={tl} res={shown} /></Suspense> : null}
       {a.result?.findings ? (
-        <Findings findings={a.result.findings} level={a.result.run.level} model={a.result.compared.model} best={best} />
+        <Findings findings={a.result.findings} level={a.result.run.level} model={a.result.compared?.model} best={best} />
       ) : (
         <p className="text-sm text-muted-foreground">Findings appear when the comparison with your peers is done.</p>
       )}

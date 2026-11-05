@@ -14,7 +14,7 @@ type HealStats = { casts: number; ch_share?: number; ch_overheal?: number; hw_ov
 export type Analysis = {
   run: { dungeon: string; level: number; timed: boolean; duration_min: number; deaths: number; player: string }
   spec: { key: string; label: string; plural: string; single?: string; group?: string; majors?: string }
-  compared: { count: number; levels: number[]; model?: string; skipped?: { player: string; key: number; reasons: string[] }[] }
+  compared?: { count: number; levels: number[]; model?: string; skipped?: { player: string; key: number; reasons: string[] }[] }
   group: Member[]
   meters?: { damage: Meter[]; healing: Meter[] } | null
   comp_notes?: string[]
