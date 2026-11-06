@@ -5,8 +5,16 @@ import { cn } from "@/lib/utils"
 
 // The group: compact player cards, the group / external cooldowns they brought as one row of chips, and the
 // group's damage and healing over the key.
-export function Group({ res }: { res: Analysis }) {
+export function Group({ res, part }: { res: Analysis; part: "people" | "meters" }) {
   const brings = res.group.flatMap((m) => (m.brings || []).map((b) => ({ m, b })))
+  if (part === "meters") {
+    return res.meters ? (
+      <div className="flex flex-col gap-5">
+        <Chart label="DPS" rows={res.meters.damage} />
+        <Chart label="HPS" rows={res.meters.healing} />
+      </div>
+    ) : null
+  }
   return (
     <div className="flex flex-col gap-3">
       {/* The roster: name in class colour, role and spec quiet beneath - no boxes. */}
@@ -46,12 +54,6 @@ export function Group({ res }: { res: Analysis }) {
         </div>
       )}
       {res.comp_notes?.map((n) => <p key={n} className="text-xs text-muted-foreground">{n}</p>)}
-      {res.meters && (
-        <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-          <Chart label="DPS" rows={res.meters.damage} />
-          <Chart label="HPS" rows={res.meters.healing} />
-        </div>
-      )}
     </div>
   )
 }

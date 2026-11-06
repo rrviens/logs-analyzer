@@ -56,17 +56,24 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
   const busy = !result || !!a.updating
   return (
     <TimelineContext.Provider value={ctx}>
-    <div className="flex flex-col gap-8">
+    {/* Wide review area (not window): meters beside the header from ~56rem, a side column for the short sections
+        from ~72rem - measured on the review itself, so it follows the key list being open or folded. */}
+    <div className="@container flex flex-col gap-8">
       {(a.updating || (!result && a.progress.length > 0)) && (
         <p className="rounded-lg border bg-secondary px-3 py-2 text-sm text-muted-foreground">
           {a.updating || `Your run is ready; comparing with peers... ${a.progress.at(-1) || ""}`}
         </p>
       )}
-      <section className="flex flex-col gap-5">
-        <RunHeader res={shown} url={url} onReanalyze={saved ? undefined : a.reanalyze} busy={busy} />
-        <Group res={shown} />
+      <section className="grid gap-x-10 gap-y-6 @4xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+        <div className="flex min-w-0 flex-col gap-5">
+          <RunHeader res={shown} url={url} onReanalyze={saved ? undefined : a.reanalyze} busy={busy} />
+          <Group res={shown} part="people" />
+        </div>
+        <Group res={shown} part="meters" />
       </section>
       {shown.timeline?.pulls?.length ? <Suspense fallback={<Skeleton className="h-96 w-full rounded-xl" />}><Timeline ref={tl} res={shown} onPull={setLookPull} /></Suspense> : null}
+      <div className="grid gap-x-10 gap-y-8 @6xl:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
+      <div className="flex min-w-0 flex-col gap-8">
       {result?.findings ? (
         <Findings findings={result.findings} level={result.run.level} model={result.compared?.model} best={best}
                   pull={lookPull} onShowAll={() => setLookPull(null)} player={result.run.player}
@@ -76,11 +83,12 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
       )}
       {result?.deaths && <Deaths deaths={result.deaths} player={result.run.player} classes={Object.fromEntries(result.group.map((m) => [m.name, m.class]))}
                                    findingFor={(d) => result.findings?.find((f) => f.rule === "death" && f.clock === d.clock && f.title.includes(d.victim)) || null} />}
+      {result && <DpsWindows res={result} />}
+      </div>
       {result && (
-        <>
+        <aside className="flex min-w-0 flex-col gap-8">
           <Items res={result} />
           <Spells res={result} />
-          <DpsWindows res={result} />
           <Pulls res={result} />
           <GoodCalls res={result} />
           <p className="text-xs text-muted-foreground">
@@ -88,8 +96,9 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
               : "No ability notes for this dungeon yet: everything here is read from combat logs, not the encounter journal - if a mechanic has a side effect the log can't show (e.g. dispelling something is punished), the advice changes."}
             {" "}Defensive values in data/defensives.json are approximate.
           </p>
-        </>
+        </aside>
       )}
+      </div>
     </div>
     </TimelineContext.Provider>
   )
