@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { ChevronRight } from "lucide-react"
 import type { Analysis } from "@/lib/analysis"
 import { pullShort } from "@/lib/review"
@@ -5,7 +6,8 @@ import { Tx, useFocus } from "@/lib/timeline"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 
-// The verdict sections after the death recaps, ported from the classic page: a headline, the lines behind it, then the data.
+// The verdict sections: DPS windows as its own section; the shorter checks (trinkets, spell choice, pulls, good calls)
+// as tiles with a detail panel.
 export type Verdict = { headline: string; ok: boolean; lines: { text: string; action: boolean; examples: string[] }[] }
 
 const pct = (v?: number | null) => (v == null ? "-" : `${Math.round(v * 100)}%`)
@@ -26,43 +28,8 @@ function Section({ title, count, empty, children }: { title: string; count: numb
 }
 
 const todo = (v?: Verdict | null) => v?.lines?.filter((l) => l.action).length || 0
-const countOf = (has: boolean, v?: Verdict | null) => (has ? todo(v) || "ok" : 0)
 
-function Fold({ label, className, children }: { label: React.ReactNode; className?: string; children: React.ReactNode }) {
-  return (
-    <Collapsible className={cn("border-y", className)}>
-      <CollapsibleTrigger className="group flex w-full items-center gap-2 px-1 py-2.5 text-left text-sm hover:bg-accent/50">
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]:rotate-90" />{label}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mb-4 ml-3 flex flex-col gap-4 border-l pl-5 text-sm">{children}</CollapsibleContent>
-    </Collapsible>
-  )
-}
 
-// Headline collapsed; the lines (→ to do, ✓ fine) and the raw data on expand.
-function VerdictBlock({ v, children }: { v?: Verdict | null; children?: React.ReactNode }) {
-  if (!v?.headline) return <>{children}</>
-  return (
-    <Fold label={<span className={cn("font-semibold", v.ok ? "text-good" : "text-med")}>{v.ok ? "✓" : "→"} {v.headline}</span>}>
-      {v.lines.length > 0 && (
-        <ul className="flex flex-col gap-1.5">
-          {v.lines.map((l, i) => (
-            <li key={i} className="flex gap-2">
-              <span className={cn("font-bold", l.action ? "text-med" : "text-good")}>{l.action ? "→" : "✓"}</span>
-              <span><Tx>{l.text}</Tx>
-                {l.examples.length > 0 && (
-                  <span className="mt-0.5 flex flex-wrap gap-1.5">
-                    {l.examples.map((e, j) => <span key={j} className="text-xs text-muted-foreground"><Tx>{e}</Tx></span>)}
-                  </span>
-                )}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {children}
-    </Fold>
-  )
-}
 
 function Table({ head, rows, note }: { head: React.ReactNode[]; rows: React.ReactNode[][]; note?: React.ReactNode }) {
   return (
@@ -82,100 +49,9 @@ function Table({ head, rows, note }: { head: React.ReactNode[]; rows: React.Reac
   )
 }
 
-// Each trinket / consumable as one compact block (fits the side column): what to do with it, your uses against peer
-// healers' as two bars, how long it sat ready under pressure, and how often it went out with your big cooldowns.
-export function Items({ res }: { res: Analysis }) {
-  const items = res.items || [], v = res.verdicts?.items
-  const linesOf = (name: string) => (v?.lines || []).filter((l) => l.text.includes(name))
-  return (
-    <Section title="Trinkets & consumables" count={countOf(items.length > 0, v)} empty="Trinkets & consumables: none used.">
-      <Fold label={v?.headline
-        ? <span className={cn("font-semibold", v.ok ? "text-good" : "text-med")}>{v.ok ? "✓" : "→"} {v.headline}</span>
-        : <span className="font-semibold">{items.length} used</span>}>
-        <div className="flex flex-col">
-          {items.map((i) => {
-            const lines = linesOf(i.name)
-            // → what the review asks you to change; • a softer suggestion (potions); ✓ fine as it is
-            const glyph = lines.some((l) => l.action) ? ["→", "text-med"] : lines.some((l) => /^(Press|Line) /.test(l.text))
-              ? ["•", "text-muted-foreground"] : ["✓", "text-good"]
-            const top = Math.max(i.uses, i.top_uses || 0, 1)
-            return (
-              <div key={i.name} className="flex flex-col gap-2 border-b py-3 first:pt-0 last:border-0 last:pb-0">
-                <div className="flex items-baseline gap-2">
-                  <span className={cn("font-semibold", glyph[1])} aria-hidden>{glyph[0]}</span>
-                  <span className="font-medium"><Tx>{i.name}</Tx></span>
-                  <span className="ml-auto text-xs text-muted-foreground">{i.kind}</span>
-                </div>
-                {lines.map((l, k) => (
-                  <p key={k} className="text-muted-foreground"><Tx>{l.text.replace(`${i.name}: `, "").replace(/ \(\d+ of \d+ peer healers use it\)\.?$/, ".")}</Tx></p>
-                ))}
-                <div className="grid grid-cols-[3.5rem_1fr_2.5rem] items-center gap-x-2 gap-y-1 text-xs">
-                  <span className="text-muted-foreground">You</span>
-                  <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full bg-data" style={{ width: `${(i.uses / top) * 100}%` }} /></span>
-                  <span className="text-right tabular-nums">{i.uses}</span>
-                  <span className="text-muted-foreground">Peers</span>
-                  <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full bg-muted-foreground/50" style={{ width: `${((i.top_uses || 0) / top) * 100}%` }} /></span>
-                  <span className="text-right text-muted-foreground tabular-nums">{i.top_uses == null ? "-" : `~${Math.round(i.top_uses)}`}</span>
-                </div>
-                <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 text-xs">
-                  <dt className="text-muted-foreground">Used by</dt><dd>{i.top_users} of {i.top_count} peer healers</dd>
-                  {i.ready_pressure_s != null && <><dt className="text-muted-foreground">Sat ready under pressure</dt><dd>{dur(i.ready_pressure_s)}</dd></>}
-                  {i.paired != null && (
-                    <><dt className="text-muted-foreground">With your big cooldowns</dt>
-                      <dd>{pct(i.paired)}<span className="text-muted-foreground"> (peers {pct(i.top_paired)})</span></dd></>
-                  )}
-                </dl>
-                {!!i.ready_examples?.length && (
-                  <Collapsible>
-                    <CollapsibleTrigger className="group flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                      <ChevronRight className="size-3 transition-transform group-data-[panel-open]:rotate-90" />When it sat ready
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="mt-1 flex flex-col gap-0.5 border-l pl-3 text-xs text-muted-foreground">
-                      {i.ready_examples.map((e, k) => <p key={k}><Tx>{e}</Tx></p>)}
-                    </CollapsibleContent>
-                  </Collapsible>
-                )}
-              </div>
-            )
-          })}
-        </div>
-        <p className="text-xs text-muted-foreground">Peer uses: median among the peer healers who used it, scaled to your run length. Big cooldowns:
-          within 10s of {res.spec.majors || "your major cooldowns"}.</p>
-      </Fold>
-    </Section>
-  )
-}
 
 const SITUATION = { none: "Nobody injured", one: "1 player injured", two: "2 players injured", group: "3+ players injured" }
 
-export function Spells({ res }: { res: Analysis }) {
-  const sc = res.spell_choice, G = res.spec.group || "Group heal", S = res.spec.single || "Single-target heal"
-  return (
-    <Section title={`${S} vs ${G}`} count={countOf(!!sc?.you, res.verdicts?.spells)}
-             empty="Not enough heals to judge.">
-      {sc?.you && (
-        <VerdictBlock v={res.verdicts?.spells}>
-          <Table head={["Situation at cast", "Your heals", `Your ${G} share`, `Top ${G} share`, `${G} overheal (you / top)`,
-                        `${S} overheal (you / top)`, `Your healing per cast (${G} / ${S})`, "Your mana"]}
-                 rows={(Object.keys(SITUATION) as (keyof typeof SITUATION)[]).map((s) => {
-                   const y = sc.you![s], t: Partial<typeof y> = sc.top?.[s] || {}
-                   return [SITUATION[s], y.casts, pct(y.ch_share), pct(t.ch_share), `${pct(y.ch_overheal)} / ${pct(t.ch_overheal)}`,
-                           `${pct(y.hw_overheal)} / ${pct(t.hw_overheal)}`, `${k(y.ch_effective)} / ${k(y.hw_effective)}`, pct(y.mana)]
-                 })}
-                 note={`"Injured" = below 80% HP just before the heal landed. Healing per cast counts every target hit.`} />
-          {Object.values(sc.buffs?.you || {}).some((y) => y.casts) && (
-            <Table head={["Buff up at cast", "Your heals", `Your ${G} share`, `Top ${G} share`, `Your per cast (${G} / ${S})`, `Top per cast (${G} / ${S})`]}
-                   rows={Object.entries(sc.buffs!.you).filter(([, y]) => y.casts).map(([name, y]) => {
-                     const t: Partial<typeof y> = sc.buffs!.top?.[name] || {}
-                     return [name, y.casts, pct(y.ch_share), pct(t.ch_share), `${k(y.ch_effective)} / ${k(y.hw_effective)}`,
-                             `${k(t.ch_effective)} / ${k(t.hw_effective)}`]
-                   })} />
-          )}
-        </VerdictBlock>
-      )}
-    </Section>
-  )
-}
 
 const useTone = (u?: number | null) => (u == null ? "bg-muted-foreground" : u >= 0.75 ? "bg-good" : u >= 0.4 ? "bg-warn" : "bg-bad")
 
@@ -234,7 +110,113 @@ export function DpsWindows({ res }: { res: Analysis }) {
   )
 }
 
-export function Pulls({ res }: { res: Analysis }) {
+// A verdict's lines: → to change, ✓ fine (the headline sits on the tile).
+function VerdictLines({ v }: { v?: Verdict | null }) {
+  if (!v?.lines.length) return null
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {v.lines.map((l, i) => (
+        <li key={i} className="grid grid-cols-[0.9rem_1fr] gap-x-1.5">
+          <span className={cn("text-center font-semibold", l.action ? "text-med" : "text-good")} aria-hidden>{l.action ? "→" : "✓"}</span>
+          <span><Tx>{l.text}</Tx>
+            {l.examples.length > 0 && (
+              <span className="mt-0.5 flex flex-wrap gap-x-3">
+                {l.examples.map((e, j) => <span key={j} className="text-xs text-muted-foreground"><Tx>{e}</Tx></span>)}
+              </span>
+            )}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// Each trinket / consumable as one compact block (fits the side column): what to do with it, your uses against peer
+// healers' as two bars, how long it sat ready under pressure, and how often it went out with your big cooldowns.
+function ItemsDetail({ res }: { res: Analysis }) {
+  const items = res.items || [], v = res.verdicts?.items
+  const linesOf = (name: string) => (v?.lines || []).filter((l) => l.text.includes(name))
+  return (
+    <>
+        <div className="grid gap-x-8 gap-y-0 @3xl:grid-cols-2">
+          {items.map((i) => {
+            const lines = linesOf(i.name)
+            // → what the review asks you to change; • a softer suggestion (potions); ✓ fine as it is
+            const glyph = lines.some((l) => l.action) ? ["→", "text-med"] : lines.some((l) => /^(Press|Line) /.test(l.text))
+              ? ["•", "text-muted-foreground"] : ["✓", "text-good"]
+            const top = Math.max(i.uses, i.top_uses || 0, 1)
+            return (
+              <div key={i.name} className="flex flex-col gap-2 border-b py-3">
+                <div className="flex items-baseline gap-2">
+                  <span className={cn("font-semibold", glyph[1])} aria-hidden>{glyph[0]}</span>
+                  <span className="font-medium"><Tx>{i.name}</Tx></span>
+                  <span className="ml-auto text-xs text-muted-foreground">{i.kind}</span>
+                </div>
+                {lines.map((l, k) => (
+                  <p key={k} className="text-muted-foreground"><Tx>{l.text.replace(`${i.name}: `, "").replace(/ \(\d+ of \d+ peer healers use it\)\.?$/, ".")}</Tx></p>
+                ))}
+                <div className="grid grid-cols-[3.5rem_1fr_2.5rem] items-center gap-x-2 gap-y-1 text-xs">
+                  <span className="text-muted-foreground">You</span>
+                  <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full bg-data" style={{ width: `${(i.uses / top) * 100}%` }} /></span>
+                  <span className="text-right tabular-nums">{i.uses}</span>
+                  <span className="text-muted-foreground">Peers</span>
+                  <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full bg-muted-foreground/50" style={{ width: `${((i.top_uses || 0) / top) * 100}%` }} /></span>
+                  <span className="text-right text-muted-foreground tabular-nums">{i.top_uses == null ? "-" : `~${Math.round(i.top_uses)}`}</span>
+                </div>
+                <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 text-xs">
+                  <dt className="text-muted-foreground">Used by</dt><dd>{i.top_users} of {i.top_count} peer healers</dd>
+                  {i.ready_pressure_s != null && <><dt className="text-muted-foreground">Sat ready under pressure</dt><dd>{dur(i.ready_pressure_s)}</dd></>}
+                  {i.paired != null && (
+                    <><dt className="text-muted-foreground">With your big cooldowns</dt>
+                      <dd>{pct(i.paired)}<span className="text-muted-foreground"> (peers {pct(i.top_paired)})</span></dd></>
+                  )}
+                </dl>
+                {!!i.ready_examples?.length && (
+                  <Collapsible>
+                    <CollapsibleTrigger className="group flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                      <ChevronRight className="size-3 transition-transform group-data-[panel-open]:rotate-90" />When it sat ready
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-1 flex flex-col gap-0.5 border-l pl-3 text-xs text-muted-foreground">
+                      {i.ready_examples.map((e, k) => <p key={k}><Tx>{e}</Tx></p>)}
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">Peer uses: median among the peer healers who used it, scaled to your run length. Big cooldowns:
+          within 10s of {res.spec.majors || "your major cooldowns"}.</p>
+    </>
+  )
+}
+
+function SpellsDetail({ res }: { res: Analysis }) {
+  const sc = res.spell_choice, G = res.spec.group || "Group heal", S = res.spec.single || "Single-target heal"
+  if (!sc?.you) return null
+  return (
+    <>
+          <VerdictLines v={res.verdicts?.spells} />
+          <Table head={["Situation at cast", "Your heals", `Your ${G} share`, `Top ${G} share`, `${G} overheal (you / top)`,
+                        `${S} overheal (you / top)`, `Your healing per cast (${G} / ${S})`, "Your mana"]}
+                 rows={(Object.keys(SITUATION) as (keyof typeof SITUATION)[]).map((s) => {
+                   const y = sc.you![s], t: Partial<typeof y> = sc.top?.[s] || {}
+                   return [SITUATION[s], y.casts, pct(y.ch_share), pct(t.ch_share), `${pct(y.ch_overheal)} / ${pct(t.ch_overheal)}`,
+                           `${pct(y.hw_overheal)} / ${pct(t.hw_overheal)}`, `${k(y.ch_effective)} / ${k(y.hw_effective)}`, pct(y.mana)]
+                 })}
+                 note={`"Injured" = below 80% HP just before the heal landed. Healing per cast counts every target hit.`} />
+          {Object.values(sc.buffs?.you || {}).some((y) => y.casts) && (
+            <Table head={["Buff up at cast", "Your heals", `Your ${G} share`, `Top ${G} share`, `Your per cast (${G} / ${S})`, `Top per cast (${G} / ${S})`]}
+                   rows={Object.entries(sc.buffs!.you).filter(([, y]) => y.casts).map(([name, y]) => {
+                     const t: Partial<typeof y> = sc.buffs!.top?.[name] || {}
+                     return [name, y.casts, pct(y.ch_share), pct(t.ch_share), `${k(y.ch_effective)} / ${k(y.hw_effective)}`,
+                             `${k(t.ch_effective)} / ${k(t.hw_effective)}`]
+                   })} />
+          )}
+    </>
+  )
+}
+
+function PullsDetail({ res }: { res: Analysis }) {
   const reqs = res.requirements || []
   const rows: React.ReactNode[][] = []
   for (const q of reqs) {
@@ -251,24 +233,74 @@ export function Pulls({ res }: { res: Analysis }) {
     }
   }
   return (
-    <Section title="Pulls vs peers" count={countOf(reqs.length > 0, res.verdicts?.pulls)} empty="No pulls to compare.">
-      <VerdictBlock v={res.verdicts?.pulls}>
-        <Table head={["Pull", "Time", "Group HP", "Top HP", "Dmg in/s", "Top in/s", "Heal/s", "Top heal/s"]} rows={rows} />
-      </VerdictBlock>
-    </Section>
+    <>
+      <VerdictLines v={res.verdicts?.pulls} />
+      <Table head={["Pull", "Time", "Group HP", "Top HP", "Dmg in/s", "Top in/s", "Heal/s", "Top heal/s"]} rows={rows} />
+    </>
   )
 }
 
-export function GoodCalls({ res }: { res: Analysis }) {
+function GoodDetail({ res }: { res: Analysis }) {
   const good = res.good_calls || []
   return (
-    <Section title="Good calls" count={good.length} empty="Good calls: none recorded.">
-      <Fold label={<span className="font-semibold text-good">✓ {good.length} cooldowns pressed at the right moment</span>}>
+    <div className="flex flex-col gap-2">
         {good.map((g, i) => (
           <p key={i}><span className="text-good">✓</span> <Tx>{g.title}</Tx> <span className="text-xs text-muted-foreground">{pullShort(g.pull)}</span>
             <span className="block pl-4 text-muted-foreground"><Tx>{g.detail.join(" ")}</Tx></span></p>
         ))}
-      </Fold>
-    </Section>
+    </div>
+  )
+}
+
+type Check = { key: string; title: string; has: boolean; empty: string; ok: boolean; headline: string; todo: number; detail: React.ReactNode }
+
+// The headline without its section name or "no change needed" tail: what fits on a tile.
+const brief = (h?: string) => (h || "").replace(/^[^:]+:\s*/, "").replace(/\s*-\s*no change needed\.?$/, "").replace(/\.$/, "")
+  .replace(/^./, (c) => c.toUpperCase())
+
+// The shorter checks as one row of tiles across the width, each with its verdict; picking one opens its detail
+// full width under the row (one at a time), so its blocks and tables always have room.
+export function Checks({ res }: { res: Analysis }) {
+  const [open, setOpen] = useState<string | null>(null)
+  const v = res.verdicts || {}, G = res.spec.group || "Group heal", S = res.spec.single || "Single-target heal"
+  const good = res.good_calls || []
+  const list: Check[] = [
+    { key: "items", title: "Trinkets & consumables", has: !!res.items?.length, empty: "None used",
+      ok: v.items?.ok ?? true, headline: brief(v.items?.headline), todo: todo(v.items), detail: <ItemsDetail res={res} /> },
+    { key: "spells", title: `${S} vs ${G}`, has: !!res.spell_choice?.you, empty: "Not enough heals to judge",
+      ok: v.spells?.ok ?? true, headline: brief(v.spells?.headline), todo: todo(v.spells), detail: <SpellsDetail res={res} /> },
+    { key: "pulls", title: "Pulls vs peers", has: !!res.requirements?.length, empty: "No pulls to compare",
+      ok: v.pulls?.ok ?? true, headline: brief(v.pulls?.headline), todo: todo(v.pulls), detail: <PullsDetail res={res} /> },
+    { key: "good", title: "Good calls", has: good.length > 0, empty: "None recorded",
+      ok: true, headline: `${good.length} cooldown${good.length === 1 ? "" : "s"} pressed at the right moment`, todo: 0, detail: <GoodDetail res={res} /> },
+  ]
+  const shown = list.find((c) => c.key === open && c.has)
+  return (
+    <section className="flex flex-col gap-3 border-t pt-7">
+      <h2 className="text-lg font-semibold tracking-tight">Other checks</h2>
+      <div className="grid grid-cols-2 gap-2 @4xl:grid-cols-4" role="tablist">
+        {list.map((c) => (
+          <button key={c.key} type="button" role="tab" aria-selected={open === c.key} disabled={!c.has}
+                  onClick={() => setOpen(open === c.key ? null : c.key)}
+                  className={cn("flex flex-col gap-1 rounded-md border px-3 py-2.5 text-left hover:bg-accent/50 disabled:cursor-default disabled:hover:bg-transparent",
+                                open === c.key && "border-foreground/60 bg-accent/50")}>
+            <span className="text-xs text-muted-foreground">{c.title}</span>
+            {c.has ? (
+              <span className="grid grid-cols-[0.9rem_1fr] gap-x-1.5 text-sm font-medium">
+                <span className={cn("text-center font-semibold", c.ok ? "text-good" : "text-med")} aria-hidden>{c.ok ? "✓" : "→"}</span>
+                <span className="line-clamp-2">{c.headline}</span>
+              </span>
+            ) : <span className="text-sm text-muted-foreground">{c.empty}</span>}
+            {c.todo > 0 && <span className="pl-[1.275rem] text-xs text-med">{c.todo} to change</span>}
+          </button>
+        ))}
+      </div>
+      {shown && (
+        <div role="tabpanel" className="flex flex-col gap-4 rounded-md border p-4 text-sm">
+          <h3 className="font-semibold">{shown.title}</h3>
+          {shown.detail}
+        </div>
+      )}
+    </section>
   )
 }
