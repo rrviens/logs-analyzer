@@ -502,14 +502,15 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
         ready_line = (f"Not a defensive problem: {dodge['ability']} is damage to dodge ({dodge['why']}). "
                       f"Standing in it was the mistake.")
     elif savers:
-        ready_line = "Ready and would likely have saved them: " + ", ".join(
-            f"{i['name']} ({i['owner']}, ~{i['lowest']:.0%}" + (", costs a GCD - holding it can be right" if i.get("gcd")
-                                                                else "") + ")" for i in savers) + "."
+        ready_line = "; ".join(
+            f"{i['name']} ({i['owner']}) - would likely have saved them, ~{i['lowest']:.0%}"
+            + (" (costs a GCD - holding it can be right)" if i.get("gcd") else "") for i in savers) + "."
     elif ready_any:
-        ready_line = "Ready but not enough on its own: " + ", ".join(f"{i['name']} ({i['owner']})" for i in ready_any) + "."
+        ready_line = (", ".join(f"{i['name']} ({i['owner']})" for i in ready_any)
+                      + f" - ready, but not enough on {'its' if len(ready_any) == 1 else 'their'} own.")
     else:
         why = [f"{i['name']} ({i['owner']}): {i['text']}" for i in every if i["status"] == "cooldown"][:4]
-        ready_line = "Nothing was ready. " + (" ".join(why) if why else "No tracked defensives for this group.")
+        ready_line = "Nothing. " + (" ".join(why) if why else "No tracked defensives for this group.")
 
     sm = c.seg_models[pull] if pull is not None else None
     expected = sm is not None and sm["deaths_per_run"] >= EXPECTED_DEATHS
@@ -522,12 +523,12 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
         severity = min(severity, 30)  # their threat / positioning, not your healing
     context = [["Ready?", ready_line]]
     if no_window:
-        context.append(["No reaction window", f"{' and '.join(i['name'] for i in no_window)} "
-                        f"{'was' if len(no_window) == 1 else 'were'} ready, but no reaction window "
-                        f"({r.get('reaction', {}).get('why', '')}) - not a mistake."])
+        context.append(["No reaction window", f"{' and '.join(i['name'] for i in no_window)} - "
+                        f"{'was' if len(no_window) == 1 else 'were'} ready, but there was no time to react "
+                        f"({r.get('reaction', {}).get('why', '')}); not a mistake."])
     if others and not dodge and not pull_melee and not skip:
-        context.append(["Group tools", "Also up, not expected to be spent on this: "
-                        + ", ".join(f"{i['name']} ({i['owner']})" for i in others) + "."])
+        context.append(["Group tools", ", ".join(f"{i['name']} ({i['owner']})" for i in others)
+                        + " - up, but not expected to be spent on this."])
     if advice:
         context.append(["What to do", " ".join(advice)])
     fix = ("Skip went wrong - not healing" if skip else "Let the tank get threat first" if pull_melee else f"Dodge {dodge['ability']}" if dodge else

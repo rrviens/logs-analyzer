@@ -81,8 +81,8 @@ function FindingCard({ f, id, recap }: { f: Finding; id: number; recap?: string 
               <span className="ml-2 text-xs text-muted-foreground" title={`${SEV_LABEL[sev]} impact, score ${f.severity}`}>{pullShort(f.pull)}</span></>}>
       {p ? (
         // One reading order for every finding: what was ready, the evidence, how peers compare, side notes.
-        <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-[9rem_1fr]">
-          {p.verdict.map(([k, v]) => <Part key={k} label={k.replace(/\?$/, "")}><p><Tx>{v}</Tx></p></Part>)}
+        <dl className="flex flex-col divide-y rounded-md border">
+          {p.verdict.map(([k, v]) => <Part key={k} label={label(k, f.rule)}><p><Tx>{v}</Tx></p></Part>)}
           {p.shares && (
             <Part label={`Damage, last ${p.shares.seconds}s`}>
               <div className="grid max-w-xl grid-cols-[minmax(0,auto)_1fr_2.5rem] items-center gap-x-3 gap-y-1">
@@ -112,13 +112,12 @@ function FindingCard({ f, id, recap }: { f: Finding; id: number; recap?: string 
           {p.notes.length > 0 && (
             <Part label="Also" muted>{p.notes.map((n, i) => <p key={i}><Tx>{n.replace(/^Also:\s*/, "")}</Tx></p>)}</Part>
           )}
-          {recap && (
-            <Part label="">
-              <button className="underline underline-offset-2 hover:no-underline" onClick={() => reveal(recap)}>Open the death recap</button>
-            </Part>
-          )}
         </dl>
-      ) : (
+      ) : null}
+      {p && recap && (
+        <button className="self-start underline underline-offset-2 hover:no-underline" onClick={() => reveal(recap)}>Open the death recap</button>
+      )}
+      {p ? null : (
         <>
           {f.context?.length > 0 && (
             <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
@@ -134,10 +133,17 @@ function FindingCard({ f, id, recap }: { f: Finding; id: number; recap?: string 
   )
 }
 
+// The rules' short labels, said as the question each answers. A death's "Ready?" lists the victim's own tools;
+// on cooldown findings it is about that one cooldown.
+const LABELS: Record<string, string> = { "Needed?": "Was it needed", "Group tools": "Other tools up", "Avoidable?": "Avoidable",
+                                         "Interrupts": "Interrupts", "Situation": "Situation" }
+const label = (k: string, rule: string) => k === "Ready?" ? (rule === "death" ? "What was ready" : "Was it ready") : LABELS[k] || k
+
+// One subcategory: its label, and the data that falls under it - each on its own line of the frame.
 function Part({ label, muted, children }: { label: string; muted?: boolean; children: React.ReactNode }) {
   return (
-    <div className="contents">
-      <dt className="pt-px text-xs font-medium text-muted-foreground">{label}</dt>
+    <div className="grid gap-x-6 gap-y-1 px-3 py-2.5 sm:grid-cols-[9.5rem_1fr]">
+      <dt className="text-sm font-medium">{label}</dt>
       <dd className={cn("flex min-w-0 flex-col gap-1", muted && "text-muted-foreground")}>{children}</dd>
     </div>
   )
