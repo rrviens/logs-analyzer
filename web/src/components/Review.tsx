@@ -73,8 +73,7 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
       </section>
       {shown.timeline?.pulls?.length ? <Suspense fallback={<Skeleton className="h-96 w-full rounded-xl" />}><Timeline ref={tl} res={shown} onPull={setLookPull} /></Suspense> : null}
       {result && <Checks res={result} />}
-      {/* Reading column: rows of text stay a readable length on wide screens. */}
-      <div className="flex max-w-5xl flex-col gap-8">
+      <div className="flex flex-col gap-8">
       {result?.findings ? (
         <Findings findings={result.findings} level={result.run.level} model={result.compared?.model} best={best}
                   pull={lookPull} onShowAll={() => setLookPull(null)} player={result.run.player}

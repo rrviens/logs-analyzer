@@ -75,7 +75,8 @@ export function Part({ label, muted, wide, tone, children }: {
   return (
     <div className={cn("grid gap-x-6 gap-y-1.5 px-3 py-2.5", !wide && "sm:grid-cols-[9.5rem_1fr]")}>
       <dt className={cn("text-sm font-medium", tone)}>{label}</dt>
-      <dd className={cn("flex min-w-0 flex-col gap-1", muted && "text-muted-foreground")}>{children}</dd>
+      {/* Running text wraps at a readable length; wide parts (columns, tables) use the full frame. */}
+      <dd className={cn("flex min-w-0 flex-col gap-1", !wide && "max-w-3xl", muted && "text-muted-foreground")}>{children}</dd>
     </div>
   )
 }
