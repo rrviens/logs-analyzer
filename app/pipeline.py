@@ -20,6 +20,7 @@ from app.chains import OUTCOME_S, Chain, find_chains
 from app.dps_windows import (BUCKET_LABEL, apply_peer_rates, bucket, calm_bins, calm_dps, damage_model, fetch_damage_done,
                              find_windows, gear_factor, learn_peer_rates, median_rate, summarize)
 from app.encounters import Encounter, load_encounter
+from app.finding_parts import structure
 from app.findings import DEATH_GROUP_MS as SAME_EVENT_MS, WIPE_DEATHS, WIPE_WINDOW_S, Analysis, Finding, TopRun, analyze
 from app.metrics import hot_refreshes, hots_active
 from app.reports import ability_icons, get_fights, get_players, get_trinkets, parse_report_url, pick_fight
@@ -42,7 +43,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 74
+RULES_VERSION = 75
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -417,7 +418,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     def as_dict(f):
         return {"clock": clock(f.t), "t_s": round((f.t - run.start) / 1000, 1), "pull": f.pull,
                 "severity": f.severity, "title": f.title, "detail": f.detail, "context": f.context, "rule": f.rule,
-                "short": f.short, "fix": f.fix}
+                "short": f.short, "fix": f.fix, "parts": structure(f.detail, f.context)}
 
     phase_out = [{**{k: v for k, v in r.items() if k not in ("start", "end")},
                   "pull": f"Pull {r['pull_idx'] + 1}: {run.pulls[r['pull_idx']].name}",

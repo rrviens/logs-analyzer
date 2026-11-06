@@ -4,6 +4,14 @@ import { lsGet } from "./wow"
 export type Finding = {
   t_s: number; clock: string; pull: string; severity: number; title: string; short?: string; fix?: string
   detail: string[]; context: [string, string][]; rule: string
+  parts?: Parts  // the detail sorted for reading (app/finding_parts.py); missing on results saved before it
+}
+export type Line = { text: string; sub: string[] }
+export type Parts = {
+  verdict: [string, string][]; peer_context: [string, string][]
+  shares: { seconds: number; rows: [string, number][] } | null
+  rates: [string, number, number, string][]; rates_title: string
+  why: Line[]; peers: Line[]; notes: string[]
 }
 
 export type Strict = "auto" | "relaxed" | "normal" | "strict"

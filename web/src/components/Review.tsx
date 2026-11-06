@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "@/lib/api"
 import { useAnalysis } from "@/lib/analysis"
-import { Deaths } from "@/components/Deaths"
+import { deathId, Deaths } from "@/components/Deaths"
 import { Findings } from "@/components/Findings"
 import { DpsWindows, GoodCalls, Items, Pulls, Spells } from "@/components/Sections"
 import { Group } from "@/components/Group"
@@ -69,7 +69,8 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
       {shown.timeline?.pulls?.length ? <Suspense fallback={<Skeleton className="h-96 w-full rounded-xl" />}><Timeline ref={tl} res={shown} onPull={setLookPull} /></Suspense> : null}
       {result?.findings ? (
         <Findings findings={result.findings} level={result.run.level} model={result.compared?.model} best={best}
-                  pull={lookPull} onShowAll={() => setLookPull(null)} />
+                  pull={lookPull} onShowAll={() => setLookPull(null)}
+                  deathRecap={(f) => { const d = f.rule === "death" && result.deaths?.find((x) => x.clock === f.clock); return d ? deathId(d.clock, d.victim) : null }} />
       ) : (
         <p className="text-sm text-muted-foreground">Findings appear when the comparison with your peers is done.</p>
       )}
