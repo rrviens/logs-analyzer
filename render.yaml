@@ -4,7 +4,7 @@ services:
   - type: web
     name: healer-review
     runtime: docker
-    plan: starter
+    plan: standard
     healthCheckPath: /healthz
     numInstances: 1
     disk:
@@ -17,7 +17,9 @@ services:
       - key: DATA_DIR
         value: /data
       - key: TOP_WORKERS
-        value: "1"  # one top log at a time keeps memory within the Starter plan's 512 MB (2 gave 502s, 2026-11-01)
+        value: "3"  # top logs fetched at once per analysis; 1 on the Starter plan's 512 MB (2 gave 502s, 2026-11-01)
+      - key: JOB_WORKERS
+        value: "2"  # analyses run at once (different users); with TOP_WORKERS=3 up to 6 top logs in Standard's 2 GB
       - key: FETCH_STREAMS
         value: "3"  # event streams of one log fetched at once (each trims page by page); lower to 2 on memory errors
       - key: ADMIN_USER_IDS

@@ -1,11 +1,13 @@
 """Background jobs kept in the database, so they survive restarts and wait out Warcraft Logs rate limits.
 
-One worker thread runs them one at a time (memory stays flat on a small host). A job that hits a rate limit is not
+JOB_WORKERS threads run them (1 on a small host keeps memory flat). A job someone clicked runs before keys queued in
+the background, and one person's jobs run one at a time (they share that person's rate limit). A job that hits a rate limit is not
 an error: it goes back to "waiting" with a retry time (WCL's Retry-After, else a growing backoff) and the page shows
 that instead. Progress lines live in memory only; status, notes and errors are in the table.
 """
 import json
 import logging
+import os
 import threading
 import time
 import traceback
@@ -18,6 +20,9 @@ log = logging.getLogger("uvicorn.error")
 BACKOFF_S = [60, 120, 300, 600, 900, 1800]  # waits between attempts on a rate limit (when WCL gives no Retry-After)
 MAX_ATTEMPTS = len(BACKOFF_S) + 1
 KEEP_DAYS = 7  # finished jobs older than this are deleted
+JOB_WORKERS = max(1, int(os.getenv("JOB_WORKERS", "1")))
+# Clicked jobs first (background "auto" ones last), then by due time. Used for picking and for queue positions.
+ORDER = "COALESCE(json_extract(payload, '$.auto'), 0), next_at, rowid"
 
 
 class Jobs:
@@ -44,7 +49,8 @@ class Jobs:
         return register
 
     def start(self) -> None:
-        threading.Thread(target=self._loop, daemon=True).start()
+        for _ in range(JOB_WORKERS):
+            threading.Thread(target=self._loop, daemon=True).start()
 
     def submit(self, owner: int, kind: str, payload: dict) -> str:
         job_id = uuid.uuid4().hex
@@ -63,6 +69,13 @@ class Jobs:
             rows = self.c.db.execute("SELECT id, payload FROM jobs WHERE owner = ? AND kind = ? AND status IN "
                                      "('queued', 'running', 'waiting') ORDER BY rowid DESC", (owner, kind)).fetchall()
         return next((jid for jid, p in rows if json.loads(p).get("url") == url), None)
+
+    def prioritize(self, job_id: str) -> None:
+        """Someone clicked a key that was queued in the background: it now goes ahead of background jobs."""
+        with self.c.lock:
+            self.c.db.execute("UPDATE jobs SET payload = json_remove(payload, '$.auto') WHERE id = ?", (job_id,))
+            self.c.db.commit()
+        self.wake.set()
 
     def busy(self) -> bool:
         """Someone's analysis is queued or running (background chores wait for it)."""
@@ -85,8 +98,8 @@ class Jobs:
 
     def _position(self, job: dict) -> int:
         with self.c.lock:
-            return self.c.db.execute("SELECT COUNT(*) FROM jobs WHERE status IN ('queued', 'running') AND "
-                                     "rowid < (SELECT rowid FROM jobs WHERE id = ?)", (job["id"],)).fetchone()[0]
+            ids = [r[0] for r in self.c.db.execute(f"SELECT id FROM jobs WHERE status = 'queued' ORDER BY {ORDER}")]
+        return ids.index(job["id"]) if job["id"] in ids else 0
 
     def _set(self, job_id: str, **fields) -> None:
         fields["updated"] = time.time()
@@ -96,9 +109,16 @@ class Jobs:
             self.c.db.commit()
 
     def _next(self) -> tuple | None:
+        """Pick and claim the next job in one step under the lock, so two workers never take the same one. Skips
+        owners who already have a job running."""
         with self.c.lock:
-            return self.c.db.execute("SELECT id, owner, kind, payload, attempts FROM jobs WHERE status IN ('queued', 'waiting') "
-                                     "AND next_at <= ? ORDER BY next_at, rowid LIMIT 1", (time.time(),)).fetchone()
+            job = self.c.db.execute("SELECT id, owner, kind, payload, attempts FROM jobs WHERE status IN ('queued', 'waiting') "
+                                    "AND next_at <= ? AND owner NOT IN (SELECT owner FROM jobs WHERE status = 'running') "
+                                    f"ORDER BY {ORDER} LIMIT 1", (time.time(),)).fetchone()
+            if job:
+                self.c.db.execute("UPDATE jobs SET status = 'running', note = NULL, updated = ? WHERE id = ?", (time.time(), job[0]))
+                self.c.db.commit()
+            return job
 
     def _soonest_wait(self) -> float:
         with self.c.lock:
@@ -109,11 +129,11 @@ class Jobs:
         while True:
             job = self._next()
             if not job:
+                # shortcut: while a due job waits for its owner's running one, idle workers re-check every second
                 self.wake.wait(self._soonest_wait())
                 self.wake.clear()
                 continue
             job_id, owner, kind, payload, attempts = job
-            self._set(job_id, status="running", note=None)
             progress = self.progress.setdefault(job_id, [])
             try:
                 key = self.handlers[kind](owner, json.loads(payload), progress.append,

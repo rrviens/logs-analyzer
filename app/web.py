@@ -636,8 +636,11 @@ def start_analysis(req: AnalyzeRequest, w: Who = Depends(who)):
         stored = None
     if stored and stored.get("rules_version") == RULES_VERSION:
         return {"result": stored}
-    job_id = (None if req.fresh else queue.pending(w.user_id, "analyze", req.url)) or \
-        queue.submit(w.user_id, "analyze", {"url": req.url, "name": name, "fresh": req.fresh})  # already queued: reuse
+    job_id = None if req.fresh else queue.pending(w.user_id, "analyze", req.url)
+    if job_id:
+        queue.prioritize(job_id)  # already queued (maybe in the background): reuse it, now as a click
+    else:
+        job_id = queue.submit(w.user_id, "analyze", {"url": req.url, "name": name, "fresh": req.fresh})
     return {"job": job_id, "result": stored, "stale": bool(stored)}
 
 

@@ -21,6 +21,7 @@ COPY data data
 ENV AUTH_MODE=wcl \
     DATA_DIR=/data \
     PORT=8000 \
+    JOB_WORKERS=2 \
     PYTHONUNBUFFERED=1
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request,os; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/healthz')"
