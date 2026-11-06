@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Check, ChevronDown, FlaskConical, Gauge, HeartPulse, LogOut, Monitor, Moon, Settings2, Sun } from "lucide-react"
+import { Check, ChevronDown, HeartPulse, LogOut, Monitor, Moon, Settings2, Sun } from "lucide-react"
 import { api, type Char, type Me, type MyChars, type Settings } from "@/lib/api"
 import type { ThemePick } from "@/lib/theme"
 import { CLASS_COLORS, lsGet, lsSet } from "@/lib/wow"
@@ -17,14 +17,17 @@ const recentChars = (): Char[] => { try { return JSON.parse(lsGet("recentChars2"
 
 type Props = { me: Me; settings: Settings; theme: ThemePick; setTheme: (p: ThemePick) => void; onCharacter: () => void; current?: string }
 
+// The header reads like a status bar: square, full-height segments split by hairlines, plain text, no pills.
+const SEG = "flex h-14 shrink-0 items-center gap-2 border-l px-4 text-sm hover:bg-accent/50"
+
 export function Header({ me, settings, theme, setTheme, onCharacter, current }: Props) {
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-sidebar px-4">
-      <a href="/" className="flex items-center gap-2 text-sm font-semibold">
-        <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground"><HeartPulse className="size-4" /></span>
+    <header className="square-ui sticky top-0 z-30 flex h-14 items-center border-b bg-sidebar pl-4">
+      <a href="/" className="flex items-center gap-2.5 text-sm font-semibold">
+        <span className="grid size-7 place-items-center bg-primary text-primary-foreground"><HeartPulse className="size-4" /></span>
         <span className="max-sm:sr-only">Healer Review</span>
       </a>
-      {current && <span className="hidden min-w-0 items-center gap-3 md:flex"><span className="text-muted-foreground/60">/</span><span className="truncate text-sm text-muted-foreground">{current}</span></span>}
+      {current && <span className="ml-3 hidden min-w-0 items-center gap-3 md:flex"><span className="text-muted-foreground/60">/</span><span className="truncate text-sm text-muted-foreground">{current}</span></span>}
       <span className="mr-auto" />
       {(me.mode === "local" || me.user) && <>
         <Budget />
@@ -33,10 +36,10 @@ export function Header({ me, settings, theme, setTheme, onCharacter, current }: 
       </>}
       <DisplayMenu theme={theme} setTheme={setTheme} />
       {me.user && (
-        <Button variant="ghost" size="sm" title={`Your Warcraft Logs user id: ${me.user_id}`}
+        <button type="button" className={SEG} title={`Signed in as ${me.user} (Warcraft Logs user id ${me.user_id}) - sign out`}
                 onClick={async () => { await fetch("/logout", { method: "POST" }); location.href = "/" }}>
-          <LogOut className="size-4" />{me.user}
-        </Button>
+          <LogOut className="size-4 text-muted-foreground" /><span className="max-md:sr-only">{me.user}</span>
+        </button>
       )}
     </header>
   )
@@ -72,7 +75,7 @@ function CharacterPicker({ settings, onCharacter }: { settings: Settings; onChar
   return (
     <>
       <DropdownMenu onOpenChange={onOpen}>
-        <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="gap-2 rounded-full" />}>
+        <DropdownMenuTrigger render={<button type="button" className={SEG} />}>
             {current ? (
               <>
                 <span className="font-semibold" style={{ color: CLASS_COLORS[current.class || ""] }}>{current.name}</span>
@@ -146,7 +149,7 @@ function DisplayMenu({ theme, setTheme }: { theme: ThemePick; setTheme: (p: Them
   const opts: [ThemePick, string, typeof Sun][] = [["system", "System", Monitor], ["dark", "Dark", Moon], ["light", "Light", Sun]]
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Display: theme and text size" />}>
+      <DropdownMenuTrigger render={<button type="button" className={cn(SEG, "px-3.5")} aria-label="Display: theme and text size" />}>
         <Settings2 className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
@@ -183,9 +186,13 @@ function Budget() {
   if (!b) return null
   const share = b.used / Math.max(1, b.limit)
   return (
-    <span className="hidden items-center gap-1.5 text-xs text-muted-foreground lg:flex" title="Warcraft Logs API points used this hour">
-      <Gauge className={cn("size-3.5", share > 0.8 ? "text-bad" : share > 0.5 ? "text-warn" : "")} />
-      WCL API {b.used.toLocaleString()}/{b.limit.toLocaleString()} · resets in {Math.ceil(b.reset_in_s / 60)} min
+    <span className={cn(SEG, "hidden cursor-default gap-2.5 text-xs text-muted-foreground hover:bg-transparent lg:flex")}
+          title={`Warcraft Logs API points used this hour; resets in ${Math.ceil(b.reset_in_s / 60)} min`}>
+      <span>API <span className="text-foreground tabular-nums">{b.used.toLocaleString()}</span>/{b.limit.toLocaleString()}</span>
+      <span className="h-1.5 w-14 bg-muted">
+        <span className={cn("block h-full", share > 0.8 ? "bg-bad" : share > 0.5 ? "bg-warn" : "bg-foreground/50")} style={{ width: `${Math.min(100, share * 100)}%` }} />
+      </span>
+      <span className="tabular-nums">{Math.ceil(b.reset_in_s / 60)} min</span>
     </span>
   )
 }
@@ -217,7 +224,8 @@ function Study() {
   const label = running ? `Study running: ${s.job?.progress?.at(-1) || "starting..."}`
     : s.job?.status === "error" ? "Study failed"
     : !s.exists ? "No top-player study"
-    : `Study ${days == null ? "age unknown" : days === 0 ? "today" : `${days}d old`}${counts.length ? ` · ${Math.min(...counts)}-${Math.max(...counts)} runs/dungeon` : ""}`
+    : `Study ${days == null ? "age unknown" : days === 0 ? "from today" : `${days}d old`}${counts.length
+      ? `, ${Math.min(...counts) === Math.max(...counts) ? Math.min(...counts) : `${Math.min(...counts)}-${Math.max(...counts)}`} runs per dungeon` : ""}`
   const stale = !running && (days == null || days >= 7)
   const ago = (iso?: string) => { const d = daysAgo(iso); return d == null ? "never" : d === 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago` }
   const start = async () => {
@@ -227,10 +235,12 @@ function Study() {
   }
   return (
     <>
-      <Button variant="outline" size="sm" className={cn("max-w-80 gap-1.5 rounded-full max-sm:hidden", stale && "border-warn/50 text-warn")}
+      <button type="button" className={cn(SEG, "max-w-80 text-xs max-sm:hidden")}
               title={s.job?.error || "The top-player study the analysis compares against"} onClick={() => setOpen(true)}>
-        <FlaskConical className="size-3.5" /><span className="truncate">{label}</span>
-      </Button>
+        {/* status mark: blue while running, amber when 7+ days old or failed, green when fresh */}
+        <i className={cn("size-2 shrink-0", running ? "animate-pulse bg-data" : stale || s.job?.status === "error" ? "bg-warn" : "bg-good")} />
+        <span className="truncate">{label}</span>
+      </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
