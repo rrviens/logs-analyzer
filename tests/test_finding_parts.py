@@ -11,6 +11,8 @@ def main() -> None:
         "Peer Resto Shamans with Earthbound's Imprint on themselves (50 times in 8 runs) got rid of it after 8.0s median.",
         "Also: Not topped before Frost Overload (25x).",
         "Also hit Pmon: it dropped off with no dispel or known escape seen after 3s.",
+        "Also: Not topped before Frost Overload (25x).",
+        "  8 of the 25 Frost Overload hits left someone below 20% HP.",
         "Your group averaged 74% before it; peer groups hold 87%.",
         "Top Resto Shamans go in with 3 Riptides out (you: 2.8).",
         "Healing pressure here is partly damage peer groups avoid or mitigate. Biggest differences:",
@@ -29,7 +31,7 @@ def main() -> None:
     assert s["why"][1]["sub"] == ["Pull 3: Keen Taskmaster (2:10): 40% more",
                                   "Melee: 30% of it landed on DPS or healer - mobs not held by the tank."]
     assert [p["text"][:10] for p in s["peers"]] == ["Peer Resto", "Your group", "Top Resto ", "Pull 4: Qu"], s["peers"]
-    assert len(s["notes"]) == 2 and s["rates_title"] == "Healing pressure here is partly damage peer groups avoid or mitigate."
+    assert len(s["notes"]) == 3 and s["notes"][2]["sub"] == ["8 of the 25 Frost Overload hits left someone below 20% HP."] and s["rates_title"] == "Healing pressure here is partly damage peer groups avoid or mitigate."
     assert s["verdict"] == [["Ready?", "Ready and would likely have saved them: Feint."]]
     assert s["peer_context"] == [["Top players", "Press it here 5 of 8 runs."]]
     print("finding parts ok")

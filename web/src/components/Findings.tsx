@@ -82,7 +82,7 @@ function FindingCard({ f, id, recap }: { f: Finding; id: number; recap?: string 
       {p ? (
         // One reading order for every finding: what was ready, the evidence, how peers compare, side notes.
         <dl className="flex flex-col divide-y rounded-md border">
-          {p.verdict.map(([k, v]) => <Part key={k} label={label(k, f.rule)}><p><Tx>{v}</Tx></p></Part>)}
+          {p.verdict.map(([k, v]) => <Part key={k} label={label(k, f.rule)}>{v.split("\n").map((l, i) => <p key={i}><Tx>{l}</Tx></p>)}</Part>)}
           {p.shares && (
             <Part label={`Damage, last ${p.shares.seconds}s`}>
               <div className="grid max-w-xl grid-cols-[minmax(0,auto)_1fr_2.5rem] items-center gap-x-3 gap-y-1">
@@ -105,12 +105,15 @@ function FindingCard({ f, id, recap }: { f: Finding; id: number; recap?: string 
           )}
           {(p.peers.length > 0 || p.peer_context.length > 0) && (
             <Part label="Compared with peers">
-              {p.peer_context.map(([k, v]) => <p key={k}><Tx>{v}</Tx></p>)}
+              {p.peer_context.flatMap(([k, v]) => v.split("\n").map((l, i) => <p key={`${k}${i}`}><Tx>{l}</Tx></p>))}
               <Lines items={p.peers} />
             </Part>
           )}
           {p.notes.length > 0 && (
-            <Part label="Also" muted>{p.notes.map((n, i) => <p key={i}><Tx>{n.replace(/^Also:\s*/, "")}</Tx></p>)}</Part>
+            <Part label="Also" muted><Lines items={p.notes.map((n) => {
+              const l = typeof n === "string" ? { text: n, sub: [] } : n  // results saved before rules 77 had plain strings
+              return { ...l, text: l.text.replace(/^Also:\s*/, "") }
+            })} /></Part>
           )}
         </dl>
       ) : null}

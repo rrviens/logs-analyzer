@@ -350,7 +350,7 @@ def _merge_same_moment(findings: list[Finding]) -> list[Finding]:
         host = next((m for m in merged if m.pull == f.pull and abs(m.t - f.t) <= MERGE_S * 1000), None)
         if host:
             host.detail.append(f"Also: {f.title}.")
-            host.detail.extend(f.detail)
+            host.detail.extend(f"  {d}" for d in f.detail)
             host.context = host.context or f.context
         else:
             merged.append(Finding(f.t, f.pull, f.severity, f.title, list(f.detail), list(f.context), f.rule, fix=f.fix))
@@ -502,15 +502,14 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
         ready_line = (f"Not a defensive problem: {dodge['ability']} is damage to dodge ({dodge['why']}). "
                       f"Standing in it was the mistake.")
     elif savers:
-        ready_line = "; ".join(
+        ready_line = "\n".join(
             f"{i['name']} ({i['owner']}) - would likely have saved them, ~{i['lowest']:.0%}"
             + (" (costs a GCD - holding it can be right)" if i.get("gcd") else "") for i in savers) + "."
     elif ready_any:
-        ready_line = (", ".join(f"{i['name']} ({i['owner']})" for i in ready_any)
-                      + f" - ready, but not enough on {'its' if len(ready_any) == 1 else 'their'} own.")
+        ready_line = "\n".join(f"{i['name']} ({i['owner']}) - ready, but not enough on its own." for i in ready_any)
     else:
         why = [f"{i['name']} ({i['owner']}): {i['text']}" for i in every if i["status"] == "cooldown"][:4]
-        ready_line = "Nothing. " + (" ".join(why) if why else "No tracked defensives for this group.")
+        ready_line = "\n".join(["Nothing - these were on cooldown:", *why] if why else ["Nothing - no tracked defensives for this group."])
 
     sm = c.seg_models[pull] if pull is not None else None
     expected = sm is not None and sm["deaths_per_run"] >= EXPECTED_DEATHS
@@ -527,8 +526,8 @@ def _death_from_recap(c: _Ctx, group: list[list], r: dict) -> Finding:
                         f"{'was' if len(no_window) == 1 else 'were'} ready, but there was no time to react "
                         f"({r.get('reaction', {}).get('why', '')}); not a mistake."])
     if others and not dodge and not pull_melee and not skip:
-        context.append(["Group tools", ", ".join(f"{i['name']} ({i['owner']})" for i in others)
-                        + " - up, but not expected to be spent on this."])
+        context.append(["Group tools", "\n".join(f"{i['name']} ({i['owner']}) - up, but not expected to be spent on this."
+                                                 for i in others)])
     if advice:
         context.append(["What to do", " ".join(advice)])
     fix = ("Skip went wrong - not healing" if skip else "Let the tank get threat first" if pull_melee else f"Dodge {dodge['ability']}" if dodge else
@@ -965,7 +964,7 @@ def _not_topped(c: _Ctx) -> list[Finding]:
             near = sum(1 for h in hits if h.min_after < LETHAL_EHP)
             detail = [f"Your group averaged {mine:.0%} before it; peer groups hold {top:.0%}."]
             if near:
-                detail.append(f"{near} of {len(hits)} left someone below {LETHAL_EHP:.0%}.")
+                detail.append(f"{near} of the {len(hits)} {c.ability(ability)} hits left someone below {LETHAL_EHP:.0%} HP.")
             mh = model_hits.get(ability)
             if mh and c.spec.maintenance:
                 mine_rip = statistics.mean(c.hots[max(0, c.tl.bin_of(h.t) - 1)] for h in hits)

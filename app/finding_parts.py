@@ -13,7 +13,7 @@ PEER_CONTEXT = ("Top players", "Peers")
 
 def structure(detail: list[str], context: list[list[str]]) -> dict:
     """{verdict: [[label, text]], shares: {seconds, rows: [[name, pct]]} | None, rates: [[name, mine, peer, note]],
-    why: [{text, sub}], peers: [{text, sub}], notes: [text]} - indented lines nest under the line before them."""
+    why: [{text, sub}], peers: [{text, sub}], notes: [{text, sub}]} - indented lines nest under the line before them."""
     out = {"verdict": [c for c in context if c[0] not in PEER_CONTEXT],
            "peer_context": [c for c in context if c[0] in PEER_CONTEXT],
            "shares": None, "rates": [], "rates_title": "", "why": [], "peers": [], "notes": []}
@@ -36,8 +36,8 @@ def structure(detail: list[str], context: list[list[str]]) -> dict:
             last = None
             continue
         if NOTE.match(line):
-            out["notes"].append(line)
-            last = None
+            last = {"text": line, "sub": []}
+            out["notes"].append(last)
             continue
         last = {"text": line, "sub": []}
         out["peers" if PEER.search(line) else "why"].append(last)

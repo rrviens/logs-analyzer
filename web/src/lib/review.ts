@@ -11,7 +11,7 @@ export type Parts = {
   verdict: [string, string][]; peer_context: [string, string][]
   shares: { seconds: number; rows: [string, number][] } | null
   rates: [string, number, number, string][]; rates_title: string
-  why: Line[]; peers: Line[]; notes: string[]
+  why: Line[]; peers: Line[]; notes: (Line | string)[]
 }
 
 export type Strict = "auto" | "relaxed" | "normal" | "strict"
