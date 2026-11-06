@@ -47,6 +47,7 @@
     --color-foreground: var(--foreground);
     --color-background: var(--background);
     --color-data: var(--data);
+    --color-peer: var(--peer);
     --color-good: var(--good);
     --color-warn: var(--warn);
     --color-bad: var(--bad);
@@ -90,6 +91,7 @@
     --chart-5: #898781;
     --radius: 0.75rem;
     --data: #2f6fe0;
+    --peer: #5d6470;
     --good: #15803d; --warn: #b45309; --bad: #b91c1c; --high: #c2410c; --med: #a16207; --low: #4b5563;
     --sidebar: #ffffff;
     --sidebar-foreground: #161b22;
@@ -126,6 +128,7 @@
     --chart-4: #9085e9;
     --chart-5: #7d8794;
     --data: #5b8def;
+    --peer: #b4bac3;
     --good: #45d483; --warn: #ffa047; --bad: #f25c5c; --high: #ff7a59; --med: #f0b43c; --low: #a7b0bc;
     --sidebar: #171a1f;
     --sidebar-foreground: #e8ecf1;

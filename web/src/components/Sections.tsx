@@ -216,26 +216,82 @@ function SpellsDetail({ res }: { res: Analysis }) {
   )
 }
 
+type PullRow = { label: string; part: boolean; boss: boolean; you: number; peer: number | null
+                dmg: string; worseDmg: boolean; tip: string; cells: React.ReactNode[] }
+
+// Group HP through each pull (and each part of a boss), your group's dot against peer groups' ring; the line between
+// them turns red where yours sat lower. Damage taken beside it. The full numbers stay one click away as a table.
 function PullsDetail({ res }: { res: Analysis }) {
   const reqs = res.requirements || []
-  const rows: React.ReactNode[][] = []
+  const rows: PullRow[] = []
   for (const q of reqs) {
-    rows.push([q.pull, `${Math.round(q.duration_s)}s`,
-               <span className={cn(q.top_group_hp != null && q.group_hp < q.top_group_hp - 0.03 && "font-semibold text-bad")}>{pct(q.group_hp)}</span>,
-               pct(q.top_group_hp), k(q.intake), k(q.top_intake), k(q.healing), k(q.top_healing)])
+    rows.push({ label: pullShort(q.pull) || q.pull, part: false, boss: q.pull.includes("(boss)"), you: q.group_hp, peer: q.top_group_hp,
+                dmg: `${k(q.intake)}${q.top_intake == null ? "" : ` vs ${k(q.top_intake)}`}/s`,
+                worseDmg: q.top_intake != null && q.intake > q.top_intake * 1.2,
+                tip: `${q.pull} (${Math.round(q.duration_s)}s): group HP ${pct(q.group_hp)}, peers ${pct(q.top_group_hp)}; damage in ${k(q.intake)}/s vs ${k(q.top_intake)}; healing ${k(q.healing)}/s vs ${k(q.top_healing)}`,
+                cells: [q.pull, `${Math.round(q.duration_s)}s`, pct(q.group_hp), pct(q.top_group_hp), k(q.intake), k(q.top_intake), k(q.healing), k(q.top_healing)] })
     // Boss fights get a row per part (named after what began it).
     for (const ph of (res.phases || []).filter((ph) => ph.pull.split(":")[0] === q.pull.split(":")[0])) {
-      rows.push([<span className="pl-4 text-muted-foreground">{ph.phase === "Start" ? "start" : `after ${ph.phase}`} · {ph.clock}</span>, `${ph.duration_s}s`,
-                 <span className={cn(ph.top_group_hp != null && ph.group_hp < ph.top_group_hp - 0.05 && "font-semibold text-bad")}>{pct(ph.group_hp)}</span>,
-                 pct(ph.top_group_hp),
-                 <span className="text-muted-foreground">damage taken {(ph.intake * 100).toFixed(1)}%/s{ph.top_intake == null ? "" : ` vs ${(ph.top_intake * 100).toFixed(1)}%/s`}</span>,
-                 "", "", ""])
+      const name = ph.phase === "Start" ? "start" : `after ${ph.phase}`
+      rows.push({ label: name, part: true, boss: false, you: ph.group_hp, peer: ph.top_group_hp,
+                  dmg: `${(ph.intake * 100).toFixed(1)}%${ph.top_intake == null ? "" : ` vs ${(ph.top_intake * 100).toFixed(1)}%`}/s`,
+                  worseDmg: ph.top_intake != null && ph.intake > ph.top_intake * 1.2,
+                  tip: `${name} at ${ph.clock} (${ph.duration_s}s): group HP ${pct(ph.group_hp)}, peers ${pct(ph.top_group_hp)}; damage taken ${(ph.intake * 100).toFixed(1)}% of group HP/s`
+                       + (ph.top_intake == null ? "" : ` vs ${(ph.top_intake * 100).toFixed(1)}%`),
+                  cells: [`  ${name} (${ph.clock})`, `${ph.duration_s}s`, pct(ph.group_hp), pct(ph.top_group_hp), `${(ph.intake * 100).toFixed(1)}%/s`,
+                          ph.top_intake == null ? "-" : `${(ph.top_intake * 100).toFixed(1)}%/s`, "", ""] })
     }
   }
+  const vals = rows.flatMap((r) => [r.you, r.peer ?? r.you])
+  const lo = Math.max(0, Math.floor((Math.min(...vals) - 0.05) * 10) / 10)
+  const x = (v: number) => `${((v - lo) / (1 - lo)) * 100}%`
   return (
     <>
       <VerdictLines v={res.verdicts?.pulls} />
-      <Table head={["Pull", "Time", "Group HP", "Top HP", "Dmg in/s", "Top in/s", "Heal/s", "Top heal/s"]} rows={rows} />
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-data" />your group</span>
+        <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-full border-2 border-peer" />peer groups</span>
+        <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 rounded-full bg-bad" />yours lower</span>
+        <span>Average group HP through the pull</span>
+      </div>
+      <div className="grid grid-cols-[minmax(7rem,12rem)_minmax(8rem,1fr)_6.5rem] items-center gap-x-4 @3xl:grid-cols-[minmax(7rem,12rem)_minmax(8rem,1fr)_6.5rem_9rem]">
+        <span />
+        <span className="relative h-4 text-[11px] text-muted-foreground">
+          {[lo, (lo + 1) / 2, 1].map((t) => (
+            <span key={t} className="absolute -translate-x-1/2" style={{ left: x(t) }}>{Math.round(t * 100)}%</span>
+          ))}
+        </span>
+        <span className="text-xs text-muted-foreground">Group HP</span>
+        <span className="hidden text-xs text-muted-foreground @3xl:block">Damage taken</span>
+        {rows.map((r, i) => {
+          const worse = r.peer != null && r.you < r.peer - 0.03
+          const a = r.peer == null ? r.you : Math.min(r.you, r.peer), b = r.peer == null ? r.you : Math.max(r.you, r.peer)
+          return (
+            <div key={i} className="contents" title={r.tip}>
+              <span className={cn("truncate py-1.5 text-sm", r.part ? "pl-4 text-muted-foreground" : "font-medium", r.boss && "font-semibold")}>{r.label}</span>
+              <span className="relative h-6">
+                <span className="absolute inset-x-0 top-1/2 h-px bg-border" />
+                <span className={cn("absolute top-1/2 h-0.5 -translate-y-1/2 rounded-full", worse ? "bg-bad" : "bg-muted-foreground/40")}
+                      style={{ left: x(a), width: `calc(${x(b)} - ${x(a)})` }} />
+                {r.peer != null && <span className="absolute top-1/2 size-2.5 -translate-1/2 rounded-full border-2 border-peer bg-background" style={{ left: x(r.peer) }} />}
+                <span className="absolute top-1/2 size-2.5 -translate-1/2 rounded-full bg-data ring-2 ring-background" style={{ left: x(r.you) }} />
+              </span>
+              <span className="text-sm tabular-nums">{pct(r.you)}<span className="text-muted-foreground"> vs {r.peer == null ? "-" : pct(r.peer)}</span></span>
+              <span className={cn("hidden text-xs tabular-nums @3xl:block", r.worseDmg ? "font-medium" : "text-muted-foreground")}>
+                {r.worseDmg && <i className="mr-1.5 inline-block size-1.5 rounded-full bg-med align-middle" />}{r.dmg}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      <Collapsible>
+        <CollapsibleTrigger className="group flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          <ChevronRight className="size-3 transition-transform group-data-[panel-open]:rotate-90" />Show as table
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2">
+          <Table head={["Pull", "Time", "Group HP", "Top HP", "Dmg in/s", "Top in/s", "Heal/s", "Top heal/s"]} rows={rows.map((r) => r.cells)} />
+        </CollapsibleContent>
+      </Collapsible>
     </>
   )
 }

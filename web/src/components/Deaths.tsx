@@ -1,4 +1,6 @@
 import { useState } from "react"
+import { ChevronRight } from "lucide-react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { pullShort } from "@/lib/review"
 import { Tx } from "@/lib/timeline"
 import { LogRow } from "@/components/LogRow"
@@ -154,6 +156,12 @@ function Evidence({ d, player, events, all, setAll }: {
       </Part>
       <Part label="Last 10 seconds" wide>
       <p className="text-xs text-muted-foreground">Took {k(d.taken)}, healed {k(d.healed)} (max HP {k(d.max_hp)}).</p>
+      <LastSeconds d={d} />
+      <Collapsible>
+      <CollapsibleTrigger className="group flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+        <ChevronRight className="size-3 transition-transform group-data-[panel-open]:rotate-90" />Show every hit and heal
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 flex flex-col gap-2">
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="text-muted-foreground"><tr className="border-b text-left">
@@ -185,6 +193,8 @@ function Evidence({ d, player, events, all, setAll }: {
       {!all && d.events.length > 8 && (
         <button className="self-start text-xs underline underline-offset-2 hover:no-underline" onClick={() => setAll(true)}>Show all {d.events.length} events</button>
       )}
+      </CollapsibleContent>
+      </Collapsible>
       </Part>
     </>
   )
@@ -220,3 +230,44 @@ function ReadyCol({ title, items, owner }: { title: string; items: ReadyItem[]; 
   )
 }
 
+// The 10 seconds before the death: the victim's HP as a line, every hit (red, below) and heal (green, above) as a bar
+// sized by its share of max HP, defensives as diamonds. Hover any mark for what it was.
+function LastSeconds({ d }: { d: Death }) {
+  const W = 640, H = 120, top = 8, hpH = 64, laneY = top + hpH + 26, lane = 18, maxHp = d.max_hp || 1
+  const x = (dt: number) => ((Math.max(-10, dt) + 10) / 10) * W
+  const y = (hp: number) => top + (1 - hp) * hpH
+  const pts = d.events.filter((e) => e.hp != null).map((e) => `${x(e.dt).toFixed(1)},${y(e.hp!).toFixed(1)}`)
+  const size = (a?: number) => Math.max(2, Math.min(lane, ((a || 0) / maxHp) * lane * 2.5))
+  const tip = (e: Death["events"][number]) => `${e.dt.toFixed(1)}s ${e.kind === "hit" ? "Hit" : e.kind === "heal" ? "Heal" : "Defensive"}: ${e.ability}`
+    + (e.source ? ` (${e.source})` : "") + (e.amount ? `, ${k(e.amount)}` : "") + (e.hp != null ? `, HP after ${Math.round(e.hp * 100)}%` : "")
+  return (
+    <figure className="flex flex-col gap-1">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-3xl overflow-visible" role="img"
+           aria-label={`${d.victim}'s HP over the last 10 seconds before dying, with each hit and heal`}>
+        {[0, 0.5, 1].map((v) => <line key={v} x1={0} x2={W} y1={y(v)} y2={y(v)} className="stroke-border" strokeWidth={1} />)}
+        {[0.5, 1].map((v) => <text key={v} x={-6} y={y(v) + 4} textAnchor="end" className="fill-muted-foreground text-[10px]">{v * 100}%</text>)}
+        <polyline points={pts.join(" ")} fill="none" className="stroke-data" strokeWidth={2} strokeLinejoin="round" />
+        {d.events.filter((e) => e.hp != null).map((e, i) => (
+          <circle key={i} cx={x(e.dt)} cy={y(e.hp!)} r={2.5} className="fill-data"><title>{tip(e)}</title></circle>
+        ))}
+        <line x1={0} x2={W} y1={laneY} y2={laneY} className="stroke-border" strokeWidth={1} />
+        {d.events.map((e, i) => e.kind === "defensive" ? (
+          <rect key={i} x={x(e.dt) - 4} y={top - 4} width={8} height={8} transform={`rotate(45 ${x(e.dt)} ${top})`} className="fill-foreground"><title>{tip(e)}</title></rect>
+        ) : (
+          <rect key={i} x={x(e.dt) - 1.5} width={3} rx={1}
+                y={e.kind === "heal" ? laneY - size(e.amount) : laneY} height={size(e.amount)}
+                className={e.kind === "heal" ? "fill-good" : "fill-bad"}><title>{tip(e)}</title></rect>
+        ))}
+        <text x={W} y={y(0) + 4} textAnchor="end" dx={10} className="fill-bad text-[12px] font-bold">✕</text>
+        {[-10, -5, 0].map((t) => <text key={t} x={x(t)} y={H} textAnchor={t === -10 ? "start" : t === 0 ? "end" : "middle"} className="fill-muted-foreground text-[10px]">{t}s</text>)}
+      </svg>
+      <figcaption className="flex flex-wrap gap-x-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 rounded-full bg-data" />HP</span>
+        <span className="flex items-center gap-1.5"><i className="h-2.5 w-1 rounded-sm bg-bad" />hit (below)</span>
+        <span className="flex items-center gap-1.5"><i className="h-2.5 w-1 rounded-sm bg-good" />heal (above)</span>
+        <span className="flex items-center gap-1.5"><i className="size-2 rotate-45 bg-foreground" />defensive</span>
+        <span>Bar height = share of max HP. Hover a mark for details.</span>
+      </figcaption>
+    </figure>
+  )
+}
