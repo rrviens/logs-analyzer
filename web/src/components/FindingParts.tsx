@@ -9,7 +9,7 @@ const LABELS: Record<string, string> = { "Needed?": "Was it needed", "Group tool
 const label = (k: string, rule: string) => k === "Ready?" ? (rule === "death" ? "What was ready" : "Was it ready") : LABELS[k] || k
 
 // A finding opened: one reading order for every finding - what was ready, the evidence, how peers compare, side notes.
-export function FindingParts({ f }: { f: Finding }) {
+export function FindingParts({ f, children }: { f: Finding; children?: React.ReactNode }) {
   const p = f.parts
   return (
     <>
@@ -48,6 +48,7 @@ export function FindingParts({ f }: { f: Finding }) {
               return { ...l, text: l.text.replace(/^Also:\s*/, "") }
             })} /></Part>
           )}
+          {children}
         </dl>
       ) : null}
       {p ? null : (
@@ -66,10 +67,14 @@ export function FindingParts({ f }: { f: Finding }) {
   )
 }
 
-function Part({ label, muted, children }: { label: string; muted?: boolean; children: React.ReactNode }) {
+// One subcategory on its own line of the frame: label left, its data right. Wide data (columns, tables) puts the label
+// above instead, so it keeps the full width.
+export function Part({ label, muted, wide, tone, children }: {
+  label: string; muted?: boolean; wide?: boolean; tone?: string; children: React.ReactNode
+}) {
   return (
-    <div className="grid gap-x-6 gap-y-1 px-3 py-2.5 sm:grid-cols-[9.5rem_1fr]">
-      <dt className="text-sm font-medium">{label}</dt>
+    <div className={cn("grid gap-x-6 gap-y-1.5 px-3 py-2.5", !wide && "sm:grid-cols-[9.5rem_1fr]")}>
+      <dt className={cn("text-sm font-medium", tone)}>{label}</dt>
       <dd className={cn("flex min-w-0 flex-col gap-1", muted && "text-muted-foreground")}>{children}</dd>
     </div>
   )

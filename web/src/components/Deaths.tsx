@@ -2,7 +2,7 @@ import { useState } from "react"
 import { pullShort } from "@/lib/review"
 import { Tx } from "@/lib/timeline"
 import { LogRow } from "@/components/LogRow"
-import { FindingParts } from "@/components/FindingParts"
+import { FindingParts, Part } from "@/components/FindingParts"
 import { type Finding, sevOf } from "@/lib/review"
 import { CLASS_COLORS } from "@/lib/wow"
 import { cn } from "@/lib/utils"
@@ -69,9 +69,9 @@ export function Deaths({ deaths, player, classes = {}, findingFor }: {
   )
 }
 
-function Story({ label, children, tone }: { label: string; children: React.ReactNode; tone?: string }) {
-  return <p><b className={tone}>{label}</b> {children}</p>
-}
+const Story = ({ label, children, tone }: { label: string; children: React.ReactNode; tone?: string }) =>
+  <Part label={label.replace(/:$/, "")} tone={tone}><p>{children}</p></Part>
+const FRAME = "flex flex-col divide-y rounded-md border"
 
 // One death, fully: the finding's verdict when the review flagged it (what was ready, damage, what happened, peers),
 // then what only the recap knows - everyone's defensives with "would they have lived" and the last seconds of hits.
@@ -82,8 +82,7 @@ export function DeathView({ d, f, player }: { d: Death; f?: Finding | null; play
   const s = d.stoppable
   if (!f?.parts) return <DeathBody d={d} player={player} />
   return (
-    <>
-      <FindingParts f={f} />
+    <FindingParts f={f}>
       {d.note && <Story label={`About ${d.cause?.name || d.killing}:`}>{d.note}</Story>}
       {d.avoid && <Story label={`${d.avoid.label}:`} tone="text-med">{d.avoid.line.split(" - ").slice(1).join(" - ")}</Story>}
       {s && (
@@ -94,7 +93,7 @@ export function DeathView({ d, f, player }: { d: Death; f?: Finding | null; play
         </Story>
       )}
       <Evidence d={d} player={player} events={events} all={all} setAll={setAll} />
-    </>
+    </FindingParts>
   )
 }
 
@@ -103,12 +102,11 @@ function DeathBody({ d, player }: { d: Death; player: string }) {
   const events = all ? d.events : d.events.slice(-8)
   const s = d.stoppable
   return (
-    <>
+    <dl className={FRAME}>
       {d.story?.advice.length ? (
-        <div>
-          <b>What to do</b>
-          <ul className="mt-1 list-disc pl-5 marker:text-med">{d.story.advice.map((a, i) => <li key={i}><Tx>{a}</Tx></li>)}</ul>
-        </div>
+        <Part label="What to do">
+          <ul className="list-disc pl-5 marker:text-med">{d.story.advice.map((a, i) => <li key={i}><Tx>{a}</Tx></li>)}</ul>
+        </Part>
       ) : null}
       {d.note && <Story label={`About ${d.cause?.name || d.killing}:`}>{d.note}</Story>}
       {d.avoid && <Story label={`${d.avoid.label}:`} tone="text-med">{d.avoid.line.split(" - ").slice(1).join(" - ")}</Story>}
@@ -129,14 +127,16 @@ function DeathBody({ d, player }: { d: Death; player: string }) {
       {d.cause && (
         <Story label="Cause:"><Tx>{d.cause.lines.join("; ")}</Tx>{d.cause.name !== d.killing ? `; killing blow ${d.killing}` : ""}</Story>
       )}
-      {d.story && <ul className="list-disc pl-5 text-muted-foreground">{d.story.lines.map((l, i) => <li key={i}><Tx>{l}</Tx></li>)}</ul>}
+      {!!d.story?.lines.length && (
+        <Part label="What happened"><ul className="flex flex-col gap-1">{d.story.lines.map((l, i) => <li key={i}><Tx>{l}</Tx></li>)}</ul></Part>
+      )}
       {!!d.last_casts?.filter((x) => x.target).length && (
         <Story label="Last casts:">
           {d.last_casts.filter((x) => x.target).map((x) => `${x.ability} → ${x.target}${x.hp != null ? ` @${Math.round(x.hp * 100)}%` : ""} (${x.dt.toFixed(1)}s)`).join("; ")}
         </Story>
       )}
       <Evidence d={d} player={player} events={events} all={all} setAll={setAll} />
-    </>
+    </dl>
   )
 }
 
@@ -145,12 +145,15 @@ function Evidence({ d, player, events, all, setAll }: {
 }) {
   return (
     <>
-      <div className="grid gap-4 border-y py-3 md:grid-cols-3 md:gap-0 md:divide-x">
+      <Part label="Defensives - would they have lived?" wide>
+      <div className="grid gap-4 md:grid-cols-3 md:gap-0 md:divide-x">
         <ReadyCol title="Group" items={d.ready.group} owner />
         <ReadyCol title={d.victim === player ? `${d.victim} (you, died)` : `${d.victim} (died)`} items={d.ready.victim} />
         <ReadyCol title={`${player} (healer)`} items={d.ready.healer} />
       </div>
-      <p className="text-xs text-muted-foreground">Last 10s: took {k(d.taken)}, healed {k(d.healed)} (max HP {k(d.max_hp)}).</p>
+      </Part>
+      <Part label="Last 10 seconds" wide>
+      <p className="text-xs text-muted-foreground">Took {k(d.taken)}, healed {k(d.healed)} (max HP {k(d.max_hp)}).</p>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="text-muted-foreground"><tr className="border-b text-left">
@@ -182,6 +185,7 @@ function Evidence({ d, player, events, all, setAll }: {
       {!all && d.events.length > 8 && (
         <button className="self-start text-xs underline underline-offset-2 hover:no-underline" onClick={() => setAll(true)}>Show all {d.events.length} events</button>
       )}
+      </Part>
     </>
   )
 }
