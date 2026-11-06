@@ -43,7 +43,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 77
+RULES_VERSION = 78
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -824,10 +824,10 @@ def _judge(r: dict, encounter) -> None:
 
 
 def _death_short(r: dict) -> tuple[str, str]:
-    """Collapsed death card: 'Died in Bloodthorn Roots (9.5s)' and one fix."""
+    """Collapsed death card: 'Died to Bloodthorn Roots' (same words as its finding; how long a debuff was on them is
+    in the story) and one fix."""
     story, cause = r.get("story"), r["cause"]["name"]
-    short = (f"Died in {cause} ({story['on_for']:.1f}s)" if story and story["debuff"] == cause
-             else f"Died to {cause}")
+    short = f"Died to {cause}"
     every = [i for i in r["ready"]["victim"]  # only the victim's own tools are a fix
              if not i.get("escape") and not i.get("no_window") and not i.get("gcd")]
     savers = [i for i in every if i["status"] == "ready" and i.get("verdict") == "lived"]
