@@ -49,6 +49,11 @@ export function RunHeader({ res, url, onReanalyze, busy }: { res: Analysis; url:
       <p className="text-sm text-muted-foreground">
         {r.player} ({res.spec.label}) · {r.duration_min} min · {r.deaths} death{r.deaths === 1 ? "" : "s"} ·{" "}
         {c ? <>compared with {c.count} peer {res.spec.label} logs ({c.levels.map((l) => `+${l}`).join(", ") || "none"})
+               {!!c.skipped?.length && (
+                 <span className="cursor-help underline decoration-dotted underline-offset-2"
+                       title={c.skipped.map((s) => `${s.player} +${s.key}: ${s.reasons.join(", ")}`).join("\n")}>
+                   {" "}({c.skipped.length} skipped: incomplete data)</span>
+               )}
                {c.model ? ` · top players ${c.model}` : ""}</> : "comparing with peer logs..."}
       </p>
     </div>

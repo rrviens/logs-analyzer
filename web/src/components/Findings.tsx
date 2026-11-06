@@ -27,7 +27,7 @@ export function Findings({ findings, level, model, best, pull, onShowAll, deathF
   const choose = (p: Strict) => { lsSet("strict", p); setPick(p) }  // same setting as the classic page's Display menu
 
   return (
-    <section className="flex flex-col gap-4 border-t pt-7">
+    <section id="sec-look" className="flex scroll-mt-28 flex-col gap-4 border-t pt-7">
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-lg font-semibold tracking-tight">What to look at</h2>
         <span className="text-sm text-muted-foreground tabular-nums">{shown.length}</span>

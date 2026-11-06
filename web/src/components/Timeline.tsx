@@ -84,20 +84,31 @@ export type TimelineHandle = { focus: (s: number, e?: number | null) => void }
 
 // The run at a glance (overview strip: click a pull, drag a range), then the chart of what's open: HP, your events,
 // each player's defensives. Drag across the chart to select a range: it zooms there and summarizes it.
-export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p: TPull | null) => void }>(function Timeline({ res, onPull }, ref) {
+export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p: TPull | null) => void; deep?: URLSearchParams | null }>(function Timeline({ res, onPull, deep }, ref) {
   const t = res.timeline as TimelineData
   const box = useRef<HTMLDivElement>(null), section = useRef<HTMLElement>(null)
   const chart = useRef<echarts.ECharts | null>(null)
   const sc = useMemo(() => squeeze(t.pulls), [t])
-  const [pull, setPull] = useState(() => { const v = +(lsGet(`pull:${res.run.dungeon}:${t.pulls[0]?.start_s}`) ?? -1); return v < t.pulls.length ? v : -1 })
-  const [zoom, setZoom] = useState<[number, number] | null>(null)  // run seconds
+  // A link can open a pull (&pull=3 or whole) and a zoomed range (&view=<from s>-<to s>); otherwise the pull last open.
+  const linkView = deep?.get("view")?.match(/^(\d+)-(\d+)$/)
+  const [zoom, setZoom] = useState<[number, number] | null>(() => linkView && +linkView[2] > +linkView[1] ? [+linkView[1], +linkView[2]] : null)  // run seconds
+  const [pull, setPull] = useState(() => {
+    if (zoom) return Math.max(0, sc.pullAt(zoom[0]))
+    const lp = deep?.get("pull")
+    if (lp) return lp === "whole" ? -1 : Math.min(t.pulls.length - 1, Math.max(0, +lp - 1))
+    const v = +(lsGet(`pull:${res.run.dungeon}:${t.pulls[0]?.start_s}`) ?? -1)
+    return v < t.pulls.length ? v : -1
+  })
   const [mark, setMark] = useState<[number, number] | null>(null)
   const [sel, setSel] = useState<[number, number] | null>(null)
   const [party, setParty] = useState(lsGet("tl2:party") !== "0")
   const [minor, setMinor] = useState(lsGet("tl2:minor") === "1")
   const [mana, setMana] = useState(lsGet("tl2:mana") === "1")
   const hasTop = !!res.preview || t.pulls.some((q) => q.study_curve)
-  const [base, setBase] = useState<Base>(lsGet("baseline") === "top" && hasTop ? "top" : "peers")
+  const [base, setBase] = useState<Base>(() => {
+    const want = deep?.get("base") || lsGet("baseline")  // &base=top opens on the top-player baseline
+    return want === "top" && hasTop ? "top" : "peers"
+  })
   const [dark, setDark] = useState(document.documentElement.classList.contains("dark"))
   const [readout, setReadout] = useState("")
 
@@ -263,6 +274,9 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
         { name: "Lowest player", type: "line" as const, xAxisIndex: 0, yAxisIndex: 0, data: data.lowest, showSymbol: false, sampling: "lttb" as const,
           lineStyle: { width: 1.5, color: C.high }, itemStyle: { color: C.high }, silent: true, z: 2 },
         { name: "Events", type: "scatter" as const, xAxisIndex: 1, yAxisIndex: 1, data: ev.map(evItem), z: 4, emphasis: { scale: 1.3 } },
+        { name: "Avoidable", type: "scatter" as const, xAxisIndex: 1, yAxisIndex: 1, z: 5, silent: true,
+          data: ev.filter((m) => m.kind === "hit" && m.avoid && !m.kick).map((m) => ({ value: [sc.toC(m.t_s), evRow("hit")], symbol: "rect",
+            symbolSize: 5, symbolOffset: [0, -10], itemStyle: { color: C.warn } })) },
         ...(party ? [
           { name: "Defensives", type: "custom" as const, xAxisIndex: 2, yAxisIndex: 2, z: 3,
             data: data.spans.map((d) => ({ value: [sc.toC(d.start_s), sc.toC(d.end_s), data.rowOf(d.lane)], tip: d.tip })),
@@ -351,7 +365,7 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
     : open && base === "top" && open.study_approx ? "Top-player band from the most similar pack (approximate)" : ""
 
   return (
-    <section ref={section} className="flex scroll-mt-18 flex-col gap-4 border-t pt-7">
+    <section ref={section} id="sec-timeline" className="flex scroll-mt-28 flex-col gap-4 border-t pt-7">
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-lg font-semibold tracking-tight">Timeline</h2>
         <select className="h-8 max-w-72 rounded-md border bg-background px-2 text-sm" aria-label="Pull" value={pull} onChange={(e) => openPull(+e.target.value)}>
@@ -382,6 +396,7 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
         <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 bg-high" />Lowest player</span>
         <span className="flex items-center gap-1.5"><i className="h-2.5 w-4 rounded-sm bg-muted-foreground/30" />{base === "top" ? "Top players" : "Peers"} (middle half, dashed = median)</span>
         <span className="flex items-center gap-1.5"><i className="h-2.5 w-1 rounded-sm bg-bad" />Big hit, unanswered</span>
+        <span className="flex items-center gap-1.5"><i className="size-1.5 bg-warn" />avoidable, <span className="text-warn">◆</span> not kicked</span>
         <span>⛓ chain pull · <span className="text-high">⚡</span> Bloodlust</span>
         {party && <>
           <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm bg-data/60" />Personal</span>

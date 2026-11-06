@@ -29,6 +29,17 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
   const shown = result || a.preview
   const [lookPull, setLookPull] = useState<TPull | null>(null)  // the pull open on the timeline filters "What to look at"
   const tl = useRef<TimelineHandle>(null)
+  // A link's extra parameters (?run=<this key>&pull=..&view=..&base=..&at=..) apply to the key it names only.
+  const deep = useMemo(() => { const q = new URLSearchParams(location.search); return q.get("run") === url ? q : null }, [url])
+  const at = deep?.get("at") || null
+  const CHECK_AT: Record<string, string> = { "sec-items": "items", "sec-spells": "spells", "sec-pulls": "pulls", "sec-good": "good" }
+  useEffect(() => {  // &at=<section>: scroll there once the full result is in
+    if (!at || !result) return
+    const id = CHECK_AT[at] ? "sec-checks" : at
+    const go = () => document.getElementById(id)?.scrollIntoView({ block: "start" })
+    const timers = [300, 1500].map((ms) => setTimeout(go, ms))  // again once the timeline (loaded later) has settled the layout
+    return () => timers.forEach(clearTimeout)
+  }, [at, !!result])  // eslint-disable-line react-hooks/exhaustive-deps
   const spells = useMemo(() => spellPattern(result?.spell_ids), [result])
   const ctx = useMemo(() => ({ focus: (s: number, e?: number | null) => tl.current?.focus(s, e), spells }), [spells])
   const [best, setBest] = useState<number | null>(null)  // your best timed key (Raider.io): sets how strict the review is
@@ -64,6 +75,7 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
           {a.updating || `Your run is ready; comparing with peers... ${a.progress.at(-1) || ""}`}
         </p>
       )}
+      {result && <SectionBar res={result} />}
       <section className="grid gap-x-10 gap-y-6 @4xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
         <div className="flex min-w-0 flex-col gap-5">
           <RunHeader res={shown} url={url} onReanalyze={saved ? undefined : a.reanalyze} busy={busy} />
@@ -71,8 +83,8 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
         </div>
         <Group res={shown} part="meters" />
       </section>
-      {shown.timeline?.pulls?.length ? <Suspense fallback={<Skeleton className="h-96 w-full rounded-xl" />}><Timeline ref={tl} res={shown} onPull={setLookPull} /></Suspense> : null}
-      {result && <Checks res={result} />}
+      {shown.timeline?.pulls?.length ? <Suspense fallback={<Skeleton className="h-96 w-full rounded-xl" />}><Timeline ref={tl} res={shown} onPull={setLookPull} deep={deep} /></Suspense> : null}
+      {result && <Checks res={result} initial={at && CHECK_AT[at]} />}
       <div className="flex flex-col gap-8">
       {result?.findings ? (
         <Findings findings={result.findings} level={result.run.level} model={result.compared?.model} best={best}
@@ -94,5 +106,26 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
       )}
     </div>
     </TimelineContext.Provider>
+  )
+}
+
+// A sticky row of section links with their counts, to move around a long review (as on the classic page).
+function SectionBar({ res }: { res: Analysis }) {
+  const todo = (v?: { lines?: { action: boolean }[] } | null) => v?.lines?.filter((l) => l.action).length || 0
+  const checks = todo(res.verdicts?.items) + todo(res.verdicts?.spells) + todo(res.verdicts?.pulls)
+  const links: [string, string, number | null][] = [
+    ["sec-timeline", "Timeline", null], ["sec-checks", "Other checks", checks || null],
+    ["sec-look", "What to look at", res.findings?.length ?? null], ["sec-deaths", "Death recaps", res.deaths?.length ?? null],
+    ["sec-dps", "DPS windows", (res.timeline?.dps_windows || []).filter((w) => w.use != null && w.use < 0.4).length || null],
+  ]
+  return (
+    <nav aria-label="Sections" className="sticky top-14 z-20 -mx-1 order-first flex flex-wrap gap-1 border-b bg-background/95 px-1 py-2 backdrop-blur">
+      {links.map(([id, label, n]) => (
+        <button key={id} type="button" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                className="border px-2.5 py-1 text-xs hover:border-foreground/40 hover:bg-accent/50">
+          {label}{n != null && <span className="ml-1.5 text-muted-foreground tabular-nums">{n}</span>}
+        </button>
+      ))}
+    </nav>
   )
 }

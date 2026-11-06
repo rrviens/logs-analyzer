@@ -44,7 +44,7 @@ export function Deaths({ deaths, player, classes = {}, findingFor }: {
   deaths: Death[]; player: string; classes?: Record<string, string | undefined>; findingFor: (d: Death) => Finding | null
 }) {
   return (
-    <section className="flex flex-col gap-4 border-t pt-7">
+    <section id="sec-deaths" className="flex scroll-mt-28 flex-col gap-4 border-t pt-7">
       <div className="flex items-center gap-3">
         <h2 className="text-lg font-semibold tracking-tight">Death recaps</h2>
         <span className="text-sm text-muted-foreground tabular-nums">{deaths.length}</span>

@@ -15,9 +15,9 @@ const k = (v?: number | null) => (v == null ? "-" : `${Math.round(v / 1000)}k`)
 const dur = (s: number) => (s >= 90 ? `${Math.floor(s / 60)} min ${s % 60}s` : `${s}s`)
 const m = (v: number) => `${(v / 1e6).toFixed(1)}M`
 
-function Section({ title, count, empty, children }: { title: string; count: number | string; empty: string; children: React.ReactNode }) {
+function Section({ id, title, count, empty, children }: { id?: string; title: string; count: number | string; empty: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-4 border-t pt-7">
+    <section id={id} className="flex scroll-mt-28 flex-col gap-4 border-t pt-7">
       <div className="flex items-center gap-3">
         <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
         <span className="text-sm text-muted-foreground tabular-nums">{count || 0}</span>
@@ -60,7 +60,7 @@ export function DpsWindows({ res }: { res: Analysis }) {
   const focus = useFocus()
   const worst = ws.filter((w) => w.missed >= 5e4).sort((a, b) => b.missed - a.missed).slice(0, 6)
   return (
-    <Section title="DPS windows" count={ws.length ? ws.filter((w) => w.use != null && w.use < 0.4).length || "ok" : 0}
+    <Section id="sec-dps" title="DPS windows" count={ws.length ? ws.filter((w) => w.use != null && w.use < 0.4).length || "ok" : 0}
              empty="No calm stretches long enough to deal damage in this run.">
       {d && (
         <p className="text-sm">
@@ -316,8 +316,8 @@ const brief = (h?: string) => (h || "").replace(/^[^:]+:\s*/, "").replace(/\s*-\
 
 // The shorter checks as one row of tiles across the width, each with its verdict; picking one opens its detail
 // full width under the row (one at a time), so its blocks and tables always have room.
-export function Checks({ res }: { res: Analysis }) {
-  const [open, setOpen] = useState<string | null>(null)
+export function Checks({ res, initial }: { res: Analysis; initial?: string | null }) {
+  const [open, setOpen] = useState<string | null>(initial ?? null)
   const v = res.verdicts || {}, G = res.spec.group || "Group heal", S = res.spec.single || "Single-target heal"
   const good = res.good_calls || []
   const list: Check[] = [
@@ -332,7 +332,7 @@ export function Checks({ res }: { res: Analysis }) {
   ]
   const shown = list.find((c) => c.key === open && c.has)
   return (
-    <section className="flex flex-col gap-3 border-t pt-7">
+    <section id="sec-checks" className="flex scroll-mt-28 flex-col gap-3 border-t pt-7">
       <h2 className="text-lg font-semibold tracking-tight">Other checks</h2>
       <div className="grid grid-cols-2 gap-2 @4xl:grid-cols-4" role="tablist">
         {list.map((c) => (
