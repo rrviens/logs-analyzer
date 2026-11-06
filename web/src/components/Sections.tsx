@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronDown, ChevronRight } from "lucide-react"
 import type { Analysis } from "@/lib/analysis"
 import { pullShort } from "@/lib/review"
 import { Tx, useFocus } from "@/lib/timeline"
@@ -282,8 +282,8 @@ export function Checks({ res }: { res: Analysis }) {
         {list.map((c) => (
           <button key={c.key} type="button" role="tab" aria-selected={open === c.key} disabled={!c.has}
                   onClick={() => setOpen(open === c.key ? null : c.key)}
-                  className={cn("flex flex-col gap-1 rounded-md border px-3 py-2.5 text-left hover:bg-accent/50 disabled:cursor-default disabled:hover:bg-transparent",
-                                open === c.key && "border-foreground/60 bg-accent/50")}>
+                  className={cn("group flex cursor-pointer flex-col gap-1 rounded-md border px-3 py-2.5 text-left transition-colors hover:border-foreground/40 hover:bg-accent/50",
+                                "disabled:cursor-default disabled:hover:border-border disabled:hover:bg-transparent", open === c.key && "border-foreground/60 bg-accent/50")}>
             <span className="text-xs text-muted-foreground">{c.title}</span>
             {c.has ? (
               <span className="grid grid-cols-[0.9rem_1fr] gap-x-1.5 text-sm font-medium">
@@ -292,6 +292,13 @@ export function Checks({ res }: { res: Analysis }) {
               </span>
             ) : <span className="text-sm text-muted-foreground">{c.empty}</span>}
             {c.todo > 0 && <span className="pl-[1.275rem] text-xs text-med">{c.todo} to change</span>}
+            {c.has && (
+              // The cue that a tile opens: a details link with a chevron that turns when open.
+              <span className="mt-auto flex items-center gap-1 pt-1 text-xs text-muted-foreground group-hover:text-foreground">
+                {open === c.key ? "Hide details" : "Show details"}
+                <ChevronDown className={cn("size-3.5 transition-transform", open === c.key && "rotate-180")} />
+              </span>
+            )}
           </button>
         ))}
       </div>
