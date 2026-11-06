@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "@/lib/api"
 import { useAnalysis } from "@/lib/analysis"
-import { deathId, Deaths } from "@/components/Deaths"
+import { Deaths } from "@/components/Deaths"
 import { Findings } from "@/components/Findings"
 import { DpsWindows, GoodCalls, Items, Pulls, Spells } from "@/components/Sections"
 import { Group } from "@/components/Group"
@@ -69,12 +69,13 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
       {shown.timeline?.pulls?.length ? <Suspense fallback={<Skeleton className="h-96 w-full rounded-xl" />}><Timeline ref={tl} res={shown} onPull={setLookPull} /></Suspense> : null}
       {result?.findings ? (
         <Findings findings={result.findings} level={result.run.level} model={result.compared?.model} best={best}
-                  pull={lookPull} onShowAll={() => setLookPull(null)}
-                  deathRecap={(f) => { const d = f.rule === "death" && result.deaths?.find((x) => x.clock === f.clock); return d ? deathId(d.clock, d.victim) : null }} />
+                  pull={lookPull} onShowAll={() => setLookPull(null)} player={result.run.player}
+                  deathFor={(f) => (f.rule === "death" && result.deaths?.find((d) => d.clock === f.clock && f.title.includes(d.victim))) || null} />
       ) : (
         <p className="text-sm text-muted-foreground">Findings appear when the comparison with your peers is done.</p>
       )}
-      {result?.deaths && <Deaths deaths={result.deaths} player={result.run.player} classes={Object.fromEntries(result.group.map((m) => [m.name, m.class]))} />}
+      {result?.deaths && <Deaths deaths={result.deaths} player={result.run.player} classes={Object.fromEntries(result.group.map((m) => [m.name, m.class]))}
+                                   findingFor={(d) => result.findings?.find((f) => f.rule === "death" && f.clock === d.clock && f.title.includes(d.victim)) || null} />}
       {result && (
         <>
           <Items res={result} />

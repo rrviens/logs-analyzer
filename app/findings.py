@@ -581,7 +581,7 @@ def _death_basic(c: _Ctx, group: list[list]) -> Finding:
         elif pool.ready(a, t - READY_BEFORE_MS) and not pool.used_between(a, t - READY_BEFORE_MS, t):
             ready.append(pool.name(a))
     if ready and not burst:
-        detail.append("Ready and unused: " + ", ".join(ready) + ".")
+        detail.append(", ".join(ready) + " - ready and unused.")
     detail += late
     if c.ctx.defensive[b]:
         detail.append("Team defensives were active at the time.")

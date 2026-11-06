@@ -1,21 +1,22 @@
 import { useState } from "react"
 import { ChevronRight } from "lucide-react"
 import { LogRow } from "@/components/LogRow"
-import { byTime, type Finding, type Line, pullShort, reviewTier, SEV_LABEL, type Sev, sevOf, splitFindings, type Strict, strictPick } from "@/lib/review"
+import { type Death, DeathView } from "@/components/Deaths"
+import { FindingParts } from "@/components/FindingParts"
+import { byTime, type Finding, pullShort, reviewTier, SEV_LABEL, type Sev, sevOf, splitFindings, type Strict, strictPick } from "@/lib/review"
 import { lsSet } from "@/lib/wow"
-import { reveal, Tx } from "@/lib/timeline"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 
-const SEV_MARK: Record<Sev, string> = { high: "bg-high", med: "bg-med", low: "bg-low" }
+export const SEV_MARK: Record<Sev, string> = { high: "bg-high", med: "bg-med", low: "bg-low" }
 const SEV_HEAD: Record<Sev, string> = { high: "High impact", med: "Medium impact", low: "Low impact" }
 const STRICT: [Strict, string][] = [["auto", "Auto"], ["relaxed", "Relaxed"], ["normal", "Normal"], ["strict", "Strict"]]
 
 // "What to look at": High / Medium / Low, each in run order; what the review tier leaves out folds into minor notes.
-export function Findings({ findings, level, model, best, pull, onShowAll, deathRecap }: {
+export function Findings({ findings, level, model, best, pull, onShowAll, deathFor, player }: {
   findings: Finding[]; level: number; model?: string; best: number | null
   pull?: { label: string; start_s: number; end_s: number } | null; onShowAll?: () => void
-  deathRecap?: (f: Finding) => string | null  // the death recap's id for a death finding, to link instead of repeating it
+  deathFor: (f: Finding) => Death | null; player: string
 }) {
   const [pick, setPick] = useState<Strict>(strictPick)
   const tier = reviewTier(level, best, pick)
@@ -54,7 +55,7 @@ export function Findings({ findings, level, model, best, pull, onShowAll, deathR
             <h3 className="mt-3 mb-2 flex items-baseline gap-2 text-sm font-medium">
               {SEV_HEAD[sev]} <span className="font-normal text-muted-foreground tabular-nums">{group.length}</span>
             </h3>
-            {group.map((f, i) => <FindingCard key={`${f.rule}-${f.t_s}-${i}`} f={f} id={findings.indexOf(f)} recap={deathRecap?.(f)} />)}
+            {group.map((f, i) => <FindingCard key={`${f.rule}-${f.t_s}-${i}`} f={f} id={findings.indexOf(f)} death={deathFor(f)} player={player} />)}
           </div>
         )
       })}
@@ -65,7 +66,7 @@ export function Findings({ findings, level, model, best, pull, onShowAll, deathR
             {minor.length} minor note{minor.length > 1 ? "s" : ""} ({tier.minorWhy})
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2 flex flex-col">
-            {byTime(minor).map((f, i) => <FindingCard key={`m-${f.rule}-${f.t_s}-${i}`} f={f} id={findings.indexOf(f)} recap={deathRecap?.(f)} />)}
+            {byTime(minor).map((f, i) => <FindingCard key={`m-${f.rule}-${f.t_s}-${i}`} f={f} id={findings.indexOf(f)} death={deathFor(f)} player={player} />)}
           </CollapsibleContent>
         </Collapsible>
       )}
@@ -73,120 +74,14 @@ export function Findings({ findings, level, model, best, pull, onShowAll, deathR
   )
 }
 
-function FindingCard({ f, id, recap }: { f: Finding; id: number; recap?: string | null }) {
-  const sev = sevOf(f.severity), p = f.parts
+function FindingCard({ f, id, death, player }: { f: Finding; id: number; death?: Death | null; player: string }) {
+  const sev = sevOf(f.severity)
   return (
     <LogRow id={`finding-${id}`} time={f.pull !== "Whole run" ? f.clock : "run"} mark={SEV_MARK[sev]} fix={f.fix}
             title={<><span className="font-medium">{f.short || f.title}</span>
               <span className="ml-2 text-xs text-muted-foreground" title={`${SEV_LABEL[sev]} impact, score ${f.severity}`}>{pullShort(f.pull)}</span></>}>
-      {p ? (
-        // One reading order for every finding: what was ready, the evidence, how peers compare, side notes.
-        <dl className="flex flex-col divide-y rounded-md border">
-          {p.verdict.map(([k, v]) => <Part key={k} label={label(k, f.rule)}>{v.split("\n").map((l, i) => <p key={i}><Tx>{l}</Tx></p>)}</Part>)}
-          {p.shares && (
-            <Part label={`Damage, last ${p.shares.seconds}s`}>
-              <div className="grid max-w-xl grid-cols-[minmax(0,auto)_1fr_2.5rem] items-center gap-x-3 gap-y-1">
-                {p.shares.rows.map(([name, pct]) => (
-                  <div key={name} className="contents">
-                    <span className="truncate"><Tx>{name}</Tx></span>
-                    <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full bg-foreground/60" style={{ width: `${pct}%` }} /></span>
-                    <span className="text-right text-muted-foreground tabular-nums">{pct}%</span>
-                  </div>
-                ))}
-              </div>
-            </Part>
-          )}
-          {p.why.length > 0 && <Part label="What happened"><Lines items={p.why} /></Part>}
-          {p.rates.length > 0 && (
-            <Part label="Damage vs peers">
-              {p.rates_title && <p className="mb-1.5 text-muted-foreground">{p.rates_title}</p>}
-              <RateRows rows={p.rates} />
-            </Part>
-          )}
-          {(p.peers.length > 0 || p.peer_context.length > 0) && (
-            <Part label="Compared with peers">
-              {p.peer_context.flatMap(([k, v]) => v.split("\n").map((l, i) => <p key={`${k}${i}`}><Tx>{l}</Tx></p>))}
-              <Lines items={p.peers} />
-            </Part>
-          )}
-          {p.notes.length > 0 && (
-            <Part label="Also" muted><Lines items={p.notes.map((n) => {
-              const l = typeof n === "string" ? { text: n, sub: [] } : n  // results saved before rules 77 had plain strings
-              return { ...l, text: l.text.replace(/^Also:\s*/, "") }
-            })} /></Part>
-          )}
-        </dl>
-      ) : null}
-      {p && recap && (
-        <button className="self-start underline underline-offset-2 hover:no-underline" onClick={() => reveal(recap)}>Open the death recap</button>
-      )}
-      {p ? null : (
-        <>
-          {f.context?.length > 0 && (
-            <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
-              {f.context.map(([k, v]) => (
-                <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd><Tx>{v}</Tx></dd></div>
-              ))}
-            </dl>
-          )}
-          {f.detail.length > 0 && <ul className="list-disc space-y-0.5 pl-4 marker:text-muted-foreground">{f.detail.map((d, i) => <li key={i}><Tx>{d}</Tx></li>)}</ul>}
-        </>
-      )}
+      {/* A death opens the one merged death analysis - the same view the Death recaps list opens. */}
+      {death ? <DeathView d={death} f={f} player={player} /> : <FindingParts f={f} />}
     </LogRow>
-  )
-}
-
-// The rules' short labels, said as the question each answers. A death's "Ready?" lists the victim's own tools;
-// on cooldown findings it is about that one cooldown.
-const LABELS: Record<string, string> = { "Needed?": "Was it needed", "Group tools": "Other tools up", "Avoidable?": "Avoidable",
-                                         "Interrupts": "Interrupts", "Situation": "Situation" }
-const label = (k: string, rule: string) => k === "Ready?" ? (rule === "death" ? "What was ready" : "Was it ready") : LABELS[k] || k
-
-// One subcategory: its label, and the data that falls under it - each on its own line of the frame.
-function Part({ label, muted, children }: { label: string; muted?: boolean; children: React.ReactNode }) {
-  return (
-    <div className="grid gap-x-6 gap-y-1 px-3 py-2.5 sm:grid-cols-[9.5rem_1fr]">
-      <dt className="text-sm font-medium">{label}</dt>
-      <dd className={cn("flex min-w-0 flex-col gap-1", muted && "text-muted-foreground")}>{children}</dd>
-    </div>
-  )
-}
-
-function Lines({ items }: { items: Line[] }) {
-  return (
-    <ul className="flex flex-col gap-1">
-      {items.map((l, i) => (
-        <li key={i}>
-          <Tx>{l.text}</Tx>
-          {l.sub.length > 0 && (
-            <ul className="mt-1 flex flex-col gap-0.5 border-l pl-3 text-muted-foreground">{l.sub.map((x, j) => <li key={j}><Tx>{x}</Tx></li>)}</ul>
-          )}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-// Your group's damage taken per ability (share of group HP per second) against peer groups': two thin bars each.
-function RateRows({ rows }: { rows: [string, number, number, string][] }) {
-  const top = Math.max(...rows.flatMap(([, a, b]) => [a, b]), 0.1)
-  return (
-    <div className="grid max-w-xl grid-cols-[minmax(0,auto)_1fr_auto] items-center gap-x-3 gap-y-2">
-      {rows.map(([name, mine, peer, note]) => (
-        <div key={name} className="contents">
-          <span className="truncate"><Tx>{name}</Tx></span>
-          <span className="flex flex-col gap-0.5" title={`You ${mine}% of group HP per second, peers ${peer}%`}>
-            <span className="h-1.5 rounded-full bg-data" style={{ width: `${(mine / top) * 100}%` }} />
-            <span className="h-1.5 rounded-full bg-muted-foreground/40" style={{ width: `${(peer / top) * 100}%` }} />
-          </span>
-          <span className="text-xs text-muted-foreground tabular-nums">{mine}% vs {peer}%/s</span>
-          {note && <span className="col-span-3 -mt-1 text-xs text-muted-foreground">{note}</span>}
-        </div>
-      ))}
-      <span className="col-span-3 flex gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><i className="h-1.5 w-3 rounded-full bg-data" />your group</span>
-        <span className="flex items-center gap-1.5"><i className="h-1.5 w-3 rounded-full bg-muted-foreground/40" />peer groups</span>
-      </span>
-    </div>
   )
 }
