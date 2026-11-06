@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
-import { X } from "lucide-react"
+import { ChevronRight, X } from "lucide-react"
 import * as echarts from "echarts/core"
 import { CustomChart, LineChart, ScatterChart } from "echarts/charts"
 import { BrushComponent, DataZoomComponent, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent } from "echarts/components"
@@ -376,7 +376,8 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
         </div>
       </div>
       <Overview t={t} sc={sc} pull={pull} view={view} zoomed={!!zoom} onPull={openPull} onRange={(a, b) => focus(a, b)} />
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      {pull < 0 && !zoom && <PullStory t={t} base={base} onOpen={openPull} />}
+      <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground", pull < 0 && !zoom && "hidden")}>
         <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 bg-data" />Group HP</span>
         <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 bg-high" />Lowest player</span>
         <span className="flex items-center gap-1.5"><i className="h-2.5 w-4 rounded-sm bg-muted-foreground/30" />{base === "top" ? "Top players" : "Peers"} (middle half, dashed = median)</span>
@@ -390,7 +391,7 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
         {bandNote && <span className="italic">{bandNote}</span>}
         <span className="ml-auto tabular-nums text-foreground">{readout || "Drag across the chart to select a range · double-click to step back out"}</span>
       </div>
-      <div ref={box} style={{ height }} className="w-full" />
+      <div ref={box} style={{ height }} className={cn("w-full", pull < 0 && !zoom && "hidden")} />
       {sel && <Selection t={t} sel={sel} base={base} onClose={resetZoom} />}
     </section>
   )
@@ -398,6 +399,80 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
 
 // The whole run at a glance, always: pulls side by side with their HP, deaths, chains, lust and the stretches your
 // big cooldowns sat ready. Click a pull to open it, drag to zoom into a range, double-click for the whole run.
+// The whole run as a story, pull by pull: what each pull looked like (HP against peers), what went wrong in it and
+// what you pressed - squeezed cast ticks across a whole key don't say what happened. Click a pull to open it in the chart.
+function PullStory({ t, base, onOpen }: { t: TimelineData; base: Base; onOpen: (i: number) => void }) {
+  const inPull = (p: TPull, s: number) => s >= p.start_s && s <= p.end_s
+  const SEV = [["high", "bg-high", 70], ["med", "bg-med", 45], ["low", "bg-low", 0]] as const
+  return (
+    <ol className="flex flex-col">
+      {t.pulls.map((p, i) => {
+        const findings = (t.markers || []).filter((m) => m.kind === "finding" && inPull(p, m.t_s))
+        const cds = (t.markers || []).filter((m) => m.kind === "cooldown" && inPull(p, m.t_s))
+        const lust = (t.lust || []).some((l) => inPull(p, l.t_s))
+        const chained = (t.markers || []).find((m) => m.kind === "chain" && Math.abs(m.t_s - p.start_s) < 2)
+        return (
+          <li key={i} className="border-b first:border-t">
+            <button type="button" onClick={() => onOpen(i)}
+                    className="group grid w-full grid-cols-[minmax(0,15rem)_9rem_1fr_auto] items-center gap-x-4 gap-y-1 px-1 py-2.5 text-left hover:bg-accent/50 max-md:grid-cols-[1fr_auto]">
+              <span className="min-w-0">
+                <span className={cn("block truncate text-sm", p.boss ? "font-semibold" : "font-medium")}>{(p.label.split(": ")[1] || p.label).replace(" (boss)", "")}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  Pull {i + 1}, {fmtClock(p.start_s)}, {Math.round(p.end_s - p.start_s)}s{p.boss ? ", boss" : ""}
+                </span>
+              </span>
+              <Spark t={t} p={p} base={base} />
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs max-md:hidden">
+                {!!p.deaths && <span className="font-semibold text-bad">✕ {p.deaths} death{p.deaths > 1 ? "s" : ""}</span>}
+                {SEV.map(([k, tone, min], j) => {
+                  const n = findings.filter((m) => (m.severity || 0) >= min && (j === 0 || (m.severity || 0) < SEV[j - 1][2])).length
+                  return n ? <span key={k} className="flex items-center gap-1"><i className={cn("h-3 w-[3px] rounded-full", tone)} />{n} {k}</span> : null
+                })}
+                {chained && <span className={chained.risky ? "text-warn" : "text-muted-foreground"} title="Chained into from the pull before">⛓ chained</span>}
+                {lust && <span className="text-high" title="Bloodlust">⚡ lust</span>}
+              </span>
+              <span className="flex items-center gap-1">
+                {cds.map((m, j) => m.icon
+                  ? <img key={j} src={iconUrl(m.icon)} alt={m.label} title={`${m.label} at ${fmtClock(m.t_s)}`} className="size-5 rounded-sm" />
+                  : <span key={j} className="text-xs" title={fmtClock(m.t_s)}>{m.label}</span>)}
+                <ChevronRight className="ml-1 size-4 text-muted-foreground" />
+              </span>
+              {(p.verdict || p.death_lines?.length || p.avoid || p.chain) && (
+                <span className="col-span-full flex flex-col gap-0.5 text-xs text-muted-foreground md:col-start-2">
+                  {p.verdict && <span className="text-foreground">{p.verdict}</span>}
+                  {p.death_lines?.map((d, j) => <span key={j}><span className="text-bad">✕</span> {d}</span>)}
+                  {p.avoid && <span><span className="text-warn">⚠</span> {p.avoid}</span>}
+                  {p.chain && <span>⛓ {p.chain}</span>}
+                </span>
+              )}
+            </button>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+// A pull's group HP as a small line, against the peer (or top-player) median and middle half for the same pull.
+function Spark({ t, p, base }: { t: TimelineData; p: TPull; base: Base }) {
+  const W = 144, H = 32, span = Math.max(1, p.end_s - p.start_s)
+  const x = (s: number) => ((s - p.start_s) / span) * W, y = (v: number) => 2 + (1 - v) * (H - 4)
+  const pts: string[] = []
+  for (let b = Math.floor(p.start_s / t.bin_s); b <= Math.min(t.group.length - 1, Math.ceil(p.end_s / t.bin_s)); b++)
+    if (t.group[b] != null) pts.push(`${x(b * t.bin_s).toFixed(1)},${y(t.group[b]!).toFixed(1)}`)
+  const cv = curveOf(p, base)
+  return (
+    <svg width={W} height={H} className="overflow-visible max-md:hidden" aria-label="Group HP through the pull">
+      {cv && <polygon points={[...cv.map(([f, , , hi]) => `${(f * W).toFixed(1)},${y(hi).toFixed(1)}`),
+                               ...cv.slice().reverse().map(([f, lo]) => `${(f * W).toFixed(1)},${y(lo).toFixed(1)}`)].join(" ")}
+                      className="fill-peer/15" />}
+      {cv && <polyline points={cv.map(([f, , med]) => `${(f * W).toFixed(1)},${y(med).toFixed(1)}`).join(" ")} fill="none"
+                       className="stroke-peer" strokeWidth={1} strokeDasharray="3 2" />}
+      <polyline points={pts.join(" ")} fill="none" className="stroke-data" strokeWidth={1.5} strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 function Overview({ t, sc, pull, view, zoomed, onPull, onRange }: {
   t: TimelineData; sc: Scale; pull: number; view: [number, number]; zoomed: boolean
   onPull: (i: number) => void; onRange: (a: number, b: number) => void
