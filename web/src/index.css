@@ -152,4 +152,6 @@
     }
   html.large { font-size: 112.5%; }
   body { font-variant-numeric: tabular-nums; }
+  /* The analysis is square-cornered throughout (user preference): bars, frames, tiles, buttons and marks. */
+  .square-ui, .square-ui * { border-radius: 0 !important; }
 }

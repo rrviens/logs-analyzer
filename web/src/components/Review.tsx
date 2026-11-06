@@ -58,7 +58,7 @@ export function Review({ url, saved, onStatus }: { url: string; saved?: Analysis
     <TimelineContext.Provider value={ctx}>
     {/* Wide review area (not window): meters beside the header from ~56rem, a side column for the short sections
         from ~72rem - measured on the review itself, so it follows the key list being open or folded. */}
-    <div className="@container flex flex-col gap-8">
+    <div className="square-ui @container flex flex-col gap-8">
       {(a.updating || (!result && a.progress.length > 0)) && (
         <p className="rounded-lg border bg-secondary px-3 py-2 text-sm text-muted-foreground">
           {a.updating || `Your run is ready; comparing with peers... ${a.progress.at(-1) || ""}`}

@@ -76,10 +76,10 @@ function Row({ e, pct }: { e: Meter; pct: number }) {
   return (
     <>
       <span>{e.name}</span>
-      <span className="h-1.5 overflow-hidden rounded-full bg-secondary">
-        <span className="block h-full rounded-full" style={{ width: `${Math.max(1, pct)}%`, background: CLASS_COLORS[e.class] || "var(--border)" }} />
+      <span className="h-2 overflow-hidden bg-secondary">
+        <span className="block h-full" style={{ width: `${Math.max(1, pct)}%`, background: CLASS_COLORS[e.class] || "var(--border)" }} />
       </span>
-      <span className="text-right text-muted-foreground tabular-nums" title={`${k(e.total)} total`}>{k(e.per_s)}</span>
+      <span className="text-right tabular-nums">{k(e.total)} <span className="text-muted-foreground">({k(e.per_s)}/s)</span></span>
     </>
   )
 }

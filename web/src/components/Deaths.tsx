@@ -248,13 +248,13 @@ function LastSeconds({ d }: { d: Death }) {
         {[0.5, 1].map((v) => <text key={v} x={-6} y={y(v) + 4} textAnchor="end" className="fill-muted-foreground text-[10px]">{v * 100}%</text>)}
         <polyline points={pts.join(" ")} fill="none" className="stroke-data" strokeWidth={2} strokeLinejoin="round" />
         {d.events.filter((e) => e.hp != null).map((e, i) => (
-          <circle key={i} cx={x(e.dt)} cy={y(e.hp!)} r={2.5} className="fill-data"><title>{tip(e)}</title></circle>
+          <rect key={i} x={x(e.dt) - 2.5} y={y(e.hp!) - 2.5} width={5} height={5} className="fill-data"><title>{tip(e)}</title></rect>
         ))}
         <line x1={0} x2={W} y1={laneY} y2={laneY} className="stroke-border" strokeWidth={1} />
         {d.events.map((e, i) => e.kind === "defensive" ? (
           <rect key={i} x={x(e.dt) - 4} y={top - 4} width={8} height={8} transform={`rotate(45 ${x(e.dt)} ${top})`} className="fill-foreground"><title>{tip(e)}</title></rect>
         ) : (
-          <rect key={i} x={x(e.dt) - 1.5} width={3} rx={1}
+          <rect key={i} x={x(e.dt) - 1.5} width={3}
                 y={e.kind === "heal" ? laneY - size(e.amount) : laneY} height={size(e.amount)}
                 className={e.kind === "heal" ? "fill-good" : "fill-bad"}><title>{tip(e)}</title></rect>
         ))}

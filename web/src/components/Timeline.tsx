@@ -198,12 +198,12 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
       if (m.kind === "death") return { ...base, symbol: "path://M0,0L10,10M10,0L0,10", symbolSize: 11, itemStyle: { color: "none", borderColor: C.bad, borderWidth: 2.5 } }
       if (m.kind === "finding") {
         const col = (m.severity || 0) >= 70 ? C.bad : (m.severity || 0) >= 45 ? C.warn : C.low
-        return { ...base, symbol: "circle", symbolSize: 11, itemStyle: { color: col, borderColor: C.card, borderWidth: 2 } }
+        return { ...base, symbol: "rect", symbolSize: 10, itemStyle: { color: col, borderColor: C.card, borderWidth: 2 } }
       }
       if (m.kind === "hit" && m.kick) return { ...base, symbol: "diamond", symbolSize: 11, itemStyle: { color: C.warn } }
-      if (m.kind === "hit") return { ...base, symbol: "roundRect", symbolSize: [3, 14], itemStyle: { color: m.covered === false ? C.bad : C.muted } }
+      if (m.kind === "hit") return { ...base, symbol: "rect", symbolSize: [3, 14], itemStyle: { color: m.covered === false ? C.bad : C.muted } }
       if (m.icon && !dense) return { ...base, symbol: `image://${iconUrl(m.icon)}`, symbolSize: LANE_H - 6 }
-      return { ...base, symbol: "roundRect", symbolSize: [7, 13], itemStyle: { color: C.text, opacity: 0.75 } }
+      return { ...base, symbol: "rect", symbolSize: [7, 13], itemStyle: { color: C.text, opacity: 0.75 } }
     }
     const scopeColor = { personal: C.primary, external: C.high, group: C.good }
     const xAxis = [0, 1, 2, 3].map((i) => ({
@@ -271,7 +271,7 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
               const d = data.spans[(params as { dataIndex: number }).dataIndex]
               const [x0, y] = api.coord([api.value(0), api.value(2)]), [x1] = api.coord([api.value(1), api.value(2)])
               const h = api.size([0, 1])[1] * 0.62, w = Math.max(3, x1 - x0)
-              const children: object[] = [{ type: "rect", shape: { x: x0, y: y - h / 2, width: w, height: h, r: 3 },
+              const children: object[] = [{ type: "rect", shape: { x: x0, y: y - h / 2, width: w, height: h },
                                             style: { fill: scopeColor[d.scope], opacity: d.minor ? 0.3 : d.protective ? 0.6 : 0.4 } }]
               if (d.icon && !dense && w >= h) children.push({ type: "image", style: { image: iconUrl(d.icon), x: x0, y: y - h / 2, width: h, height: h } })
               return { type: "group", children }
@@ -280,7 +280,7 @@ export const Timeline = forwardRef<TimelineHandle, { res: Analysis; onPull?: (p:
             data: (t.uses || []).filter((u) => visible(u.t_s) && data.rowOf(u.lane) >= 0).map((u) => ({
               value: [sc.toC(u.t_s), data.rowOf(u.lane)], tip: u.tip,
               ...(u.icon && !dense ? { symbol: `image://${iconUrl(u.icon)}`, symbolSize: LANE_H - 8 }
-                                   : { symbol: "circle", symbolSize: 8, itemStyle: { color: C.text, borderColor: C.card, borderWidth: 1.5 } }) })) },
+                                   : { symbol: "rect", symbolSize: 7, itemStyle: { color: C.text, borderColor: C.card, borderWidth: 1.5 } }) })) },
         ] : []),
         ...(showMana ? [{ name: "Mana", type: "line" as const, xAxisIndex: 3, yAxisIndex: 3, data: data.mana, showSymbol: false, silent: true,
                           lineStyle: { width: 2, color: C.primary }, areaStyle: { color: C.primary, opacity: 0.1 } }] : []),
@@ -523,9 +523,9 @@ function Overview({ t, sc, pull, view, zoomed, onPull, onRange }: {
           const lx = x0 + (ch ? 14 : 3)
           return (
             <g key={i}>
-              <rect x={x0} y={top} width={Math.max(1, x1 - x0)} height={hpH} rx={3}
+              <rect x={x0} y={top} width={Math.max(1, x1 - x0)} height={hpH}
                     className={cn(p.boss ? "fill-data/15" : "fill-muted-foreground/10", tip?.i === i && "fill-data/25")} />
-              {i === pull && !zoomed && <rect x={x0} y={top - 1} width={x1 - x0} height={hpH + 2} rx={3} fill="none" className="stroke-data" strokeWidth={1.5} />}
+              {i === pull && !zoomed && <rect x={x0} y={top - 1} width={x1 - x0} height={hpH + 2} fill="none" className="stroke-data" strokeWidth={1.5} />}
               <polyline points={pts.join(" ")} fill="none" className="stroke-data" strokeWidth={1.2} />
               {ch && x1 - x0 > 14 && <text x={x0 + 2} y={top - 4} className={cn("text-[11px]", ch.risky ? "fill-warn" : "fill-muted-foreground")}>⛓</text>}
               {x1 - lx > label.length * 6.2 && <text x={lx} y={top - 4} className={cn("fill-muted-foreground text-[11px]", p.boss && "fill-foreground font-bold")}>{label}</text>}
