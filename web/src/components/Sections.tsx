@@ -10,6 +10,7 @@ export type Verdict = { headline: string; ok: boolean; lines: { text: string; ac
 
 const pct = (v?: number | null) => (v == null ? "-" : `${Math.round(v * 100)}%`)
 const k = (v?: number | null) => (v == null ? "-" : `${Math.round(v / 1000)}k`)
+const dur = (s: number) => (s >= 90 ? `${Math.floor(s / 60)} min ${s % 60}s` : `${s}s`)
 const m = (v: number) => `${(v / 1e6).toFixed(1)}M`
 
 function Section({ title, count, empty, children }: { title: string; count: number | string; empty: string; children: React.ReactNode }) {
@@ -81,18 +82,66 @@ function Table({ head, rows, note }: { head: React.ReactNode[]; rows: React.Reac
   )
 }
 
+// Each trinket / consumable as one compact block (fits the side column): what to do with it, your uses against peer
+// healers' as two bars, how long it sat ready under pressure, and how often it went out with your big cooldowns.
 export function Items({ res }: { res: Analysis }) {
-  const items = res.items || []
+  const items = res.items || [], v = res.verdicts?.items
+  const linesOf = (name: string) => (v?.lines || []).filter((l) => l.text.includes(name))
   return (
-    <Section title="Trinkets & consumables" count={countOf(items.length > 0, res.verdicts?.items)}
-             empty="Trinkets & consumables: none used.">
-      <VerdictBlock v={res.verdicts?.items}>
-        <Table head={["Item", "Type", "Your uses", "Top uses*", "Top players using it", "Ready during pressure", "With big cooldowns", "Top with big cooldowns"]}
-               rows={items.map((i) => [i.name, i.kind, i.uses, i.top_uses ?? "-", `${i.top_users}/${i.top_count}`,
-                                       i.ready_pressure_s == null ? "-" : `${i.ready_pressure_s}s`, pct(i.paired), pct(i.top_paired)])}
-               note={<>* median among the peer healers who used it, scaled to your run length. "With big cooldowns" = share of uses within 10s
-                 of {res.spec.majors || "your major cooldowns"}.</>} />
-      </VerdictBlock>
+    <Section title="Trinkets & consumables" count={countOf(items.length > 0, v)} empty="Trinkets & consumables: none used.">
+      <Fold label={v?.headline
+        ? <span className={cn("font-semibold", v.ok ? "text-good" : "text-med")}>{v.ok ? "✓" : "→"} {v.headline}</span>
+        : <span className="font-semibold">{items.length} used</span>}>
+        <div className="flex flex-col">
+          {items.map((i) => {
+            const lines = linesOf(i.name)
+            // → what the review asks you to change; • a softer suggestion (potions); ✓ fine as it is
+            const glyph = lines.some((l) => l.action) ? ["→", "text-med"] : lines.some((l) => /^(Press|Line) /.test(l.text))
+              ? ["•", "text-muted-foreground"] : ["✓", "text-good"]
+            const top = Math.max(i.uses, i.top_uses || 0, 1)
+            return (
+              <div key={i.name} className="flex flex-col gap-2 border-b py-3 first:pt-0 last:border-0 last:pb-0">
+                <div className="flex items-baseline gap-2">
+                  <span className={cn("font-semibold", glyph[1])} aria-hidden>{glyph[0]}</span>
+                  <span className="font-medium"><Tx>{i.name}</Tx></span>
+                  <span className="ml-auto text-xs text-muted-foreground">{i.kind}</span>
+                </div>
+                {lines.map((l, k) => (
+                  <p key={k} className="text-muted-foreground"><Tx>{l.text.replace(`${i.name}: `, "").replace(/ \(\d+ of \d+ peer healers use it\)\.?$/, ".")}</Tx></p>
+                ))}
+                <div className="grid grid-cols-[3.5rem_1fr_2.5rem] items-center gap-x-2 gap-y-1 text-xs">
+                  <span className="text-muted-foreground">You</span>
+                  <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full bg-data" style={{ width: `${(i.uses / top) * 100}%` }} /></span>
+                  <span className="text-right tabular-nums">{i.uses}</span>
+                  <span className="text-muted-foreground">Peers</span>
+                  <span className="h-1.5 rounded-full bg-muted"><span className="block h-full rounded-full bg-muted-foreground/50" style={{ width: `${((i.top_uses || 0) / top) * 100}%` }} /></span>
+                  <span className="text-right text-muted-foreground tabular-nums">{i.top_uses == null ? "-" : `~${Math.round(i.top_uses)}`}</span>
+                </div>
+                <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 text-xs">
+                  <dt className="text-muted-foreground">Used by</dt><dd>{i.top_users} of {i.top_count} peer healers</dd>
+                  {i.ready_pressure_s != null && <><dt className="text-muted-foreground">Sat ready under pressure</dt><dd>{dur(i.ready_pressure_s)}</dd></>}
+                  {i.paired != null && (
+                    <><dt className="text-muted-foreground">With your big cooldowns</dt>
+                      <dd>{pct(i.paired)}<span className="text-muted-foreground"> (peers {pct(i.top_paired)})</span></dd></>
+                  )}
+                </dl>
+                {!!i.ready_examples?.length && (
+                  <Collapsible>
+                    <CollapsibleTrigger className="group flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                      <ChevronRight className="size-3 transition-transform group-data-[panel-open]:rotate-90" />When it sat ready
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-1 flex flex-col gap-0.5 border-l pl-3 text-xs text-muted-foreground">
+                      {i.ready_examples.map((e, k) => <p key={k}><Tx>{e}</Tx></p>)}
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">Peer uses: median among the peer healers who used it, scaled to your run length. Big cooldowns:
+          within 10s of {res.spec.majors || "your major cooldowns"}.</p>
+      </Fold>
     </Section>
   )
 }

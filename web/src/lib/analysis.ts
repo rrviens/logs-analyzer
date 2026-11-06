@@ -24,7 +24,7 @@ export type Analysis = {
   encounter?: { covered?: boolean } | null
   verdicts?: { items?: Verdict | null; spells?: Verdict | null; pulls?: Verdict | null }
   items?: { name: string; kind: string; uses: number; top_uses: number | null; top_users: number; top_count: number
-            ready_pressure_s: number | null; paired: number | null; top_paired: number | null }[]
+            ready_pressure_s: number | null; paired: number | null; top_paired: number | null; ready_examples?: string[] }[]
   spell_choice?: { you?: Record<string, HealStats>; top?: Record<string, HealStats>
                    buffs?: { you: Record<string, HealStats>; top?: Record<string, HealStats> } } | null
   dps?: { windows: number; seconds: number; your_dps?: number; top_dps?: number; missed?: number } | null

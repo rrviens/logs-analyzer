@@ -1,4 +1,4 @@
-import { type Finding, type Line } from "@/lib/review"
+import { type Finding, type Line, type Mark } from "@/lib/review"
 import { Tx } from "@/lib/timeline"
 import { cn } from "@/lib/utils"
 
@@ -15,7 +15,8 @@ export function FindingParts({ f, children }: { f: Finding; children?: React.Rea
     <>
       {p ? (
         <dl className="flex flex-col divide-y rounded-md border">
-          {p.verdict.map(([k, v]) => <Part key={k} label={label(k, f.rule)}>{v.split("\n").map((l, i) => <p key={i}><Tx>{l}</Tx></p>)}</Part>)}
+          {(p.verdict_lines || p.verdict.map(([label, v]) => ({ label, lines: v.split("\n").map((text) => ({ text, mark: "" as Mark })) })))
+            .map((v) => <Part key={v.label} label={label(v.label, f.rule)}><Lines items={v.lines.map((l) => ({ ...l, sub: [] }))} /></Part>)}
           {p.shares && (
             <Part label={`Damage, last ${p.shares.seconds}s`}>
               <div className="grid max-w-xl grid-cols-[minmax(0,auto)_1fr_2.5rem] items-center gap-x-3 gap-y-1">
@@ -38,8 +39,7 @@ export function FindingParts({ f, children }: { f: Finding; children?: React.Rea
           )}
           {(p.peers.length > 0 || p.peer_context.length > 0) && (
             <Part label="Compared with peers">
-              {p.peer_context.flatMap(([k, v]) => v.split("\n").map((l, i) => <p key={`${k}${i}`}><Tx>{l}</Tx></p>))}
-              <Lines items={p.peers} />
+              <Lines items={[...p.peer_context.flatMap(([, v]) => v.split("\n").map((text) => ({ text, sub: [] as string[] }))), ...p.peers]} />
             </Part>
           )}
           {p.notes.length > 0 && (
@@ -80,17 +80,26 @@ export function Part({ label, muted, wide, tone, children }: {
   )
 }
 
+// The same small markers as the verdict sections: what you could have done, what was fine, and plain context.
+const MARK = { do: ["→", "text-med"], ok: ["✓", "text-good"], "": ["•", "text-muted-foreground/60"] } as const
+
 function Lines({ items }: { items: Line[] }) {
   return (
     <ul className="flex flex-col gap-1">
-      {items.map((l, i) => (
-        <li key={i}>
-          <Tx>{l.text}</Tx>
-          {l.sub.length > 0 && (
-            <ul className="mt-1 flex flex-col gap-0.5 border-l pl-3 text-muted-foreground">{l.sub.map((x, j) => <li key={j}><Tx>{x}</Tx></li>)}</ul>
-          )}
-        </li>
-      ))}
+      {items.map((l, i) => {
+        const [glyph, tone] = MARK[l.mark || ""]
+        return (
+          <li key={i} className="grid grid-cols-[0.9rem_1fr] gap-x-1.5">
+            <span className={cn("text-center font-semibold", tone)} aria-hidden>{glyph}</span>
+            <span className="min-w-0">
+              <Tx>{l.text}</Tx>
+              {l.sub.length > 0 && (
+                <ul className="mt-1 flex flex-col gap-0.5 border-l pl-3 text-muted-foreground">{l.sub.map((x, j) => <li key={j}><Tx>{x}</Tx></li>)}</ul>
+              )}
+            </span>
+          </li>
+        )
+      })}
     </ul>
   )
 }

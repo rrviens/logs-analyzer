@@ -34,6 +34,15 @@ def main() -> None:
     assert len(s["notes"]) == 3 and s["notes"][2]["sub"] == ["8 of the 25 Frost Overload hits left someone below 20% HP."] and s["rates_title"] == "Healing pressure here is partly damage peer groups avoid or mitigate."
     assert s["verdict"] == [["Ready?", "Ready and would likely have saved them: Feint."]]
     assert s["peer_context"] == [["Top players", "Press it here 5 of 8 runs."]]
+    from app.finding_parts import mark
+    assert mark("Feint (Waràk) - would likely have saved them, ~49%.") == "do"
+    assert mark("Unused while ready for 17m 58s in total; longest stretch 14:02-15:30.") == "do"
+    assert mark("Healing Tide Totem: came back at 5:53 but was pressed at 6:06 (13s later) while people were dying.") == "do"
+    assert mark("Crimson Vial - was ready, but there was no time to react (x); not a mistake.") == "ok"
+    assert mark("anything", "No reaction window") == "ok" and mark("Spirit Link Totem: on cooldown through all of it.") == ""
+    assert mark("Yes - ready since 3:10 (40s unused).") == "do" and mark("No - on cooldown until 3:10 (pressed at 2:00).") == "ok"
+    v = structure([], [["Ready?", "Nothing - these were on cooldown:\nCloak (W): used at 4:03"], ["Group tools", "SLT (S) - up"]])
+    assert [x["label"] for x in v["verdict_lines"]] == ["Ready?", "Group tools"] and len(v["verdict_lines"][0]["lines"]) == 2
     print("finding parts ok")
 
 

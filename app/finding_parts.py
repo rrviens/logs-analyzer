@@ -9,12 +9,25 @@ RATE = re.compile(r"^(?P<name>.+?): (?P<mine>[\d.]+)% group HP/s vs (?P<peer>[\d
 PEER = re.compile(r"\bpeers?\b|\btop players\b|\btop-run\b|^top \w|\beven top\b", re.I)
 NOTE = re.compile(r"^Also\b")
 PEER_CONTEXT = ("Top players", "Peers")
+# What a line means, for its marker: "do" = something you could have done, "ok" = fine / not a mistake, "" = context.
+DO = re.compile(r"would likely have saved them|ready and unused|but was pressed at .+ later|and not pressed before"
+                r"|^Yes - (ready since|not pressed yet)|sat ready through|^Unused while ready")
+OK = re.compile(r"not a mistake|holding was reasonable|pressed as soon as it was available|handled without yours"
+                r"|^No - on cooldown")
+LABEL_MARK = {"What to do": "do", "No reaction window": "ok"}
+
+
+def mark(text: str, label: str = "") -> str:
+    return LABEL_MARK.get(label) or ("do" if DO.search(text) else "ok" if OK.search(text) else "")
 
 
 def structure(detail: list[str], context: list[list[str]]) -> dict:
     """{verdict: [[label, text]], shares: {seconds, rows: [[name, pct]]} | None, rates: [[name, mine, peer, note]],
-    why: [{text, sub}], peers: [{text, sub}], notes: [{text, sub}]} - indented lines nest under the line before them."""
+    why: [{text, sub, mark}], peers: [...], notes: [...], verdict_lines: [{label, lines: [{text, mark}]}]} - indented lines nest under the line before them."""
     out = {"verdict": [c for c in context if c[0] not in PEER_CONTEXT],
+           # the same, line by line with a marker each (the page shows these; "verdict" stays for older pages)
+           "verdict_lines": [{"label": k, "lines": [{"text": t, "mark": mark(t, k)} for t in v.split("\n")]}
+                             for k, v in context if k not in PEER_CONTEXT],
            "peer_context": [c for c in context if c[0] in PEER_CONTEXT],
            "shares": None, "rates": [], "rates_title": "", "why": [], "peers": [], "notes": []}
     last = None
@@ -25,6 +38,8 @@ def structure(detail: list[str], context: list[list[str]]) -> dict:
             continue
         if raw.startswith(" ") and last is not None:
             last["sub"].append(line)
+            if mark(line) == "do":
+                last["mark"] = "do"  # a late or missed press below it makes the whole line one to act on
             continue
         if line.endswith("Biggest differences:"):  # the intro to the rate lines below: their table's title
             out["rates_title"] = line.removesuffix(" Biggest differences:")
@@ -36,9 +51,9 @@ def structure(detail: list[str], context: list[list[str]]) -> dict:
             last = None
             continue
         if NOTE.match(line):
-            last = {"text": line, "sub": []}
+            last = {"text": line, "sub": [], "mark": ""}
             out["notes"].append(last)
             continue
-        last = {"text": line, "sub": []}
+        last = {"text": line, "sub": [], "mark": mark(line)}
         out["peers" if PEER.search(line) else "why"].append(last)
     return out

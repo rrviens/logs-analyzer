@@ -6,9 +6,11 @@ export type Finding = {
   detail: string[]; context: [string, string][]; rule: string
   parts?: Parts  // the detail sorted for reading (app/finding_parts.py); missing on results saved before it
 }
-export type Line = { text: string; sub: string[] }
+export type Mark = "do" | "ok" | ""
+export type Line = { text: string; sub: string[]; mark?: Mark }
 export type Parts = {
   verdict: [string, string][]; peer_context: [string, string][]
+  verdict_lines?: { label: string; lines: { text: string; mark: Mark }[] }[]  // missing before rules 80
   shares: { seconds: number; rows: [string, number][] } | null
   rates: [string, number, number, string][]; rates_title: string
   why: Line[]; peers: Line[]; notes: (Line | string)[]
