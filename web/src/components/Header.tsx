@@ -20,7 +20,7 @@ type Props = { me: Me; settings: Settings; theme: ThemePick; setTheme: (p: Theme
 export function Header({ me, settings, theme, setTheme, onCharacter, current }: Props) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-sidebar px-4">
-      <a href="/next/" className="flex items-center gap-2 text-sm font-semibold">
+      <a href="/" className="flex items-center gap-2 text-sm font-semibold">
         <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground"><HeartPulse className="size-4" /></span>
         <span className="max-sm:sr-only">Healer Review</span>
       </a>
@@ -34,7 +34,7 @@ export function Header({ me, settings, theme, setTheme, onCharacter, current }: 
       <DisplayMenu theme={theme} setTheme={setTheme} />
       {me.user && (
         <Button variant="ghost" size="sm" title={`Your Warcraft Logs user id: ${me.user_id}`}
-                onClick={async () => { await fetch("/logout", { method: "POST" }); location.href = "/next/" }}>
+                onClick={async () => { await fetch("/logout", { method: "POST" }); location.href = "/" }}>
           <LogOut className="size-4" />{me.user}
         </Button>
       )}
@@ -163,6 +163,8 @@ function DisplayMenu({ theme, setTheme }: { theme: ThemePick; setTheme: (p: Them
             {label}{large === l && <Check className="ml-auto size-4" />}
           </DropdownMenuItem>
         ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => { location.href = "/classic" }}>Open the classic page</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
