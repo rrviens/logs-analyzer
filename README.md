@@ -93,7 +93,7 @@ It pauses for the hourly API reset when the budget runs low (~520 points per spe
   list it in `app/specs/__init__.py`.
 - Editable data: `data/defensives.json` (defensive values), `data/comp_effects.json` (what specs bring),
   `data/encounters.json` (our ability notes), `data/realms.json` (realm autocomplete).
-- Tests: `..venvScriptspython -m tests.test_cache` and `-m tests.test_finding_parts`.
+- Tests: `.\.venv\Scripts\python -m tests.test_cache` and `-m tests.test_finding_parts`.
 - Command line: `.\.venv\Scripts\python cli.py analyze "<report url>" [--player NAME] [--fresh]`.
 
 ## Known limits
