@@ -230,7 +230,7 @@ def recap_death(run: RunData, players: list[Player], group_casts: list[list], de
                 auras: Auras | None = None, can_dispel: set[int] | None = None,
                 self_clears: dict[int, set[str]] | None = None, top_handling: dict[str, str] | None = None,
                 procs: dict[str, list[list]] | None = None, own_dispel: set[int] | None = None,
-                totems: dict[int, str] | None = None) -> dict:
+                totems: dict[int, str] | None = None, stored: list[tuple] | None = None) -> dict:
     by_id = {p.id: p for p in players}
     victim = by_id.get(victim_id)
     rel = lambda ts: round((ts - t) / 1000, 1)
@@ -287,6 +287,26 @@ def recap_death(run: RunData, players: list[Player], group_casts: list[list], de
                 item["verdict"] = "died" if r.died else "close" if r.lowest < LIVED_MIN else "lived"
                 item["lowest"] = round(r.lowest, 2)
             ready[bucket].append(item)
+    # Stored heals (Stormstream Totem): kept at the death, used just before it, or none stored.
+    for name, spans, effect, duration in stored or []:
+        item = {"name": name, "owner": pname(run.healer_id), "scope": "group", "gcd": True}
+        now = next((s for s in spans if s[0] <= t <= s[1]), None)
+        used = [s[1] for s in spans if t - WINDOW_MS <= s[1] < t]
+        last = max((s[1] for s in spans if s[1] < t), default=None)
+        if now:
+            item.update(status="ready", text=f"Stored since {clock(now[0])} ({(t - now[0]) / 1000:.0f}s) and unused.")
+            r = replay(ev, t, effect, duration, schools, dots)
+            item["verdict"] = "died" if r.died else "close" if r.lowest < LIVED_MIN else "lived"
+            item["lowest"] = round(r.lowest, 2)
+        elif used:
+            item.update(status="used", text=f"Used {(t - used[-1]) / 1000:.0f}s before the death.")
+        elif last is not None:
+            item.update(status="cooldown", text=f"None stored - the last one was used at {clock(last)}.")
+        elif spans:
+            item.update(status="cooldown", text="None stored yet at that point.")
+        else:
+            continue  # never stored this run: not talented
+        ready["healer"].append(item)
     # Passive cheat-death procs already spent (e.g. Nature's Guardian on the healer).
     if victim_id == run.healer_id:
         for name, spans in (procs or {}).items():

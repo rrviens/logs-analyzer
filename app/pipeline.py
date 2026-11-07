@@ -32,7 +32,7 @@ from app.deaths import (ENVIRONMENTAL, MAX_RECAPS, _applies, ability_schools, cl
                         judge_reaction, learn_dispels, load_defensives, recap_death)
 from app.context import CooldownTracker
 from app.defense_spans import active_at, fetch_defense_spans
-from app.healer_state import fetch_healer_state
+from app.healer_state import fetch_healer_state, fetch_stored
 from app.phases import fetch_boss_casts, fetch_boss_hp, phase_breakdown
 from app.quality import check as quality_check
 from app.spells import fetch_spell_heals, heal_casts
@@ -43,7 +43,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 81
+RULES_VERSION = 82  # 82: Stormstream Totem (stored heal) in lanes, held cooldowns and deaths
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -287,6 +287,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
     segs = all_segments(run, tl, spec)
 
     my_state = fetch_healer_state(client, fight, run, spec)
+    my_state.stored = fetch_stored(client, fight, run, spec)
     my_boss_casts, my_boss_hp = fetch_boss_casts(client, fight, run), fetch_boss_hp(client, fight, run)
 
     tops, top_boss, candidates, skipped = [], [], [], []
@@ -539,7 +540,7 @@ def _death_recaps(client, fight, run, players, state, top_runs, candidates, cloc
     for (t, victim, killing), ev in zip(deaths, events):
         r = recap_death(run, players, group_casts, defensives, ev, t, victim, killing, schools,
                         auras, can_dispel, self_clears, handling, state.procs() if state else None,
-                        own_dispel, totems)
+                        own_dispel, totems, _stored_items(state, spec))
         r["clock"] = clock(t)
         r["pull"] = next((f"Pull {i + 1}: {p.name}" for i, p in enumerate(run.pulls) if p.start <= t <= p.end), "")
         r["short"], r["fix"] = _death_short(r)
@@ -547,6 +548,13 @@ def _death_recaps(client, fight, run, players, state, top_runs, candidates, cloc
                            for (at, av), tank_t in sorted(after.items()) if tank_t == t]
         out.append(r)
     return out
+
+
+def _stored_items(state, spec) -> list[tuple]:
+    """(name, spans, effect, duration) for each stored heal, for the death recaps."""
+    if not state:
+        return []
+    return [(n, state.stored.get(n, []), eff, dur) for n, eff, dur in spec.stored_cooldowns.values()]
 
 
 def _after_tank(run, deaths: list[list]) -> dict[tuple[int, int], int]:
@@ -1025,6 +1033,10 @@ def _timeline(run, tl, segs, profiles, phases, state, trinkets, result, tops=(),
         spans_ready = merged
         ready_lanes.append({"name": spec.short_names.get(name, name), "ready": spans_ready,
                             "ready_s": round(sum(b - a for a, b in spans_ready))})
+    for name, stored in (state.stored if state else {}).items():  # stored heals: when one was being kept
+        spans_s = [[rel(a), rel(b)] for a, b in stored if b > a]
+        ready_lanes.append({"name": spec.short_names.get(name, name), "ready": spans_s,
+                            "ready_s": round(sum(b - a for a, b in spans_s))})
     findings_by_pull: dict[str, list] = {}
     for f in result.findings:
         findings_by_pull.setdefault(f.pull.split(" · ")[0], []).append(f)

@@ -23,7 +23,10 @@ SPEC = Spec(
     # Found in Season 2 Midnight logs; High Tide no longer exists.
     tracked_buffs=("Tidal Waves", "Unleash Life", "Ascendance", "Coalescing Water", "Nature's Swiftness"),
     proc_buffs=("Nature's Guardian",),
-    short_names={"Healing Tide Totem": "Healing Tide", "Spirit Link Totem": "Spirit Link"},
+    # Apex talent: Riptide procs (6%) and every Nature's Swiftness store a Stormstream Totem (buff 1267089, cast
+    # 1267068). Its burst lands ~3-5% of a ~1M HP bar on 2 allies, plus the stream (measured in Season 2 logs).
+    stored_cooldowns={1267089: ("Stormstream Totem", {"heal": 0.05, "hps": 0.006}, 10)},
+    short_names={"Healing Tide Totem": "Healing Tide", "Spirit Link Totem": "Spirit Link", "Stormstream Totem": "Stormstream"},
     mana_spells="Chain Heal and Healing Rain",
     personal_habit="press Astral Shift ~13 times a run - often before targeted damage lands",
     dispels=("magic", "curse"),

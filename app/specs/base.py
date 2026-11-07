@@ -47,6 +47,9 @@ class Spec:
     spell_pair: SpellPair | None = None
     tracked_buffs: tuple = ()  # healer buffs that change how heals behave
     proc_buffs: tuple = ()  # passive cheat-death / emergency procs (logged as buff or heal)
+    # A strong heal the healer can keep for later, logged as a buff while it's stored: buff id -> (name,
+    # death-replay effect, duration s). Holding a big cooldown while one is stored can be the right call.
+    stored_cooldowns: dict = field(default_factory=dict)
     short_names: dict = field(default_factory=dict)  # long cooldown name -> short, for one-line findings
     mana_spells: str = ""  # "Chain Heal and Healing Rain" - what low mana limits
     personal_habit: str = ""  # how top players use the personal, e.g. "press Astral Shift ~13 times a run"

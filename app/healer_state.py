@@ -19,6 +19,7 @@ class HealerState:
     buffs: dict[str, list[list]] = field(default_factory=dict)  # name -> [[start, end], ...]
     tracked: tuple = ()
     proc_names: tuple = ()
+    stored: dict[str, list[list]] = field(default_factory=dict)  # spec.stored_cooldowns name -> [[stored, used/ended]]
 
     def __post_init__(self):
         self._times = [m[0] for m in self.mana]
@@ -32,6 +33,10 @@ class HealerState:
 
     def procs(self) -> dict[str, list[list]]:
         return {n: s for n, s in self.buffs.items() if n in self.proc_names}
+
+    def stored_at(self, name: str, t: int) -> list | None:
+        """The span during which `name` was stored at time t, if it was."""
+        return next((s for s in self.stored.get(name, []) if s[0] <= t <= s[1]), None)
 
 
 def fetch_healer_state(client: WCLClient, fight: Fight, run: RunData, spec: Spec) -> HealerState:
@@ -69,3 +74,27 @@ def fetch_healer_state(client: WCLClient, fight: Fight, run: RunData, spec: Spec
         cached = {"mana": mana, "buffs": spans}
         client.set_cached(key, cached)
     return HealerState(cached["mana"], cached["buffs"], tracked, procs)
+
+
+def fetch_stored(client: WCLClient, fight: Fight, run: RunData, spec: Spec) -> dict[str, list[list]]:
+    """When each of spec.stored_cooldowns was stored (applied) and used (removed), for your own run only - a small
+    query per buff, cached apart from the healer state so peer and top logs aren't fetched again."""
+    out = {}
+    for aid, (name, _, _) in spec.stored_cooldowns.items():
+        key = f"stored:v1:{fight.report_code}:{fight.id}:{run.healer_id}:{aid}"
+        spans = client.get_cached(key)
+        if spans is None:
+            spans, start = [], None
+            for e in _events(client, fight, "Buffs", source_id=run.healer_id, ability_id=aid):
+                if e.get("targetID") != run.healer_id:
+                    continue
+                if e["type"] in ("applybuff", "applybuffstack", "refreshbuff") and start is None:
+                    start = e["timestamp"]
+                elif e["type"] == "removebuff" and start is not None:
+                    spans.append([start, e["timestamp"]])
+                    start = None
+            if start is not None:
+                spans.append([start, fight.end])
+            client.set_cached(key, spans)
+        out[name] = spans
+    return out

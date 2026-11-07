@@ -654,13 +654,16 @@ def _held_cooldowns(c: _Ctx) -> list[Finding]:
             detail.append("Not used again this run.")
         if not uncovered:
             detail.append("Team defensives covered these - holding was reasonable.")
+        bridged = _stored_note(c, windows, name)
+        if bridged:
+            detail.append(bridged[0])
         sm = c.seg_models[windows[0].pull_idx]
         rarely = sm is not None and sm["cooldowns"].get(name, {}).get("share_of_runs", 0) < 0.3
         if rarely:
             detail.append(f"{c.top_label} rarely use it on this pull either.")
 
         severity = (40 + (20 if worst.min_ehp < LETHAL_EHP else 0) + 5 * min(len(uncovered), 4)
-                    - (25 if not uncovered else 0) - (15 if rarely else 0))
+                    - (25 if not uncovered else 0) - (15 if rarely else 0) - (bridged[1] if bridged else 0))
         plural = "s" if len(windows) > 1 else ""
         first = windows[0]
         context = [["Ready?", c.ready_text(a, c.t_of(first.start))],
@@ -669,6 +672,27 @@ def _held_cooldowns(c: _Ctx) -> list[Finding]:
         out.append(Finding(c.t_of(first.start), c.pull_label(first.pull_idx), severity,
                            f"{name} held through {len(windows)} dangerous moment{plural}", detail, context))
     return out
+
+
+def _stored_note(c: _Ctx, windows: list, held: str) -> tuple[str, int] | None:
+    """A stored heal (Stormstream Totem) during held-cooldown moments. Used on them: holding the big one was
+    reasonable (line + severity cut). Kept through them unused: a second tool that sat idle (line, no cut)."""
+    if not c.state:
+        return None
+    for name, spans in c.state.stored.items():
+        def used_on(w):
+            return next((b for _, b in spans if c.t_of(w.start) - 3000 <= b <= c.t_of(w.end + 1) + 3000
+                         and b < c.run.end), None)
+        hit = [w for w in windows if used_on(w)]
+        some = "it" if len(windows) == 1 else f"{len(hit)} of them"
+        if hit:
+            return (f"{name} was used on {some} (at {c.clock(used_on(hit[0]))}) - holding {held} for a bigger "
+                    f"moment was reasonable.", 20 if len(hit) == len(windows) else 10)
+        idle = [w for w in windows if c.state.stored_at(name, c.t_of(w.start))]
+        if idle:
+            some = "it" if len(windows) == 1 else f"{len(idle)} of them"
+            return f"{name} was stored and unused through {some} too.", 0
+    return None
 
 
 def _planned_cooldowns(c: _Ctx) -> list[Finding]:
