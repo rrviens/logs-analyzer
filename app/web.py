@@ -129,21 +129,21 @@ def lookup_character(client: WCLClient, s: dict, ttl: float) -> dict | None:
 
 # ---------- pages, health, sign-in ----------
 
-# The React front end (web/, built into app/static/next) is the site at /; the classic page stays at /classic for a
-# while. /next/ keeps working for old links. no-store on pages: an open tab otherwise keeps an old page after an update.
+# The React front end (web/, built into app/static/next) is the site at /. /next/ and /classic (the retired page) keep
+# working for old links. no-store on pages: an open tab otherwise keeps an old page after an update.
 NEXT = STATIC / "next"
 
 
 @app.get("/")
 def index():
-    if not (NEXT / "index.html").exists():  # a local run without `npm run build`: the classic page
-        return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
+    if not (NEXT / "index.html").exists():
+        raise HTTPException(503, "The front end isn't built yet (cd web && npm run build).")
     return FileResponse(NEXT / "index.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/classic")
 def classic():
-    return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
+    return RedirectResponse("/", status_code=301)
 
 
 @app.get("/next/{path:path}")

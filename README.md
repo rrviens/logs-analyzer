@@ -50,7 +50,7 @@ Discipline Priest.
 - Recent keys from your character grouped by play session, with your newest ones analyzed in the background
   (green check = analyzed, blue = analyzing).
 - Header status bar: API points used this hour, top-player study age, character picker, display menu (light / dark
-  theme, text size, link to the classic page at `/classic`).
+  theme, text size).
 
 **Built to cope with Warcraft Logs limits**
 - Analyses are stored: reopening one is instant and needs no API calls. The cache prunes itself (raw logs first) when
@@ -62,8 +62,7 @@ Discipline Priest.
 
 1. Create a Warcraft Logs API client (https://www.warcraftlogs.com/api/clients) and put its id and secret in `.env`
    (see `.env.example`).
-2. Build the front end once (needs Node 22): `cd web`, `npm install`, `npm run build`. Without it, `/` serves the
-   classic page.
+2. Build the front end once (needs Node 22): `cd web`, `npm install`, `npm run build`.
 3. Double-click **`start.bat`** (sets up Python on first run) and open http://127.0.0.1:8000. Restart it after
    Python changes.
 4. Set your character (top right) and click a key, or paste any log URL.
@@ -88,7 +87,6 @@ It pauses for the hourly API reset when the budget runs low (~520 points per spe
   text into the parts the page shows.
 - Front end: React + Vite + Tailwind + shadcn/ui (Base UI) + ECharts in `web/`, built into `app/static/next` and
   served at `/`. For live reload run the API on port 8002 and `npm run dev` in `web/` (proxies `/api` and sign-in).
-  The classic single-file page stays at `app/static/index.html` (`/classic`).
 - Specs: one module per spec in `app/specs/` (cooldowns, maintenance HoT, heal pair, tracked buffs). Add a module and
   list it in `app/specs/__init__.py`.
 - Editable data: `data/defensives.json` (defensive values), `data/comp_effects.json` (what specs bring),

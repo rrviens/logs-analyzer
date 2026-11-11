@@ -166,8 +166,6 @@ function DisplayMenu({ theme, setTheme }: { theme: ThemePick; setTheme: (p: Them
             {label}{large === l && <Check className="ml-auto size-4" />}
           </DropdownMenuItem>
         ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => { location.href = "/classic" }}>Open the classic page</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
