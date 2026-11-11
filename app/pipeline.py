@@ -43,7 +43,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 84  # 83: key-level parses in the roster (+ peers' per-pull cooldown use, in progress)
+RULES_VERSION = 85  # 83: key-level parses in the roster (+ peers' per-pull cooldown use, in progress)
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -210,7 +210,9 @@ METERS_QUERY = """query($code: String!, $f: [Int]) { reportData { report(code: $
   damage: table(fightIDs: $f, dataType: DamageDone) healing: table(fightIDs: $f, dataType: Healing) } } }"""
 
 
-NPC_HEAL_SHARE = 0.2  # this share of your healing on a pull went to a non-player: a heal check (Avatar of Sethraliss)
+# This share of your healing on a pull went to a non-player: a heal check. Normal pulls (pets, totems) stay under 7%
+# across 6 dungeons; Avatar of Sethraliss is 32-51% at +22 (checked Nov 2026).
+NPC_HEAL_SHARE = 0.1
 
 
 def _heal_check_pulls(client, fight, run) -> set[int]:
@@ -222,7 +224,8 @@ def _heal_check_pulls(client, fight, run) -> set[int]:
         rows = [[e["timestamp"], e.get("targetID"), e.get("amount", 0)]
                 for e in _events(client, fight, "Healing", source_id=run.healer_id) if e.get("type") == "heal"]
         client.set_cached(key, rows)
-    out = set()
+    marked = load_encounter(run.dungeon).heal_checks  # by hand, so a boss healed very little still counts
+    out = {i for i, p in enumerate(run.pulls) if p.name in marked}
     for i, p in enumerate(run.pulls):
         inside = [(tgt, amt) for t, tgt, amt in rows if p.start <= t <= p.end]
         total = sum(a for _, a in inside)

@@ -13,6 +13,7 @@ PATH = PROJECT_ROOT / "data" / "encounters.json"
 class Encounter:
     by_id: dict = field(default_factory=dict)
     by_name: dict = field(default_factory=dict)
+    heal_checks: list = field(default_factory=list)  # bosses you heal (Avatar of Sethraliss), marked by hand
 
     @property
     def covered(self) -> bool:
@@ -48,4 +49,4 @@ def load_encounter(dungeon: str) -> Encounter:
     if not d:
         return Encounter()
     by_id = d.get("abilities", {})
-    return Encounter(by_id, {e["name"]: e for e in by_id.values()})
+    return Encounter(by_id, {e["name"]: e for e in by_id.values()}, d.get("heal_checks", []))

@@ -563,7 +563,10 @@
    "abilities": {}
   },
   "Temple of Sethraliss": {
-   "abilities": {}
+   "abilities": {},
+   "heal_checks": [
+    "Avatar of Sethraliss"
+   ]
   },
   "Ruby Life Pools": {
    "abilities": {
