@@ -60,25 +60,28 @@ export function useAnalysis(url: string | null) {
   const run = useCallback(async (fresh = false) => {
     if (!url) return
     current.current = url
-    set((p) => ({ ...p, error: "", progress: ["Starting..."], ...(fresh ? {} : { result: null, preview: null, updating: "" }) }))
+    const working = fresh ? "Re-analyzing..." : "Updating to the latest rules..."
+    // Re-analyze keeps the shown result while it runs: the server sends no saved copy then, so `fresh` counts as one
+    set((p) => ({ ...p, error: "", progress: ["Starting..."], ...(fresh ? { updating: working } : { result: null, preview: null, updating: "" }) }))
     try {
       const r = await api<Start>("/api/analyze", { method: "POST", body: JSON.stringify({ url, fresh }) })
       if (r.result && !r.job) return set((p) => ({ ...p, result: r.result!, updating: "", progress: [] }))
-      if (r.result) set((p) => ({ ...p, result: r.result!, updating: "Updating to the latest rules..." }))
+      if (r.result) set((p) => ({ ...p, result: r.result!, updating: working }))
+      const shown = fresh || !!r.result
       let hasPreview = false
       while (current.current === url) {
         await new Promise((res) => setTimeout(res, 1500))
         if (current.current !== url) return
-        const j = await api<Job>(`/api/jobs/${r.job}${hasPreview || r.result ? "?skip_preview=true" : ""}`)
+        const j = await api<Job>(`/api/jobs/${r.job}${hasPreview || shown ? "?skip_preview=true" : ""}`)
         if (j.status === "done") return set((p) => ({ ...p, result: j.result!, preview: null, updating: "", progress: [] }))
         if (j.status === "error") {
-          if (r.result) return set((p) => ({ ...p, updating: `Couldn't update to the latest rules (${j.error}) - showing the saved analysis.` }))
+          if (shown) return set((p) => ({ ...p, updating: `Couldn't ${fresh ? "re-analyze" : "update to the latest rules"} (${j.error}) - showing the saved analysis.` }))
           throw new ApiError(j.error || "Analysis failed", 500)
         }
         const status = j.status === "queued" ? `Queued${j.position ? ` (${j.position} ahead)` : ""}...` : j.status === "waiting" ? j.note || "" : ""
         if (j.preview && !hasPreview) hasPreview = true
         set((p) => ({ ...p, preview: j.preview ?? p.preview, progress: status ? [status] : j.progress,
-                      updating: r.result ? status || "Updating to the latest rules..." : "" }))
+                      updating: shown ? status || working : "" }))
       }
     } catch (e) {
       if (current.current === url) set((p) => ({ ...p, error: e instanceof Error ? e.message : String(e), progress: [] }))
