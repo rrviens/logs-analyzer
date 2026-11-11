@@ -23,7 +23,10 @@ Discipline Priest.
 - Stoppable casts: flags deaths where an enemy cast that peer groups usually stop (interrupt, stun or CC) did most of
   the damage, and who had a kick or stun ready.
 - Damage spikes judged on **your** cooldowns: held cooldowns, healing overlaps that left the next spike uncovered,
-  big hits with a cooldown ready but unused.
+  big hits with a cooldown ready but unused. A stored heal (Resto Shaman's Stormstream Totem) counts: using one on
+  the moment makes holding the big cooldown reasonable.
+- Heal-check pulls (most of your healing going to an NPC, e.g. Avatar of Sethraliss) never call a cooldown "no
+  pressure".
 - Avoidable damage and missed interrupts, learned from peer logs.
 - Other checks as tiles with a verdict each: trinkets & consumables, spell choice (single-target vs group heals),
   pulls vs peers (time and damage per pull against peer runs), good calls.
@@ -33,7 +36,7 @@ Discipline Priest.
 
 **Timeline**
 - Group HP, lowest player and a Peers / Top players band; switch between them.
-- Lanes for your cooldowns, personals, trinkets, big hits, deaths, findings, mana, and one per party member with their
+- Lanes for your cooldowns (and when each was ready, Stormstream Totem included), personals, trinkets, big hits, deaths, findings, mana, and one per party member with their
   defensives, potions and trinkets.
 - One pull at a time, or the whole run as a pull-by-pull story list; drag to zoom into any range (also across pulls),
   with a summary of that window.
@@ -44,8 +47,10 @@ Discipline Priest.
   and section.
 
 **Around the run**
-- Group composition and what each player brings (Rallying Cry, Zephyr, …); damage and healing meters with total and
-  per second.
+- The group: each player's Warcraft Logs DPS and HPS parse for the key (vs keys of the same level), and their group
+  cooldowns (Rallying Cry, Zephyr, …) with presses and big hits covered. Talent choices count: with Ascendance taken,
+  Healing Tide Totem isn't "never pressed".
+- Damage and healing meters for the five players, with total and per second.
 - Raider.io badge: your group's average score vs peers or top players.
 - Recent keys from your character grouped by play session, with your newest ones analyzed in the background
   (green check = analyzed, blue = analyzing).
@@ -55,7 +60,8 @@ Discipline Priest.
 **Built to cope with Warcraft Logs limits**
 - Analyses are stored: reopening one is instant and needs no API calls. The cache prunes itself (raw logs first) when
   it grows past its size cap.
-- New analyses queue and wait out rate limits instead of failing; your run's timeline shows while the comparison loads.
+- New analyses queue and wait out rate limits instead of failing; your run's timeline shows while the comparison loads,
+  with a "Peer logs: N of 8 ready" count. Re-analyze shows its progress the same way.
 - Errors show one clear banner with Try again; signed out, public runs still open from a link.
 
 ## Run it locally
