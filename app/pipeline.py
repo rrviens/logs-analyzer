@@ -351,14 +351,16 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
                              frozenset(intake_modifiers(get_players(pub, f), effects)),
                              heal_casts(other, otl, fetch_spell_heals(pub, f, other, spec), state, spec)),
                       otl, fetch_boss_casts(pub, f, other), fetch_boss_hp(pub, f, other))
-        fetched[0] += 1
-        progress(f"Fetched top log {fetched[0]} ({p.name} +{f.keystone_level}{'' if ok else ', incomplete data - skipped'})")
+        fetched[0] += ok  # usable peer logs so far (a skipped one is replaced from further down the ranking)
+        progress(f"Peer logs: {fetched[0]} of {need} ready - {p.name} +{f.keystone_level}"
+                 f"{'' if ok else ' had incomplete data, trying another'}")
         return loaded, reasons
 
     # Extra candidates so logs failing the data-quality gate can be replaced from further down. Fetched
     # TOP_WORKERS at a time, in batches of exactly what is still missing, so no log is fetched for nothing.
     pending = found.result()
-    progress(f"Fetching {min(top, len(pending))} top logs, {TOP_WORKERS} at a time...")
+    need = min(top, len(pending))
+    progress(f"Peer logs: 0 of {need} ready - downloading {min(TOP_WORKERS, need)} at a time...")
 
     def load_tops():
         nonlocal pending
