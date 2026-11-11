@@ -833,9 +833,10 @@ function renderGroup(res) {
   if (!res.group || !res.group.length) return "";
   const members = res.group.map((m) => `
     <div class="member"><span class="bar" style="background:${CLASS_COLORS[m.class] || "var(--line)"}"></span>
-      <div><div class="role">${esc(m.role)}</div><span class="who">${esc(m.name)}</span>${m.parse != null ? ` <span class="spec" style="color:${
-        m.parse >= 100 ? "#E5CC80" : m.parse >= 99 ? "#E268A8" : m.parse >= 95 ? "#FF8000" : m.parse >= 75 ? "#A335EE"
-        : m.parse >= 50 ? "#0070FF" : m.parse >= 25 ? "#1EFF00" : "#9D9D9D"}" title="Parse vs keys of this level">${m.parse}</span>` : ""}
+      <div><div class="role">${esc(m.role)}</div><span class="who">${esc(m.name)}</span>${["dps", "hps"].filter((k) => m.parses?.[k] != null).map((k) => {
+        const p = m.parses[k], c = p >= 100 ? "#E5CC80" : p >= 99 ? "#E268A8" : p >= 95 ? "#FF8000" : p >= 75 ? "#A335EE"
+          : p >= 50 ? "#0070FF" : p >= 25 ? "#1EFF00" : "#9D9D9D";
+        return ` <span class="spec" title="Parse vs keys of this level">${k.toUpperCase()} <b style="color:${c}">${p}</b></span>`; }).join("")}
       <span class="spec">${esc([m.spec, m.class].filter(Boolean).join(" "))}</span>
       ${m.note ? `<div class="note">${esc(m.note)}</div>` : ""}</div></div>`).join("");
   const notes = (res.comp_notes || []).map((n) => `<div>${esc(n)}</div>`).join("");

@@ -21,14 +21,17 @@ export function Group({ res, part }: { res: Analysis; part: "people" | "meters" 
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 border-y py-3 sm:grid-cols-3 lg:grid-cols-5">
         {res.group.map((m) => (
           <div key={m.name} className="min-w-0">
-            <div className="truncate font-semibold" style={{ color: CLASS_COLORS[m.class || ""] }}>{m.name}
-              {m.parse != null && (
-                <span className="ml-1.5 text-xs tabular-nums" style={{ color: parseColor(m.parse) }}
-                      title={`Parse: ${m.parse}% of ${m.role === "healer" ? "HPS" : "DPS"} in keys of this level (Warcraft Logs)`}>{m.parse}</span>
-              )}</div>
+            <div className="truncate font-semibold" style={{ color: CLASS_COLORS[m.class || ""] }}>{m.name}</div>
             <div className="truncate text-xs text-muted-foreground">
               <span className="capitalize">{m.role === "dps" ? "DPS" : m.role}</span>, {[m.spec, m.class].filter(Boolean).join(" ")}
             </div>
+            {m.parses && (
+              <div className="flex gap-3 text-xs text-muted-foreground" title="Warcraft Logs parse: percentile vs keys of this level">
+                {(["dps", "hps"] as const).map((k) => m.parses?.[k] != null && (
+                  <span key={k}>{k.toUpperCase()} <b className="tabular-nums" style={{ color: parseColor(m.parses[k]!) }}>{m.parses[k]}</b></span>
+                ))}
+              </div>
+            )}
             {m.note && <div className="text-xs text-med">{m.note}</div>}
           </div>
         ))}

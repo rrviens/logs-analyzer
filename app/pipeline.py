@@ -231,19 +231,20 @@ PARSES_QUERY = """query($code: String!, $f: [Int]) { reportData { report(code: $
 
 
 def _with_parses(client, fight, group: list[dict]) -> list[dict]:
-    """Each player's key-level percentile (WCL's bracketPercent: vs keys of the same level), HPS for healers and DPS
-    for the rest. WCL's rankPercent ranks the key's score, the same for all five, so it isn't used. Timed keys only."""
+    """Each player's key-level DPS and HPS percentiles (WCL's bracketPercent: vs keys of the same level). WCL's
+    rankPercent ranks the key's score, the same for all five, so it isn't used. Timed keys only."""
     try:
         r = client.query(PARSES_QUERY, {"code": fight.report_code, "f": [fight.id]})["reportData"]["report"]
-        pct = {}
-        for metric, roles in (("dps", ("tanks", "dps")), ("hps", ("healers",))):
+        pct: dict[str, dict] = {}
+        for metric in ("dps", "hps"):
             for rank in r[metric]["data"][:1]:
-                for role in roles:
-                    for ch in rank["roles"].get(role, {}).get("characters", []):
-                        pct[ch["name"]] = ch.get("bracketPercent")
+                for role in rank["roles"].values():
+                    for ch in role.get("characters", []):
+                        if ch.get("bracketPercent") is not None:
+                            pct.setdefault(ch["name"], {})[metric] = ch["bracketPercent"]
     except (WCLError, KeyError, TypeError, AttributeError):
         return group  # parses are a nice-to-have: never fail the analysis over them
-    return [{**m, "parse": pct[m["name"]]} if pct.get(m["name"]) is not None else m for m in group]
+    return [{**m, "parses": pct[m["name"]]} if m["name"] in pct else m for m in group]
 
 
 def _own_run_sections(client, fight, run, tl, segs, players, state, spec) -> dict:
