@@ -43,7 +43,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 85  # 83: key-level parses in the roster (+ peers' per-pull cooldown use, in progress)
+RULES_VERSION = 86  # 86: Ascendance as a group cooldown; a choice node's untaken talent isn't "never pressed"
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -779,8 +779,11 @@ def _with_brings(group: list[dict], players, run, segs, group_casts) -> list[dic
                 continue
             times = [t for t, src, aid, _ in group_casts if src == p.id and run.ability_name(aid) == name]
             on_hits = sum(1 for h in big if any(0 <= h - t <= d["duration"] * 1000 for t in times))
-            items.append({"name": name, "scope": d["scope"], "casts": len(times), "on_big_hits": on_hits})
-        m["brings"] = items
+            items.append({"name": name, "scope": d["scope"], "casts": len(times), "on_big_hits": on_hits,
+                          "choice": d.get("choice")})
+        pressed = {i["name"] for i in items if i["casts"]}  # a choice node's untaken side isn't "never pressed"
+        m["brings"] = [{k: v for k, v in i.items() if k != "choice"} for i in items
+                       if i["casts"] or i["choice"] not in pressed]
         m["big_hits"] = len(big)
     return group
 

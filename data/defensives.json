@@ -12,6 +12,7 @@
     "from_cast: true = the log has no buff on the covered players (Darkness; Aura Mastery buffs only the paladin): the whole party",
     "(or the cast target, for externals) counts as covered for 'duration' after the cast. Anti-Magic Zone keeps its per-player buff,",
     "so only players standing in it count.",
+    "choice: the other talent of a choice node - when that one is pressed, this one isn't talented and isn't listed.",
     "Group/external buff and cast IDs below were checked against 51 logs (Oct 2026). Power Word: Barrier, Mass Barrier, Ancestral Protection",
     "Totem, Roar of Sacrifice and Fortitude of the Bear were never seen there - kept/omitted as noted in the README."
   ],
@@ -26,7 +27,8 @@
   "Revival":                 {"scope": "group",    "class": "Monk", "spec": "Mistweaver", "cd": 180, "duration": 1, "from_cast": true, "effect": {"heal": 0.30}},
   "Rewind":                  {"scope": "group",    "class": "Evoker", "spec": "Preservation", "cd": 240, "duration": 5, "effect": {"heal": 0.30}},
   "Spirit Link Totem":       {"scope": "group",    "class": "Shaman", "spec": "Restoration", "cd": 180, "duration": 6, "effect": {"dr": 0.10}},
-  "Healing Tide Totem":      {"scope": "group",    "class": "Shaman", "spec": "Restoration", "cd": 120, "duration": 10, "effect": {"hps": 0.04}},
+  "Healing Tide Totem":      {"scope": "group",    "class": "Shaman", "spec": "Restoration", "cd": 120, "duration": 10, "choice": "Ascendance", "effect": {"hps": 0.04}},
+  "Ascendance":              {"scope": "group",    "class": "Shaman", "spec": "Restoration", "cd": 180, "duration": 15, "from_cast": true, "choice": "Healing Tide Totem", "effect": {"hps": 0.05}},
 
   "Blessing of Sacrifice":   {"scope": "external", "class": "Paladin",      "cd": 120, "duration": 12, "effect": {"dr": 0.30}},
   "Blessing of Protection":  {"scope": "external", "class": "Paladin",      "cd": 300, "duration": 10, "effect": {"immune": true, "school": "physical"}},

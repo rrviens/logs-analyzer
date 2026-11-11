@@ -260,6 +260,8 @@ def recap_death(run: RunData, players: list[Player], group_casts: list[list], de
             # Personals are the victim's; the healer's group/external cooldowns are the healer's even
             # when the healer is the one who died.
             bucket = "victim" if scope == "personal" else "healer" if p.id == run.healer_id else "group"
+            if not casts_by.get((p.id, name)) and casts_by.get((p.id, d.get("choice"))):
+                continue  # the other talent of a choice node was pressed: this one isn't talented
             times = uses(casts_by.get((p.id, name), []), max(SAME_USE_MS, d["duration"] * 1000))
             charges = infer_charges(times, d["cd"] * 1000)
             cd_ms = learn_recharge_ms(times, d["cd"], charges)
