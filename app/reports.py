@@ -112,13 +112,16 @@ def pick_fight(fights: list[Fight], fight_id: str | None) -> Fight:
     return keys[-1]
 
 
+def _player_details(client: WCLClient, fight: Fight) -> dict:
+    """{tanks, healers, dps} of a fight; {} when WCL sends [] for a fight with no player data."""
+    d = client.query(PLAYERS_QUERY, {"code": fight.report_code, "fightIDs": [fight.id]})["reportData"]["report"]["playerDetails"]
+    for k in ("data", "playerDetails"):
+        d = d.get(k, d) if isinstance(d, dict) else {}
+    return d if isinstance(d, dict) else {}
+
+
 def get_players(client: WCLClient, fight: Fight) -> list[Player]:
-    data = client.query(PLAYERS_QUERY, {"code": fight.report_code, "fightIDs": [fight.id]})
-    details = data["reportData"]["report"]["playerDetails"]
-    details = details.get("data", details) if isinstance(details, dict) else {}
-    details = details.get("playerDetails", details) if isinstance(details, dict) else {}
-    if not isinstance(details, dict):  # WCL sends [] instead of {} when a fight has no player data
-        details = {}
+    details = _player_details(client, fight)
     players = []
     for group, role in (("tanks", "tank"), ("healers", "healer"), ("dps", "dps")):
         for p in details.get(group, []):
@@ -200,9 +203,7 @@ def get_events(
 
 def player_realms(client: WCLClient, fight: Fight) -> list[dict]:
     """[{name, realm, region, class}] of the players in a fight (same cached query as get_players)."""
-    data = client.query(PLAYERS_QUERY, {"code": fight.report_code, "fightIDs": [fight.id]})
-    details = data["reportData"]["report"]["playerDetails"]
-    details = details.get("data", details).get("playerDetails", details)
-    raw = {p["id"]: p for group in ("tanks", "healers", "dps") for p in details.get(group, [])}
+    details = _player_details(client, fight)
+    raw ={p["id"]: p for group in ("tanks", "healers", "dps") for p in details.get(group, [])}
     return [{"name": p.name, "class": p.class_name, "realm": raw[p.id].get("server"), "region": raw[p.id].get("region")}
             for p in get_players(client, fight) if p.id in raw and raw[p.id].get("server") and raw[p.id].get("region")]
