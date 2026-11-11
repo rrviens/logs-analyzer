@@ -3,14 +3,16 @@ import { CLASS_COLORS, parseColor } from "@/lib/wow"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
-// The group: compact player cards with the group / external cooldowns each brought beneath, and the
+// The group: compact player cards, the group / external cooldowns each player brought, and the
 // group's damage and healing over the key.
 export function Group({ res, part }: { res: Analysis; part: "people" | "meters" }) {
   if (part === "meters") {
+    // The five players only: WCL's tables also list NPCs that heal or fight for the group (e.g. a dungeon ally)
+    const players = new Set(res.group.map((m) => m.name)), mine = (rows: Meter[]) => rows.filter((e) => players.has(e.name))
     return res.meters ? (
       <div className="flex flex-col gap-5">
-        <Chart label="DPS" rows={res.meters.damage} />
-        <Chart label="HPS" rows={res.meters.healing} />
+        <Chart label="DPS" rows={mine(res.meters.damage)} />
+        <Chart label="HPS" rows={mine(res.meters.healing)} />
       </div>
     ) : null
   }
@@ -32,27 +34,39 @@ export function Group({ res, part }: { res: Analysis; part: "people" | "meters" 
               </div>
             )}
             {m.note && <div className="text-xs text-med">{m.note}</div>}
-            {/* Their group / external cooldowns, one short line each: presses, and big hits it was up for */}
-            {m.brings?.map((b) => {
-              const group = b.scope === "group", big = m.big_hits || 0
-              const missed = !b.casts || (group && !b.on_big_hits && big)
-              const text = !b.casts ? "not pressed" : group && big ? `${b.casts}x, ${b.on_big_hits || "no"} big hit${b.on_big_hits === 1 ? "" : "s"}` : `${b.casts}x`
-              return (
-                <Tooltip key={b.name}>
-                  <TooltipTrigger render={<div className="flex cursor-help flex-wrap items-baseline gap-x-1.5 text-xs" />}>
-                    <span>{b.name}</span>
-                    <span className={cn("tabular-nums", missed ? "font-medium text-warn" : "text-muted-foreground")}>{text}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {group ? "Group" : "External"} cooldown, pressed {b.casts}x, up for {b.on_big_hits} of {big} big group hits
-                    {b.casts ? "" : " (may not be talented)"}
-                  </TooltipContent>
-                </Tooltip>
-              )
-            })}
           </div>
         ))}
       </div>
+      {/* Group / external cooldowns: a block per player who has any - name, then one short line per cooldown */}
+      {res.group.some((m) => m.brings?.length) && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">Group cooldowns</span>
+          <div className="flex flex-wrap gap-x-10 gap-y-3">
+            {res.group.filter((m) => m.brings?.length).map((m) => (
+              <div key={m.name} className="text-sm">
+                <div className="font-medium" style={{ color: CLASS_COLORS[m.class || ""] }}>{m.name}</div>
+                {m.brings!.map((b) => {
+                  const group = b.scope === "group", big = m.big_hits || 0
+                  const missed = !b.casts || (group && !b.on_big_hits && big)
+                  const text = !b.casts ? "not pressed" : group && big ? `${b.casts}x, ${b.on_big_hits || "no"} big hit${b.on_big_hits === 1 ? "" : "s"}` : `${b.casts}x`
+                  return (
+                    <Tooltip key={b.name}>
+                      <TooltipTrigger render={<div className="flex cursor-help items-baseline gap-2" />}>
+                        <span>{b.name}</span>
+                        <span className={cn("text-xs tabular-nums", missed ? "font-medium text-warn" : "text-muted-foreground")}>{text}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {group ? "Group" : "External"} cooldown, pressed {b.casts}x, up for {b.on_big_hits} of {big} big group hits
+                        {b.casts ? "" : " (may not be talented)"}
+                      </TooltipContent>
+                    </Tooltip>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {res.comp_notes?.map((n) => <p key={n} className="text-xs text-muted-foreground">{n}</p>)}
     </div>
   )
