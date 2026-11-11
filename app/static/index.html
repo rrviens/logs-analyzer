@@ -833,7 +833,9 @@ function renderGroup(res) {
   if (!res.group || !res.group.length) return "";
   const members = res.group.map((m) => `
     <div class="member"><span class="bar" style="background:${CLASS_COLORS[m.class] || "var(--line)"}"></span>
-      <div><div class="role">${esc(m.role)}</div><span class="who">${esc(m.name)}</span>
+      <div><div class="role">${esc(m.role)}</div><span class="who">${esc(m.name)}</span>${m.parse != null ? ` <span class="spec" style="color:${
+        m.parse >= 100 ? "#E5CC80" : m.parse >= 99 ? "#E268A8" : m.parse >= 95 ? "#FF8000" : m.parse >= 75 ? "#A335EE"
+        : m.parse >= 50 ? "#0070FF" : m.parse >= 25 ? "#1EFF00" : "#9D9D9D"}" title="Parse vs keys of this level">${m.parse}</span>` : ""}
       <span class="spec">${esc([m.spec, m.class].filter(Boolean).join(" "))}</span>
       ${m.note ? `<div class="note">${esc(m.note)}</div>` : ""}</div></div>`).join("");
   const notes = (res.comp_notes || []).map((n) => `<div>${esc(n)}</div>`).join("");

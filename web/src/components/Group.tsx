@@ -1,5 +1,5 @@
 import type { Analysis, Meter } from "@/lib/analysis"
-import { CLASS_COLORS } from "@/lib/wow"
+import { CLASS_COLORS, parseColor } from "@/lib/wow"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
@@ -21,7 +21,11 @@ export function Group({ res, part }: { res: Analysis; part: "people" | "meters" 
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 border-y py-3 sm:grid-cols-3 lg:grid-cols-5">
         {res.group.map((m) => (
           <div key={m.name} className="min-w-0">
-            <div className="truncate font-semibold" style={{ color: CLASS_COLORS[m.class || ""] }}>{m.name}</div>
+            <div className="truncate font-semibold" style={{ color: CLASS_COLORS[m.class || ""] }}>{m.name}
+              {m.parse != null && (
+                <span className="ml-1.5 text-xs tabular-nums" style={{ color: parseColor(m.parse) }}
+                      title={`Parse: ${m.parse}% of ${m.role === "healer" ? "HPS" : "DPS"} in keys of this level (Warcraft Logs)`}>{m.parse}</span>
+              )}</div>
             <div className="truncate text-xs text-muted-foreground">
               <span className="capitalize">{m.role === "dps" ? "DPS" : m.role}</span>, {[m.spec, m.class].filter(Boolean).join(" ")}
             </div>

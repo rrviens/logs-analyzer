@@ -43,7 +43,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 82  # 82: Stormstream Totem (stored heal) in lanes, held cooldowns and deaths
+RULES_VERSION = 83  # 83: key-level parses in the roster (+ peers' per-pull cooldown use, in progress)
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -224,6 +224,26 @@ def _meters(client, fight) -> dict | None:
                              "total": e["total"], "per_s": round(e["total"] / secs)} for e in d["entries"]),
                            key=lambda e: -e["total"])
     return out
+
+
+PARSES_QUERY = """query($code: String!, $f: [Int]) { reportData { report(code: $code) {
+  dps: rankings(fightIDs: $f, playerMetric: dps) hps: rankings(fightIDs: $f, playerMetric: hps) } } }"""
+
+
+def _with_parses(client, fight, group: list[dict]) -> list[dict]:
+    """Each player's key-level percentile (WCL's bracketPercent: vs keys of the same level), HPS for healers and DPS
+    for the rest. WCL's rankPercent ranks the key's score, the same for all five, so it isn't used. Timed keys only."""
+    try:
+        r = client.query(PARSES_QUERY, {"code": fight.report_code, "f": [fight.id]})["reportData"]["report"]
+        pct = {}
+        for metric, roles in (("dps", ("tanks", "dps")), ("hps", ("healers",))):
+            for rank in r[metric]["data"][:1]:
+                for role in roles:
+                    for ch in rank["roles"].get(role, {}).get("characters", []):
+                        pct[ch["name"]] = ch.get("bracketPercent")
+    except (WCLError, KeyError, TypeError, AttributeError):
+        return group  # parses are a nice-to-have: never fail the analysis over them
+    return [{**m, "parse": pct[m["name"]]} if pct.get(m["name"]) is not None else m for m in group]
 
 
 def _own_run_sections(client, fight, run, tl, segs, players, state, spec) -> dict:
@@ -465,8 +485,8 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
             "logs": [{"code": f.report_code, "fight_id": f.id, "player": p.name, "key": f.keystone_level,
                       "timed": bool(f.kill), "duration_min": round(f.duration_s / 60, 1)} for f, p in candidates],
         },
-        "group": _with_brings(describe(my_players, effects), my_players, run, segs,
-                              fetch_group_casts(client, fight, {p.id for p in my_players})),
+        "group": _with_parses(client, fight, _with_brings(describe(my_players, effects), my_players, run, segs,
+                                                          fetch_group_casts(client, fight, {p.id for p in my_players}))),
         "comp_notes": comp_notes,
         "trinkets": my_trinkets,
         "items": result.items,

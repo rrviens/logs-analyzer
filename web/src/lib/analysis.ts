@@ -7,7 +7,7 @@ import type { TimelineData } from "@/components/Timeline"
 
 // The parts of an analysis result the new views use so far (the API sends more).
 export type Bring = { name: string; scope: "group" | "external"; casts: number; on_big_hits: number }
-export type Member = { name: string; role: string; spec?: string; class?: string; note?: string; brings?: Bring[]; big_hits?: number }
+export type Member = { name: string; role: string; spec?: string; class?: string; note?: string; brings?: Bring[]; big_hits?: number; parse?: number }
 export type Meter = { name: string; class: string; spec: string; total: number; per_s: number }
 type HealStats = { casts: number; ch_share?: number; ch_overheal?: number; hw_overheal?: number; ch_effective?: number
                   hw_effective?: number; mana?: number }

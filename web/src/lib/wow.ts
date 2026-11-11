@@ -7,6 +7,10 @@ export const CLASS_COLORS: Record<string, string> = {
   DeathKnight: "#C41E3A", DemonHunter: "#A330C9",  // WCL's spelling, in meters saved before the name was spaced
 }
 
+// Warcraft Logs' parse colours: grey, green, blue, purple, orange, pink (99), gold (100).
+export const parseColor = (p: number) =>
+  p >= 100 ? "#E5CC80" : p >= 99 ? "#E268A8" : p >= 95 ? "#FF8000" : p >= 75 ? "#A335EE" : p >= 50 ? "#0070FF" : p >= 25 ? "#1EFF00" : "#9D9D9D"
+
 // A key that ended untimed this short was left before the end (a completed key runs longer).
 const ABANDONED_MIN = 20
 export type Result = "timed" | "untimed" | "abandoned"
