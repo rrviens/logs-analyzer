@@ -13,6 +13,10 @@ type Io = { group: IoGroup | null; top_avg?: number | null; pending: boolean }
 
 const DOT = { timed: "bg-good", untimed: "bg-warn", abandoned: "bg-bad" }
 const fmt = (n: number) => n.toLocaleString("en-US")
+const range = (ls: number[]) => {
+  const lo = Math.min(...ls), hi = Math.max(...ls)
+  return lo === hi ? `+${lo}` : `+${lo} to +${hi}`
+}
 const IO_NOTE = "Raider.io current-season scores, not the scores at the time of the run."
 
 // A chip in the run header: one shape for result / IO / peers, a coloured dot carries the meaning
@@ -31,6 +35,7 @@ export function RunHeader({ res, url, onReanalyze, busy }: { res: Analysis; url:
   const r = res.run
   const kind: Result = r.timed ? "timed" : r.duration_min < 20 ? "abandoned" : "untimed"
   const c = res.compared  // missing on the preview (your run alone) until the peer logs are in
+  const top = (c?.model || "").split(",").map((x) => parseInt(x.replace("+", ""))).filter((n) => n > 0)  // "+24,+23,..." per study run
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -47,14 +52,15 @@ export function RunHeader({ res, url, onReanalyze, busy }: { res: Analysis; url:
         </div>
       </div>
       <p className="text-sm text-muted-foreground">
-        {r.player} ({res.spec.label}) · {r.duration_min} min · {r.deaths} death{r.deaths === 1 ? "" : "s"} ·{" "}
-        {c ? <>compared with {c.count} peer {res.spec.label} logs ({c.levels.map((l) => `+${l}`).join(", ") || "none"})
+        {r.player} ({res.spec.label}) · {r.duration_min} min · {r.deaths} death{r.deaths === 1 ? "" : "s"}
+        <br />
+        {c ? <>Compared with {c.count} peer log{c.count === 1 ? "" : "s"}{c.levels.length ? ` (${range(c.levels)})` : ""}
                {!!c.skipped?.length && (
                  <span className="cursor-help underline decoration-dotted underline-offset-2"
                        title={c.skipped.map((s) => `${s.player} +${s.key}: ${s.reasons.join(", ")}`).join("\n")}>
                    {" "}({c.skipped.length} skipped: incomplete data)</span>
                )}
-               {c.model ? ` · top players ${c.model}` : ""}</> : "comparing with peer logs..."}
+               {top.length ? ` and ${top.length} top-player run${top.length === 1 ? "" : "s"} (${range(top)})` : ""}</> : "Comparing with peer logs..."}
       </p>
     </div>
   )
