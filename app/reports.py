@@ -115,7 +115,10 @@ def pick_fight(fights: list[Fight], fight_id: str | None) -> Fight:
 def get_players(client: WCLClient, fight: Fight) -> list[Player]:
     data = client.query(PLAYERS_QUERY, {"code": fight.report_code, "fightIDs": [fight.id]})
     details = data["reportData"]["report"]["playerDetails"]
-    details = details.get("data", details).get("playerDetails", details)
+    details = details.get("data", details) if isinstance(details, dict) else {}
+    details = details.get("playerDetails", details) if isinstance(details, dict) else {}
+    if not isinstance(details, dict):  # WCL sends [] instead of {} when a fight has no player data
+        details = {}
     players = []
     for group, role in (("tanks", "tank"), ("healers", "healer"), ("dps", "dps")):
         for p in details.get(group, []):
