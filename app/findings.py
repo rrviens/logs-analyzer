@@ -198,12 +198,14 @@ def analyze(run: RunData, tl: Timeline, segs: list[SegmentMetrics], profiles: li
             heal_casts: list[HealCast] | None = None, phases: dict | None = None,
             phase_rows: list[dict] | None = None, state: HealerState | None = None,
             death_recaps: list[dict] | None = None, *, spec: Spec,
-            group_defs: list[tuple] | None = None, went_through: list[dict] | None = None) -> Analysis:
+            group_defs: list[tuple] | None = None, went_through: list[dict] | None = None,
+            heal_checks: set[int] | None = None) -> Analysis:
     """group_defs: other players' group defensive presses [(t, name, who)] - for healing overlaps."""
     profiles = [None if s.duration_s < MIN_PULL_S else p for s, p in zip(segs, profiles)]
     c = _Ctx(run, tl, segs, profiles, ctx, model, tops or [], my_trinkets or [], my_modifiers, spec)
     c.heal_casts = heal_casts or []
     c.went_through = went_through or []  # enemy casts peers usually stop that completed here
+    c.heal_checks = heal_checks or set()  # pulls where your healing went to an NPC: a heal check
     c.recaps = {(r["t"], r["victim"]): r for r in death_recaps or []}
     c.phases, c.phase_rows, c.state = phases or {}, phase_rows or [], state
     c.group_defs = group_defs or []
@@ -872,6 +874,8 @@ def _cooldown_uses(c: _Ctx) -> tuple[list[Finding], list[Finding]]:
             ahead = range(b, min(len(labels), b + LOW_VALUE_LOOKAHEAD_S + 1))
             if rotational or not all(labels[k] in (CALM, IDLE) for k in ahead) or c.planned_near(a, t):
                 continue
+            if pull in c.heal_checks:
+                continue  # healing an NPC (Avatar of Sethraliss): the pressure isn't on the group's HP
             if pull is not None and c.run.pulls[pull].end - t < LOW_VALUE_LOOKAHEAD_S * 1000:
                 continue  # pressed as the pull ended - nothing left to judge it against
 

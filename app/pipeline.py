@@ -24,7 +24,7 @@ from app.finding_parts import structure
 from app.findings import DEATH_GROUP_MS as SAME_EVENT_MS, WIPE_DEATHS, WIPE_WINDOW_S, Analysis, Finding, TopRun, analyze
 from app.metrics import hot_refreshes, hots_active
 from app.reports import ability_icons, get_fights, get_players, get_trinkets, parse_report_url, pick_fight
-from app.runs import fetch_run
+from app.runs import _events, fetch_run
 from app.segments import all_segments, build_profile, match_pull, segment_metrics
 from app.avoidable import Avoidance, build as build_avoidance, fetch_kicks
 from app.auras import dispellable, fetch_auras, learn_self_clears, top_debuff_handling
@@ -43,7 +43,7 @@ from app.timeline import build_timeline
 from app.wcl import WCLClient, WCLError, parallel_map
 
 log = logging.getLogger("uvicorn.error")
-RULES_VERSION = 83  # 83: key-level parses in the roster (+ peers' per-pull cooldown use, in progress)
+RULES_VERSION = 84  # 83: key-level parses in the roster (+ peers' per-pull cooldown use, in progress)
 QUALITY_BACKFILL = 6  # extra ranked logs to try when some fail the data-quality gate
 COMP_POOL = 4  # extra ranked logs considered so the closest group compositions can be picked
 # Top logs fetched in parallel (cold cache: each is several pages of events). More workers = faster but more
@@ -208,6 +208,27 @@ def _stoppable_finding(recaps: list[dict], clock) -> Finding | None:
 
 METERS_QUERY = """query($code: String!, $f: [Int]) { reportData { report(code: $code) {
   damage: table(fightIDs: $f, dataType: DamageDone) healing: table(fightIDs: $f, dataType: Healing) } } }"""
+
+
+NPC_HEAL_SHARE = 0.2  # this share of your healing on a pull went to a non-player: a heal check (Avatar of Sethraliss)
+
+
+def _heal_check_pulls(client, fight, run) -> set[int]:
+    """Pulls where a real share of your healing went to a friendly NPC (heal the Avatar...) - the pressure there isn't
+    on the group's HP, so healing cooldowns pressed then aren't "no pressure". One cached request per key."""
+    key = f"npcheal:v1:{fight.report_code}:{fight.id}:{run.healer_id}"
+    rows = client.get_cached(key)
+    if rows is None:
+        rows = [[e["timestamp"], e.get("targetID"), e.get("amount", 0)]
+                for e in _events(client, fight, "Healing", source_id=run.healer_id) if e.get("type") == "heal"]
+        client.set_cached(key, rows)
+    out = set()
+    for i, p in enumerate(run.pulls):
+        inside = [(tgt, amt) for t, tgt, amt in rows if p.start <= t <= p.end]
+        total = sum(a for _, a in inside)
+        if total and sum(a for tgt, a in inside if tgt not in run.player_ids) / total >= NPC_HEAL_SHARE:
+            out.add(i)
+    return out
 
 
 def _meters(client, fight) -> dict | None:
@@ -426,7 +447,7 @@ def run_analysis(client: WCLClient, url: str, player_name: str | None = None, to
             group_defs.append((s["start"], s["name"], run.player_name(s["source"])))
     result = analyze(run, tl, segs, profiles, ctx, model, [tr for tr, _ in tops], my_trinkets, my_mods,
                      my_heals, phases, phase_rows, my_state, death_recaps, spec=spec, group_defs=group_defs,
-                     went_through=avoid.went_through)
+                     went_through=avoid.went_through, heal_checks=_heal_check_pulls(client, fight, run))
     result.findings += _chain_findings(run, chains, clock)
     result.findings += _kick_findings(run, avoid, clock)
     if (stop := _stoppable_finding(death_recaps, clock)):
