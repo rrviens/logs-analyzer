@@ -10,7 +10,7 @@ FIGHTS_QUERY = """
 query($code: String!) {
   reportData { report(code: $code) {
     title
-    fights { id encounterID name startTime endTime kill keystoneLevel difficulty }
+    fights { id encounterID name startTime endTime kill keystoneLevel keystoneBonus difficulty }
   } }
 }
 """
@@ -53,6 +53,11 @@ class Fight:
     kill: bool | None
     keystone_level: int | None
     difficulty: int | None
+    keystone_bonus: int | None = None  # chests: 0 = finished over time
+
+    @property
+    def timed(self) -> bool:
+        return bool(self.kill) and (self.keystone_bonus or 0) > 0  # kill alone = finished, maybe over time
 
     @property
     def duration_s(self) -> float:
@@ -95,6 +100,7 @@ def get_fights(client: WCLClient, code: str, ttl: float | None = None) -> list[F
             kill=f.get("kill"),
             keystone_level=f.get("keystoneLevel"),
             difficulty=f.get("difficulty"),
+            keystone_bonus=f.get("keystoneBonus"),
         )
         for f in report["fights"]
     ]

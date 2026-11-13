@@ -450,7 +450,7 @@ def _report_runs(client: WCLClient, rep: dict, s: dict, seen: list, ttl: float |
             "url": f"https://www.warcraftlogs.com/reports/{rep['code']}#fight={f.id}",
             "dungeon": f.name,
             "level": f.keystone_level,
-            "timed": bool(f.kill),
+            "timed": f.timed,
             "duration_min": round(f.duration_s / 60, 1),
             "started": started.isoformat(),
             "analyzed": client.get_cached(latest_key(rep["code"], f.id, s["name"], TOP_LOGS)) is not None,
